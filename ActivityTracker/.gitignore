@@ -23,6 +23,7 @@ DerivedData/
 ios/Pods/
 ios/build/
 
+<<<<<<< HEAD
 # Android/IntelliJ
 build/
 .idea/
@@ -41,3 +42,10 @@ local.properties
 
 # Misc
 .DS_Store
+=======
+# Ignore files and folders starting with a period (hidden files/folders)
+.*
+!.gitignore
+!.env # Example: if you want to explicitly include .env
+*.lock
+>>>>>>> 2d248a9f (Initial react native app)
