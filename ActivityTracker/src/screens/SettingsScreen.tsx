@@ -1,0 +1,150 @@
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Switch } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import theme from '../theme/theme';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { RootStackParamList } from '../navigation/RootNavigator';
+
+type SettingsScreenNavigationProp = StackNavigationProp<
+  RootStackParamList,
+  'Settings'
+>;
+
+interface Props {
+  navigation: SettingsScreenNavigationProp;
+}
+
+const SettingsScreen: React.FC<Props> = ({ navigation }) => {
+  const [pinLock, setPinLock] = useState(false);
+  const [activityReminders, setActivityReminders] = useState(false);
+  const [cloudBackup, setCloudBackup] = useState(true);
+
+  return (
+    <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => navigation.goBack()}>
+          <Icon name="arrow-left" size={30} color={theme.colors.text} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Settings</Text>
+        <View style={{ width: 30 }} />
+      </View>
+      <View style={styles.content}>
+        <Text style={styles.sectionTitle}>Security</Text>
+        <View style={styles.setting}>
+          <View>
+            <Text style={styles.settingText}>PIN Lock</Text>
+            <Text style={styles.settingSubtext}>Secure your app with a 4-digit PIN</Text>
+          </View>
+          <Switch
+            trackColor={{ false: theme.colors.PINdot, true: theme.colors.primary }}
+            thumbColor={theme.colors.text}
+            onValueChange={setPinLock}
+            value={pinLock}
+          />
+        </View>
+
+        <Text style={styles.sectionTitle}>General</Text>
+        <View style={styles.setting}>
+          <View>
+            <Text style={styles.settingText}>Activity Reminders</Text>
+            <Text style={styles.settingSubtext}>Receive reminders for activities</Text>
+          </View>
+          <Switch
+            trackColor={{ false: theme.colors.PINdot, true: theme.colors.primary }}
+            thumbColor={theme.colors.text}
+            onValueChange={setActivityReminders}
+            value={activityReminders}
+          />
+        </View>
+        <View style={styles.setting}>
+          <View>
+            <Text style={styles.settingText}>Cloud Backup</Text>
+            <Text style={styles.settingSubtext}>Automatically back up your data</Text>
+          </View>
+          <Switch
+            trackColor={{ false: theme.colors.PINdot, true: theme.colors.primary }}
+            thumbColor={theme.colors.text}
+            onValueChange={setCloudBackup}
+            value={cloudBackup}
+          />
+        </View>
+      </View>
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={styles.button}
+          onPress={() => { /* Handle Save */ }}
+        >
+          <Text style={styles.buttonText}>Save Changes</Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: theme.colors.background,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 10,
+  },
+  title: {
+    color: theme.colors.text,
+    fontSize: 22,
+    fontWeight: 'bold',
+  },
+  content: {
+    flex: 1,
+    padding: 20,
+  },
+  sectionTitle: {
+    color: theme.colors.subtext,
+    fontSize: 16,
+    fontWeight: 'bold',
+    textTransform: 'uppercase',
+    marginBottom: 10,
+    marginTop: 20,
+  },
+  setting: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    borderRadius: 15,
+    padding: 20,
+    marginBottom: 15,
+  },
+  settingText: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  settingSubtext: {
+    color: theme.colors.subtext,
+    fontSize: 14,
+    marginTop: 5,
+  },
+  footer: {
+    padding: 20,
+  },
+  button: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 30,
+    padding: 20,
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: theme.colors.background,
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+});
+
+export default SettingsScreen;
