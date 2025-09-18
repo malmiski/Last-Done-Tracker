@@ -1,7 +1,0 @@
-** BUILD FAILED **
-
-
-The following build commands failed:
-	PhaseScriptExecution [CP-User]\ Generate\ app.config\ for\ prebuilt\ Constants.manifest /Users/t/Library/Developer/Xcode/DerivedData/ActivityTracker-efdviolzcwlojaedvxifgejheuqq/Build/Intermediates.noindex/Pods.build/Debug-iphonesimulator/EXConstants.build/Script-46EB2E0001F9A0.sh (in target 'EXConstants' from project 'Pods')
-	Building workspace ActivityTracker with scheme ActivityTracker and configuration Debug
-(2 failures)

@@ -2,7 +2,7 @@
 node_modules/
 npm-debug.log
 yarn-error.log
-
+.expo/
 # Xcode
 build/
 *.pbxuser
@@ -23,7 +23,6 @@ DerivedData/
 ios/Pods/
 ios/build/
 
-<<<<<<< HEAD
 # Android/IntelliJ
 build/
 .idea/
@@ -49,4 +48,4 @@ ios/.*
 !.gitignore
 !.env # Example: if you want to explicitly include .env
 *.lock
->>>>>>> 2d248a9f (Initial react native app)
+package-lock.json
