@@ -13,11 +13,11 @@
     "tag": "v0.81.4"
   },
   "source_files": "Fabric/**/*.{c,h,m,mm,S,cpp}",
-  "compiler_flags": "",
+  "compiler_flags": "-DRCT_NEW_ARCH_ENABLED=1",
   "exclude_files": [
     "**/tests/*",
     "**/android/*",
-    ""
+    " -DRCT_NEW_ARCH_ENABLED=1"
   ],
   "header_dir": "React",
   "module_name": "RCTFabric",
@@ -68,7 +68,7 @@
       "$(PODS_ROOT)/SocketRocket",
       "$(PODS_ROOT)/RCT-Folly"
     ],
-    "OTHER_CFLAGS": "$(inherited) ",
+    "OTHER_CFLAGS": "$(inherited)  -DRCT_NEW_ARCH_ENABLED=1",
     "CLANG_CXX_LANGUAGE_STANDARD": "c++20"
   },
   "dependencies": {

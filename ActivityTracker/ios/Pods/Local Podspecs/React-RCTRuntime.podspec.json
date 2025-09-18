@@ -13,11 +13,11 @@
     "tag": "v0.81.4"
   },
   "source_files": "*.{h,mm}",
-  "compiler_flags": "",
+  "compiler_flags": "-DRCT_NEW_ARCH_ENABLED=1",
   "header_dir": "React",
   "module_name": "RCTRuntime",
   "pod_target_xcconfig": {
-    "OTHER_CFLAGS": "$(inherited) ",
+    "OTHER_CFLAGS": "$(inherited)  -DRCT_NEW_ARCH_ENABLED=1",
     "DEFINES_MODULE": "YES",
     "CLANG_CXX_LANGUAGE_STANDARD": "c++20",
     "HEADER_SEARCH_PATHS": [

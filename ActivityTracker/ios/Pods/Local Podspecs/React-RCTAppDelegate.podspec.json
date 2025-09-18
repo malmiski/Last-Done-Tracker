@@ -14,7 +14,7 @@
     "tag": "v0.81.4"
   },
   "source_files": "**/*.{c,h,m,mm,S,cpp}",
-  "compiler_flags": "$(inherited) -DUSE_HERMES=1",
+  "compiler_flags": "$(inherited)  -DRCT_NEW_ARCH_ENABLED=1-DUSE_HERMES=1",
   "pod_target_xcconfig": {
     "HEADER_SEARCH_PATHS": [
       "$(PODS_TARGET_SRCROOT)/../../ReactCommon",
@@ -52,7 +52,7 @@
       "$(PODS_ROOT)/SocketRocket",
       "$(PODS_ROOT)/RCT-Folly"
     ],
-    "OTHER_CPLUSPLUSFLAGS": "$(inherited) -DUSE_HERMES=1",
+    "OTHER_CPLUSPLUSFLAGS": "$(inherited)  -DRCT_NEW_ARCH_ENABLED=1-DUSE_HERMES=1",
     "CLANG_CXX_LANGUAGE_STANDARD": "c++20",
     "DEFINES_MODULE": "YES"
   },
