@@ -7,9 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		0C80B921A6F3F58F76C31292 /* libPods-ActivityTracker.a in Frameworks */ = {isa = PBXBuildFile; fileRef = 5DCACB8F33CDC322A6C60F78 /* libPods-ActivityTracker.a */; };
 		13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB51A68108700A75B9A /* Images.xcassets */; };
+<<<<<<< HEAD
+		283505CC2CC04F2FD10A5756 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+=======
 		1F17006379B370026315D178 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 13B07FB81A68108700A75B9A /* PrivacyInfo.xcprivacy */; };
+>>>>>>> f4c9c18c (Added .gitignore)
 		761780ED2CA45674006654EE /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761780EC2CA45674006654EE /* AppDelegate.swift */; };
 		81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 81AB9BB72411601600AC10FF /* LaunchScreen.storyboard */; };
 		B3BD87639D63096BADF3946E /* libPods-ActivityTracker.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A5F1F50399794E226C87BFB8 /* libPods-ActivityTracker.a */; };
@@ -181,7 +184,11 @@
 			files = (
 				81AB9BB82411601600AC10FF /* LaunchScreen.storyboard in Resources */,
 				13B07FBF1A68108700A75B9A /* Images.xcassets in Resources */,
+<<<<<<< HEAD
+				283505CC2CC04F2FD10A5756 /* PrivacyInfo.xcprivacy in Resources */,
+=======
 				1F17006379B370026315D178 /* PrivacyInfo.xcprivacy in Resources */,
+>>>>>>> f4c9c18c (Added .gitignore)
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
