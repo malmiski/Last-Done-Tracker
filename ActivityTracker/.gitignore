@@ -45,6 +45,7 @@ local.properties
 =======
 # Ignore files and folders starting with a period (hidden files/folders)
 .*
+ios/.*
 !.gitignore
 !.env # Example: if you want to explicitly include .env
 *.lock
