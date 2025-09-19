@@ -24,6 +24,7 @@ ios/Pods/
 ios/build/
 
 # Android/IntelliJ
+android/*
 build/
 .idea/
 .gradle/
@@ -49,3 +50,8 @@ ios/.*
 !.env # Example: if you want to explicitly include .env
 *.lock
 package-lock.json
+
+# Expo
+.expo
+dist/
+web-build/

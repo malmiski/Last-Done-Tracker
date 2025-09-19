@@ -1,4 +1,7 @@
 {
   "name": "ActivityTracker",
-  "displayName": "ActivityTracker"
+  "displayName": "ActivityTracker",
+  "android": {
+    "package": "com.anonymous.activitytracker"
+  }
 }

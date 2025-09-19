@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../theme/theme';
-import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import IconGrid from '../components/IconGrid';
 import { Calendar } from 'react-native-calendars';
 import { StackNavigationProp } from '@react-navigation/stack';
