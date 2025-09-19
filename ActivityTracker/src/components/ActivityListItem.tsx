@@ -9,9 +9,10 @@ interface ActivityListItemProps {
   onPress: () => void;
   isEditMode: boolean;
   onDelete: () => void;
+  onAddTime: () => void;
 }
 
-const ActivityListItem: React.FC<ActivityListItemProps> = ({ item, onPress, isEditMode, onDelete }) => {
+const ActivityListItem: React.FC<ActivityListItemProps> = ({ item, onPress, isEditMode, onDelete, onAddTime }) => {
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} disabled={isEditMode}>
       <View style={styles.iconContainer}>
@@ -26,7 +27,9 @@ const ActivityListItem: React.FC<ActivityListItemProps> = ({ item, onPress, isEd
           <Icon name="trash-can-outline" size={24} color={theme.colors.text} />
         </TouchableOpacity>
       ) : (
-        <Icon name="play-circle-outline" size={24} color={theme.colors.subtext} />
+        <TouchableOpacity onPress={onAddTime} style={styles.addButton}>
+          <Icon name="plus" size={32} color={theme.colors.primary} />
+        </TouchableOpacity>
       )}
     </TouchableOpacity>
   );
@@ -65,6 +68,13 @@ const styles = StyleSheet.create({
   },
   deleteButton: {
     backgroundColor: theme.colors.notification,
+    width: 48,
+    height: 48,
+    borderRadius: 15,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  addButton: {
     width: 48,
     height: 48,
     borderRadius: 15,
