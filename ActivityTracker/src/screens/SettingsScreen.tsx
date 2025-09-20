@@ -6,6 +6,7 @@ import theme from '../theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { RootStackParamList } from '../navigation/RootNavigator';
+import { useFocusEffect } from '@react-navigation/native';
 
 type SettingsScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -17,16 +18,16 @@ interface Props {
 }
 
 const SettingsScreen: React.FC<Props> = ({ navigation }) => {
-  const [pinLock, setPinLock] = useState(false);
+  const [pinLock, setPinLock] = useState('');
   const [activityReminders, setActivityReminders] = useState(false);
   const [cloudBackup, setCloudBackup] = useState(true);
 
   useEffect(() => {
     const loadPinLockState = async () => {
       try {
-        const storedPinLock = await AsyncStorage.getItem('@pinLock');
-        if (storedPinLock !== null) {
-          setPinLock(JSON.parse(storedPinLock));
+        const storedUserPin = await AsyncStorage.getItem('@user_pin');
+        if (storedUserPin !== null && storedUserPin !== '') {
+          setPinLock(storedUserPin);
         }
       } catch (e) {
         console.error('Failed to load pin lock state.', e);
@@ -35,21 +36,31 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
     loadPinLockState();
   }, []);
 
-  useEffect(() => {
-    const savePinLockState = async () => {
-      try {
-        await AsyncStorage.setItem('@pinLock', JSON.stringify(pinLock));
-      } catch (e) {
-        console.error('Failed to save pin lock state.', e);
-      }
-    };
-    savePinLockState();
-  }, [pinLock]);
+  useFocusEffect(
+    React.useCallback(() => {
+      const loadPinLockState = async () => {
+        try {
+          const storedUserPin = await AsyncStorage.getItem('@user_pin');
+          if (storedUserPin !== null && storedUserPin !== '') {
+            setPinLock(storedUserPin);
+          } else {
+            setPinLock('');
+          }
+        } catch (e) {
+          console.error('Failed to load pin lock state.', e);
+          setPinLock('');
+        }
+      };
+      loadPinLockState();
+    }, [])
+  );
+
 
   const handlePinLockToggle = (value: boolean) => {
-    setPinLock(value);
     if (value) {
       navigation.navigate('SetPin');
+    }else{
+      setPinLock('');
     }
   };
 
@@ -73,7 +84,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
             trackColor={{ false: theme.colors.PINdot, true: theme.colors.primary }}
             thumbColor={theme.colors.text}
             onValueChange={handlePinLockToggle}
-            value={pinLock}
+            value={pinLock !== null && pinLock !== ''}
           />
         </View>
 

@@ -6,21 +6,26 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 interface NumericKeypadProps {
   onPress: (value: string) => void;
   onBackspace: () => void;
+  onSubmit: () => void;
 }
 
-const NumericKeypad: React.FC<NumericKeypadProps> = ({ onPress, onBackspace }) => {
+const NumericKeypad: React.FC<NumericKeypadProps> = ({ onPress, onBackspace, onSubmit }) => {
   const buttons = [
     '1', '2', '3',
     '4', '5', '6',
     '7', '8', '9',
-    '', '0', 'backspace'
+    'submit', '0', 'backspace'
   ];
 
   return (
     <View style={styles.container}>
       {buttons.map((value) => {
-        if (value === '') {
-          return <View key={value} style={styles.button} />;
+        if (value === 'submit') {
+          return (
+            <TouchableOpacity key={value} style={styles.button} onPress={onSubmit}>
+              <Icon name="arrow-right-bold-circle-outline" size={30} color={theme.colors.primary} />
+            </TouchableOpacity>
+          );
         }
         if (value === 'backspace') {
           return (
