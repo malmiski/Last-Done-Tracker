@@ -27,7 +27,7 @@ function RootNavigator() {
         initialRouteName="Activities"
         screenOptions={{
           headerShown: false,
-          cardStyle: { backgroundColor: theme.colors.background },
+          cardStyle: {flex:1, backgroundColor: theme.colors.background },
         }}
       >
         <Stack.Screen name="EnterPin" component={EnterPinScreen} />
