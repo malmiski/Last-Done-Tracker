@@ -5,7 +5,10 @@ import theme from '../theme/theme';
 
 const icons = [
   'run', 'weight-lifter', 'swim', 'bike', 'flower',
-  'leaf', 'book-open-variant', 'coffee',
+  'leaf', 'book-open-variant', 'coffee', 'meditation',
+  'water', 'food-apple', 'sleep', 'brush', 'cat',
+  'dog', 'guitar-acoustic', 'movie', 'gamepad-variant',
+  'heart', 'star', 'work', 'phone', 'email', 'message'
 ];
 
 interface IconGridProps {
