@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import theme from '../theme/theme';
 import { activities as initialActivities, Activity } from '../data/activities';
 import ActivityListItem from '../components/ActivityListItem';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { RootStackParamList } from '../navigation/RootNavigator';
 
 type ActivitiesScreenNavigationProp = StackNavigationProp<
@@ -21,6 +23,40 @@ const ActivitiesScreen: React.FC<Props> = ({ navigation }) => {
   const [activities, setActivities] = useState(initialActivities);
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
+  const rotation = useSharedValue(0);
+
+  useEffect(() => {
+    const loadActivities = async () => {
+      try {
+        const storedActivities = await AsyncStorage.getItem('@activities');
+        if (storedActivities !== null) {
+          setActivities(JSON.parse(storedActivities));
+        }
+      } catch (e) {
+        console.error('Failed to load activities.', e);
+      }
+    };
+    loadActivities();
+  }, []);
+
+  useEffect(() => {
+    const saveActivities = async () => {
+      try {
+        await AsyncStorage.setItem('@activities', JSON.stringify(activities));
+      } catch (e) {
+        console.error('Failed to save activities.', e);
+      }
+    };
+    if (activities !== initialActivities) {
+      saveActivities();
+    }
+  }, [activities]);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ rotate: `${rotation.value}deg` }],
+    };
+  });
 
   const filteredActivities = activities.filter(activity =>
     activity.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -30,8 +66,17 @@ const ActivitiesScreen: React.FC<Props> = ({ navigation }) => {
     setActivities(activities.filter(a => a.id !== activityId));
   };
 
+  const handleAddTime = (activityId: string) => {
+    setActivities(
+      activities.map(a =>
+        a.id === activityId ? { ...a, lastDone: new Date().toLocaleDateString() } : a
+      )
+    );
+  };
+
   const toggleEditMode = () => {
     setIsEditMode(!isEditMode);
+    rotation.value = withTiming(isEditMode ? 0 : 360, { duration: 300 });
   };
 
   return (
@@ -40,7 +85,9 @@ const ActivitiesScreen: React.FC<Props> = ({ navigation }) => {
         <Text style={styles.title}>Activities</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity onPress={toggleEditMode} style={{marginRight: 15}}>
-            <Icon name={isEditMode ? "check" : "pencil-outline"} size={30} color={theme.colors.text} />
+            <Animated.View style={animatedStyle}>
+              <Icon name={isEditMode ? "check" : "pencil-outline"} size={30} color={theme.colors.text} />
+            </Animated.View>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
             <Icon name="cog-outline" size={30} color={theme.colors.text} />
@@ -66,6 +113,7 @@ const ActivitiesScreen: React.FC<Props> = ({ navigation }) => {
             onPress={() => navigation.navigate('ActivityDetail', { activityId: item.id })}
             isEditMode={isEditMode}
             onDelete={() => handleDelete(item.id)}
+            onAddTime={() => handleAddTime(item.id)}
           />
         )}
         keyExtractor={item => item.id}

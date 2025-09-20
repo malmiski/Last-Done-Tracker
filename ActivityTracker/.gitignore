@@ -3,6 +3,7 @@ node_modules/
 npm-debug.log
 yarn-error.log
 .expo/
+
 # Xcode
 build/
 *.pbxuser
@@ -24,8 +25,9 @@ ios/Pods/
 ios/build/
 
 # Android/IntelliJ
-android/*
-build/
+android/build/
+android/app/build/
+android/app/src/main/assets/
 .idea/
 .gradle/
 local.properties
@@ -34,24 +36,26 @@ local.properties
 *.aab
 *.iml
 *.keystore
-/android/app/build/
-/android/build/
 
 # Metro
 .metro-cache/
 
 # Misc
 .DS_Store
-=======
-# Ignore files and folders starting with a period (hidden files/folders)
-.*
-ios/.*
-!.gitignore
-!.env # Example: if you want to explicitly include .env
-*.lock
-package-lock.json
-
-# Expo
-.expo
+*.orig
+vendor/
+Gemfile.lock
+package-lock.json.orig
+Podfile.lock
+/ios/Pods/
+/ios/build/
+/android/app/build/
+/android/build/
+/android/.gradle/
+/android/app/.cxx/
+/android/app/build/
+.expo/
 dist/
 web-build/
+package-lock.json
+yarn.lock

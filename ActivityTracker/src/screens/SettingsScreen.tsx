@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import theme from '../theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { StackNavigationProp } from '@react-navigation/stack';
@@ -19,6 +20,38 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   const [pinLock, setPinLock] = useState(false);
   const [activityReminders, setActivityReminders] = useState(false);
   const [cloudBackup, setCloudBackup] = useState(true);
+
+  useEffect(() => {
+    const loadPinLockState = async () => {
+      try {
+        const storedPinLock = await AsyncStorage.getItem('@pinLock');
+        if (storedPinLock !== null) {
+          setPinLock(JSON.parse(storedPinLock));
+        }
+      } catch (e) {
+        console.error('Failed to load pin lock state.', e);
+      }
+    };
+    loadPinLockState();
+  }, []);
+
+  useEffect(() => {
+    const savePinLockState = async () => {
+      try {
+        await AsyncStorage.setItem('@pinLock', JSON.stringify(pinLock));
+      } catch (e) {
+        console.error('Failed to save pin lock state.', e);
+      }
+    };
+    savePinLockState();
+  }, [pinLock]);
+
+  const handlePinLockToggle = (value: boolean) => {
+    setPinLock(value);
+    if (value) {
+      navigation.navigate('SetPin');
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -39,7 +72,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
           <Switch
             trackColor={{ false: theme.colors.PINdot, true: theme.colors.primary }}
             thumbColor={theme.colors.text}
-            onValueChange={setPinLock}
+            onValueChange={handlePinLockToggle}
             value={pinLock}
           />
         </View>
