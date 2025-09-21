@@ -2,24 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import theme from '../theme/theme';
-import { activities as initialActivities, Activity } from '../data/activities';
-import ActivityListItem from '../components/ActivityListItem';
+import theme from '../src/theme/theme';
+import { activities as initialActivities, Activity } from '../src/data/activities';
+import ActivityListItem from '../src/components/ActivityListItem';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import { StackNavigationProp } from '@react-navigation/stack';
+import { useRouter } from 'expo-router';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
-import { RootStackParamList } from '../navigation/RootNavigator';
 
-type ActivitiesScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  'Activities'
->;
-
-interface Props {
-  navigation: ActivitiesScreenNavigationProp;
-}
-
-const ActivitiesScreen: React.FC<Props> = ({ navigation }) => {
+const ActivitiesScreen: React.FC = () => {
+  const router = useRouter();
   const [activities, setActivities] = useState(initialActivities);
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
@@ -89,7 +80,7 @@ const ActivitiesScreen: React.FC<Props> = ({ navigation }) => {
               <Icon name={isEditMode ? "check" : "pencil-outline"} size={30} color={theme.colors.text} />
             </Animated.View>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+          <TouchableOpacity onPress={() => router.push('/Settings')}>
             <Icon name="cog-outline" size={30} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
@@ -110,7 +101,7 @@ const ActivitiesScreen: React.FC<Props> = ({ navigation }) => {
         renderItem={({ item }) => (
           <ActivityListItem
             item={item}
-            onPress={() => navigation.navigate('ActivityDetail', { activityId: item.id })}
+            onPress={() => router.push(`/ActivityDetail?activityId=${item.id}`)}
             isEditMode={isEditMode}
             onDelete={() => handleDelete(item.id)}
             onAddTime={() => handleAddTime(item.id)}
@@ -121,7 +112,7 @@ const ActivitiesScreen: React.FC<Props> = ({ navigation }) => {
       />
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => navigation.navigate('AddActivity')}
+        onPress={() => router.push('/AddActivity')}
       >
         <Icon name="plus" size={30} color={theme.colors.background} />
         <Text style={styles.fabText}>Add Activity</Text>

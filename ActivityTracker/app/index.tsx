@@ -1,37 +1,29 @@
 import React, { useEffect } from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../navigation/RootNavigator';
-import theme from '../theme/theme';
+import { useRouter } from 'expo-router';
+import theme from '../src/theme/theme';
 
-type AuthLoadingScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  'AuthLoading'
->;
+const AuthLoadingScreen: React.FC = () => {
+  const router = useRouter();
 
-interface Props {
-  navigation: AuthLoadingScreenNavigationProp;
-}
-
-const AuthLoadingScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     const checkPinLock = async () => {
       try {
         const userPin = await AsyncStorage.getItem('@user_pin');
         if (userPin !== null && userPin !== '') {
-          navigation.replace('EnterPin');
+          router.replace('/EnterPin');
         } else {
-          navigation.replace('Activities');
+          router.replace('/Activities');
         }
       } catch (e) {
         console.error('Failed to load pin lock state.', e);
-        navigation.replace('Activities');
+        router.replace('/Activities');
       }
     };
 
     checkPinLock();
-  }, [navigation]);
+  }, [router]);
 
   return (
     <View style={styles.container}>

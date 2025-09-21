@@ -2,22 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import theme from '../theme/theme';
+import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../navigation/RootNavigator';
-import { useFocusEffect } from '@react-navigation/native';
+import { useRouter, useFocusEffect } from 'expo-router';
 
-type SettingsScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  'Settings'
->;
-
-interface Props {
-  navigation: SettingsScreenNavigationProp;
-}
-
-const SettingsScreen: React.FC<Props> = ({ navigation }) => {
+const SettingsScreen: React.FC = () => {
+  const router = useRouter();
   const [pinLock, setPinLock] = useState('');
   const [activityReminders, setActivityReminders] = useState(false);
   const [cloudBackup, setCloudBackup] = useState(true);
@@ -58,7 +48,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
 
   const handlePinLockToggle = (value: boolean) => {
     if (value) {
-      navigation.navigate('SetPin');
+      router.push('/SetPin');
     }else{
       setPinLock('');
     }
@@ -67,7 +57,7 @@ const SettingsScreen: React.FC<Props> = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => router.back()}>
           <Icon name="arrow-left" size={30} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Settings</Text>

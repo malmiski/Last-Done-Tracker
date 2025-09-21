@@ -1,31 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import theme from '../theme/theme';
+import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RouteProp } from '@react-navigation/native';
-import { RootStackParamList } from '../navigation/RootNavigator';
-import { activities } from '../data/activities';
-import { activityDetails, ActivityEntry } from '../data/activity-details';
-import ActivityHistoryItem from '../components/ActivityHistoryItem';
+import { useRouter, useLocalSearchParams } from 'expo-router';
+import { activities } from '../src/data/activities';
+import { activityDetails, ActivityEntry } from '../src/data/activity-details';
+import ActivityHistoryItem from '../src/components/ActivityHistoryItem';
 
-type ActivityDetailScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  'ActivityDetail'
->;
-type ActivityDetailScreenRouteProp = RouteProp<
-  RootStackParamList,
-  'ActivityDetail'
->;
-
-interface Props {
-  navigation: ActivityDetailScreenNavigationProp;
-  route: ActivityDetailScreenRouteProp;
-}
-
-const ActivityDetailScreen: React.FC<Props> = ({ navigation, route }) => {
-  const { activityId } = route.params;
+const ActivityDetailScreen: React.FC = () => {
+  const router = useRouter();
+  const { activityId } = useLocalSearchParams<{ activityId: string }>();
   const activity = activities.find(a => a.id === activityId);
   const [history, setHistory] = useState<ActivityEntry[]>([]);
 
@@ -46,7 +31,7 @@ const ActivityDetailScreen: React.FC<Props> = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
+        <TouchableOpacity onPress={() => router.back()}>
           <Icon name="arrow-left" size={30} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>{activity.name}</Text>
