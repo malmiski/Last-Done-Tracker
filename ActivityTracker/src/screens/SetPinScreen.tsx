@@ -1,14 +1,11 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import theme from '../theme/theme';
 import PinInputBox from '../components/PinInputBox';
 import { StackNavigationProp } from '@react-navigation/stack';
-
-type RootStackParamList = {
-  SetPin: undefined;
-  // Add other screens here
-};
+import { RootStackParamList } from '../navigation/RootNavigator';
 
 type SetPinScreenNavigationProp = StackNavigationProp<
   RootStackParamList,
@@ -23,6 +20,24 @@ const SetPinScreen: React.FC<Props> = ({ navigation }) => {
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
 
+  const handleSave = async () => {
+    if (pin.length !== 4) {
+      Alert.alert('Invalid PIN', 'Please enter a 4-digit PIN.');
+      return;
+    }
+    if (pin !== confirmPin) {
+      Alert.alert('PINs do not match', 'Please make sure your PINs match.');
+      return;
+    }
+    try {
+      await AsyncStorage.setItem('@user_pin', pin);
+      Alert.alert('PIN Saved', 'Your new PIN has been saved successfully.');
+      navigation.goBack();
+    } catch (e) {
+      Alert.alert('Error', 'Failed to save PIN.');
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -36,10 +51,10 @@ const SetPinScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.button} onPress={() => { /* Handle Cancel */ }}>
+        <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
           <Text style={styles.buttonText}>Cancel</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={() => { /* Handle Save */ }}>
+        <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSave}>
           <Text style={[styles.buttonText, styles.saveButtonText]}>Save PIN</Text>
         </TouchableOpacity>
       </View>

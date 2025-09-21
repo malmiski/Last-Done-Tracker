@@ -18,8 +18,8 @@ const AuthLoadingScreen: React.FC<Props> = ({ navigation }) => {
   useEffect(() => {
     const checkPinLock = async () => {
       try {
-        const pinLock = await AsyncStorage.getItem('@pinLock');
-        if (pinLock === 'true') {
+        const userPin = await AsyncStorage.getItem('@user_pin');
+        if (userPin !== null && userPin !== '') {
           navigation.replace('EnterPin');
         } else {
           navigation.replace('Activities');

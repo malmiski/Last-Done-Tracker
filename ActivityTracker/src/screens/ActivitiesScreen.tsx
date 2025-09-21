@@ -171,7 +171,6 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingBottom: 100,
   },
   fab: {
     position: 'absolute',

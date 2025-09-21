@@ -29,7 +29,7 @@ function RootNavigator() {
         initialRouteName="AuthLoading"
         screenOptions={{
           headerShown: false,
-          cardStyle: {flex:1, backgroundColor: theme.colors.background },
+          cardStyle: { flex: 1, backgroundColor: theme.colors.background },
           cardStyleInterpolator: CardStyleInterpolators.forFade,
         }}
       >
