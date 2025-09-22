@@ -11,7 +11,15 @@ function Layout() {
       }}
     >
       <Stack.Screen name="index" />
-      <Stack.Screen name="EnterPin" />
+      <Stack.Screen
+        name="EnterPin"
+        options={{
+          headerShown: true,
+          headerStyle: { backgroundColor: theme.colors.background },
+          headerShadowVisible: false,
+          headerTitle: '',
+        }}
+      />
       <Stack.Screen name="SetPin" />
       <Stack.Screen name="Activities" />
       <Stack.Screen name="AddActivity" />

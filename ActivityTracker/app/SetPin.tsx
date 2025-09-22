@@ -23,7 +23,7 @@ const SetPinScreen: React.FC = () => {
     try {
       await AsyncStorage.setItem('@user_pin', pin);
       Alert.alert('PIN Saved', 'Your new PIN has been saved successfully.');
-      router.back();
+      router.replace('/EnterPin');
     } catch (e) {
       Alert.alert('Error', 'Failed to save PIN.');
     }

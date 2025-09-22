@@ -6,7 +6,6 @@ import { useRouter } from 'expo-router';
 import theme from '../src/theme/theme';
 import PinInput from '../src/components/PinInput';
 import NumericKeypad from '../src/components/NumericKeypad';
-import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 
 const EnterPinScreen: React.FC = () => {
   const router = useRouter();
@@ -39,11 +38,6 @@ const EnterPinScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
-          <Icon name="arrow-left" size={30} color={theme.colors.text} />
-        </TouchableOpacity>
-      </View>
       <View style={styles.content}>
         <Text style={styles.title}>Enter PIN</Text>
         <View style={styles.pinContainer}>
