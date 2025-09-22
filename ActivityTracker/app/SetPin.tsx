@@ -2,21 +2,12 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import theme from '../theme/theme';
-import PinInputBox from '../components/PinInputBox';
-import { StackNavigationProp } from '@react-navigation/stack';
-import { RootStackParamList } from '../navigation/RootNavigator';
+import theme from '../src/theme/theme';
+import PinInputBox from '../src/components/PinInputBox';
+import { useRouter } from 'expo-router';
 
-type SetPinScreenNavigationProp = StackNavigationProp<
-  RootStackParamList,
-  'SetPin'
->;
-
-interface Props {
-  navigation: SetPinScreenNavigationProp;
-}
-
-const SetPinScreen: React.FC<Props> = ({ navigation }) => {
+const SetPinScreen: React.FC = () => {
+  const router = useRouter();
   const [pin, setPin] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
 
@@ -32,7 +23,7 @@ const SetPinScreen: React.FC<Props> = ({ navigation }) => {
     try {
       await AsyncStorage.setItem('@user_pin', pin);
       Alert.alert('PIN Saved', 'Your new PIN has been saved successfully.');
-      navigation.goBack();
+      router.replace('/EnterPin');
     } catch (e) {
       Alert.alert('Error', 'Failed to save PIN.');
     }
@@ -51,7 +42,7 @@ const SetPinScreen: React.FC<Props> = ({ navigation }) => {
       </View>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.button} onPress={() => navigation.goBack()}>
+        <TouchableOpacity style={styles.button} onPress={() => router.back()}>
           <Text style={styles.buttonText}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSave}>
