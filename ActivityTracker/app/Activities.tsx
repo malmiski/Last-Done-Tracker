@@ -1,47 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import theme from '../src/theme/theme';
-import { activities as initialActivities, Activity } from '../src/data/activities';
 import ActivityListItem from '../src/components/ActivityListItem';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter } from 'expo-router';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import { useActivityData } from '../src/hooks/useActivityData';
 
 const ActivitiesScreen: React.FC = () => {
   const router = useRouter();
-  const [activities, setActivities] = useState(initialActivities);
+  const { activities, loading, deleteActivity, addActivityEntry } = useActivityData();
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
   const rotation = useSharedValue(0);
-
-  useEffect(() => {
-    const loadActivities = async () => {
-      try {
-        const storedActivities = await AsyncStorage.getItem('@activities');
-        if (storedActivities !== null) {
-          setActivities(JSON.parse(storedActivities));
-        }
-      } catch (e) {
-        console.error('Failed to load activities.', e);
-      }
-    };
-    loadActivities();
-  }, []);
-
-  useEffect(() => {
-    const saveActivities = async () => {
-      try {
-        await AsyncStorage.setItem('@activities', JSON.stringify(activities));
-      } catch (e) {
-        console.error('Failed to save activities.', e);
-      }
-    };
-    if (activities !== initialActivities) {
-      saveActivities();
-    }
-  }, [activities]);
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -54,15 +26,11 @@ const ActivitiesScreen: React.FC = () => {
   );
 
   const handleDelete = (activityId: string) => {
-    setActivities(activities.filter(a => a.id !== activityId));
+    deleteActivity(activityId);
   };
 
   const handleAddTime = (activityId: string) => {
-    setActivities(
-      activities.map(a =>
-        a.id === activityId ? { ...a, lastDone: new Date().toLocaleDateString() } : a
-      )
-    );
+    addActivityEntry(activityId);
   };
 
   const toggleEditMode = () => {
@@ -162,6 +130,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
+    paddingBottom: 100,
   },
   fab: {
     position: 'absolute',
