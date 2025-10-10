@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
 import { Activity } from '../data/activities';
+import { formatTimeAgo } from '../utils/time';
 
 interface ActivityListItemProps {
   item: Activity;
@@ -10,9 +11,21 @@ interface ActivityListItemProps {
   isEditMode: boolean;
   onDelete: () => void;
   onAddTime: () => void;
+  lastEntryDate: Date | null;
 }
 
-const ActivityListItem: React.FC<ActivityListItemProps> = ({ item, onPress, isEditMode, onDelete, onAddTime }) => {
+const ActivityListItem: React.FC<ActivityListItemProps> = ({ item, onPress, isEditMode, onDelete, onAddTime, lastEntryDate }) => {
+  const [timeAgo, setTimeAgo] = useState(lastEntryDate ? formatTimeAgo(lastEntryDate) : 'Never');
+
+  useEffect(() => {
+    if (lastEntryDate) {
+      const interval = setInterval(() => {
+        setTimeAgo(formatTimeAgo(lastEntryDate));
+      }, 1000);
+      return () => clearInterval(interval);
+    }
+  }, [lastEntryDate]);
+
   return (
     <TouchableOpacity style={styles.container} onPress={onPress} disabled={isEditMode}>
       <View style={styles.iconContainer}>
@@ -20,7 +33,7 @@ const ActivityListItem: React.FC<ActivityListItemProps> = ({ item, onPress, isEd
       </View>
       <View style={styles.textContainer}>
         <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.lastDone}>{item.lastDone}</Text>
+        <Text style={styles.lastDone}>{timeAgo}</Text>
       </View>
       {isEditMode ? (
         <TouchableOpacity onPress={onDelete} style={styles.deleteButton}>
