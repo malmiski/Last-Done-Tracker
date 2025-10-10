@@ -7,7 +7,7 @@ function Layout() {
     <Stack
       screenOptions={{
         headerShown: false,
-        contentStyle: { backgroundColor: theme.colors.background },
+        contentStyle: { flex: 1, backgroundColor: theme.colors.background },
       }}
     >
       <Stack.Screen name="index" />

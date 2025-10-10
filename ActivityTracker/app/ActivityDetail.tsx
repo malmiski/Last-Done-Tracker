@@ -1,24 +1,19 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { activities } from '../src/data/activities';
-import { activityDetails, ActivityEntry } from '../src/data/activity-details';
 import ActivityHistoryItem from '../src/components/ActivityHistoryItem';
+import { useActivityData } from '../src/hooks/useActivityData';
 
 const ActivityDetailScreen: React.FC = () => {
   const router = useRouter();
   const { activityId } = useLocalSearchParams<{ activityId: string }>();
-  const activity = activities.find(a => a.id === activityId);
-  const [history, setHistory] = useState<ActivityEntry[]>([]);
+  const { activityDetails, getActivityById, addActivityEntry, deleteActivityEntry } = useActivityData();
 
-  useEffect(() => {
-    if (activityId) {
-      setHistory(activityDetails[activityId] || []);
-    }
-  }, [activityId]);
+  const activity = getActivityById(activityId);
+  const history = activityDetails[activityId] || [];
 
   if (!activity) {
     return (
@@ -42,8 +37,8 @@ const ActivityDetailScreen: React.FC = () => {
         renderItem={({ item }) => (
           <ActivityHistoryItem
             date={item.date}
-            onEdit={() => { /* Handle Edit */ }}
-            onDelete={() => { /* Handle Delete */ }}
+            onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
+            onDelete={() => deleteActivityEntry(activityId, item.id)}
           />
         )}
         keyExtractor={item => item.id}
@@ -51,7 +46,7 @@ const ActivityDetailScreen: React.FC = () => {
       />
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => { /* Handle Add New Entry */ }}
+        onPress={() => addActivityEntry(activityId)}
       >
         <Icon name="plus" size={30} color={theme.colors.background} />
         <Text style={styles.fabText}>Add New Entry</Text>
@@ -81,6 +76,7 @@ const styles = StyleSheet.create({
   listContent: {
     paddingHorizontal: 20,
     paddingTop: 20,
+    paddingBottom: 100,
   },
   fab: {
     position: 'absolute',

@@ -4,14 +4,20 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import IconGrid from '../src/components/IconGrid';
-import { Calendar } from 'react-native-calendars';
 import { useRouter } from 'expo-router';
+import { useActivityData } from '../src/hooks/useActivityData';
 
 const AddActivityScreen: React.FC = () => {
   const router = useRouter();
+  const { addActivity } = useActivityData();
   const [activityName, setActivityName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('run');
-  const [selectedDate, setSelectedDate] = useState('');
+
+  const handleSave = async () => {
+    if (activityName.trim() === '') return;
+    await addActivity({ name: activityName, icon: selectedIcon });
+    router.back();
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -35,41 +41,12 @@ const AddActivityScreen: React.FC = () => {
 
           <Text style={styles.label}>Choose an Icon</Text>
           <IconGrid selectedIcon={selectedIcon} onSelectIcon={setSelectedIcon} />
-
-          <Text style={styles.label}>Last Done</Text>
-          <Calendar
-            onDayPress={day => setSelectedDate(day.dateString)}
-            markedDates={{
-              [selectedDate]: { selected: true, selectedColor: theme.colors.primary },
-            }}
-            theme={{
-              backgroundColor: theme.colors.background,
-              calendarBackground: theme.colors.card,
-              textSectionTitleColor: theme.colors.subtext,
-              selectedDayBackgroundColor: theme.colors.primary,
-              selectedDayTextColor: '#ffffff',
-              todayTextColor: theme.colors.primary,
-              dayTextColor: theme.colors.text,
-              textDisabledColor: theme.colors.PINdot,
-              dotColor: theme.colors.primary,
-              selectedDotColor: '#ffffff',
-              arrowColor: theme.colors.primary,
-              monthTextColor: theme.colors.text,
-              indicatorColor: 'blue',
-              textDayFontWeight: '300',
-              textMonthFontWeight: 'bold',
-              textDayHeaderFontWeight: '300',
-              textDayFontSize: 16,
-              textMonthFontSize: 16,
-              textDayHeaderFontSize: 16,
-            }}
-          />
         </View>
       </ScrollView>
       <View style={styles.footer}>
         <TouchableOpacity
           style={styles.button}
-          onPress={() => { /* Handle Save */ }}
+          onPress={handleSave}
         >
           <Text style={styles.buttonText}>Save Activity</Text>
         </TouchableOpacity>
