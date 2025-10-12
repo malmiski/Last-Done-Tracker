@@ -9,6 +9,7 @@ const colors = {
   SOS: '#FF453A',
   PINdot: '#48484A',
   PINdotActive: '#34C759',
+  accent: '#F4F7F9',
 };
 
 const typography = {
