@@ -1,19 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import ActivityListItem from '../src/components/ActivityListItem';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
 import { useActivityData } from '../src/hooks/useActivityData';
+import Toast from 'react-native-root-toast';
 
 const ActivitiesScreen: React.FC = () => {
   const router = useRouter();
-  const { activities, loading, deleteActivity, addActivityEntry } = useActivityData();
+  const { activities, activityDetails, loading, deleteActivity, addActivityEntry, refreshData } = useActivityData();
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
   const rotation = useSharedValue(0);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshData();
+    }, [refreshData])
+  );
 
   const animatedStyle = useAnimatedStyle(() => {
     return {
@@ -31,6 +38,17 @@ const ActivitiesScreen: React.FC = () => {
 
   const handleAddTime = (activityId: string) => {
     addActivityEntry(activityId);
+    const activity = activities.find(a => a.id === activityId);
+    if (activity) {
+      Toast.show(`Added new entry for ${activity.name}`, {
+        duration: Toast.durations.SHORT,
+        position: Toast.positions.BOTTOM,
+        shadow: true,
+        animation: true,
+        hideOnPress: true,
+        delay: 0,
+      });
+    }
   };
 
   const toggleEditMode = () => {
@@ -66,15 +84,20 @@ const ActivitiesScreen: React.FC = () => {
       </View>
       <FlatList
         data={filteredActivities}
-        renderItem={({ item }) => (
-          <ActivityListItem
-            item={item}
-            onPress={() => router.push(`/ActivityDetail?activityId=${item.id}`)}
-            isEditMode={isEditMode}
-            onDelete={() => handleDelete(item.id)}
-            onAddTime={() => handleAddTime(item.id)}
-          />
-        )}
+        renderItem={({ item }) => {
+          const lastEntry = activityDetails[item.id]?.[0];
+          const lastEntryDate = lastEntry ? lastEntry.date : null;
+          return (
+            <ActivityListItem
+              item={item}
+              onPress={() => router.push(`/ActivityDetail?activityId=${item.id}`)}
+              isEditMode={isEditMode}
+              onDelete={() => handleDelete(item.id)}
+              onAddTime={() => handleAddTime(item.id)}
+              lastEntryDate={lastEntryDate}
+            />
+          );
+        }}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
       />

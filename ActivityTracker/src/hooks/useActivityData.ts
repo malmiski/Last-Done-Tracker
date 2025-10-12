@@ -11,38 +11,39 @@ export const useActivityData = () => {
   const [activityDetails, setActivityDetails] = useState<{ [key: string]: ActivityEntry[] }>({});
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const storedActivities = await AsyncStorage.getItem(ACTIVITIES_KEY);
-        const storedActivityDetails = await AsyncStorage.getItem(ACTIVITY_DETAILS_KEY);
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const storedActivities = await AsyncStorage.getItem(ACTIVITIES_KEY);
+      const storedActivityDetails = await AsyncStorage.getItem(ACTIVITY_DETAILS_KEY);
 
-        if (storedActivities !== null) {
-          setActivities(JSON.parse(storedActivities));
-        } else {
-          setActivities(initialActivities);
-          await AsyncStorage.setItem(ACTIVITIES_KEY, JSON.stringify(initialActivities));
-        }
-
-        if (storedActivityDetails !== null) {
-          const parsedDetails = JSON.parse(storedActivityDetails, (key, value) => {
-            if (key === 'date') return new Date(value);
-            return value;
-          });
-          setActivityDetails(parsedDetails);
-        } else {
-          setActivityDetails(initialActivityDetails);
-          await AsyncStorage.setItem(ACTIVITY_DETAILS_KEY, JSON.stringify(initialActivityDetails));
-        }
-      } catch (e) {
-        console.error('Failed to load data.', e);
-      } finally {
-        setLoading(false);
+      if (storedActivities !== null) {
+        setActivities(JSON.parse(storedActivities));
+      } else {
+        setActivities(initialActivities);
+        await AsyncStorage.setItem(ACTIVITIES_KEY, JSON.stringify(initialActivities));
       }
-    };
 
-    loadData();
+      if (storedActivityDetails !== null) {
+        const parsedDetails = JSON.parse(storedActivityDetails, (key, value) => {
+          if (key === 'date') return new Date(value);
+          return value;
+        });
+        setActivityDetails(parsedDetails);
+      } else {
+        setActivityDetails(initialActivityDetails);
+        await AsyncStorage.setItem(ACTIVITY_DETAILS_KEY, JSON.stringify(initialActivityDetails));
+      }
+    } catch (e) {
+      console.error('Failed to load data.', e);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const saveData = async (key: string, data: any) => {
     try {
@@ -122,5 +123,6 @@ export const useActivityData = () => {
     deleteActivityEntry,
     deleteActivity,
     getActivityById,
+    refreshData: loadData,
   };
 };
