@@ -30,7 +30,9 @@ const ActivityDetailScreen: React.FC = () => {
           <Icon name="arrow-left" size={30} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>{activity.name}</Text>
-        <View style={{ width: 30 }} />
+        <TouchableOpacity onPress={() => router.push(`/GraphView?activityId=${activityId}`)}>
+          <Icon name="chart-line" size={30} color={theme.colors.text} />
+        </TouchableOpacity>
       </View>
       <FlatList
         data={history}
