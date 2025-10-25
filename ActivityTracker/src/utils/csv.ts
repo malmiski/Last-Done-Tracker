@@ -2,6 +2,7 @@ import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 export const downloadCsv = async () => {
   try {
@@ -16,18 +17,29 @@ export const downloadCsv = async () => {
     const activities = JSON.parse(activitiesJson);
     const activityDetails = JSON.parse(activityDetailsJson);
 
-    let csvContent = 'Activity,Date\n';
+    let csvContent = 'Activity,Icon,Date\n';
 
     activities.forEach((activity: any) => {
       const details = activityDetails[activity.id] || [];
       details.forEach((detail: any) => {
-        csvContent += `${activity.name},${new Date(detail.date).toISOString()}\n`;
+        csvContent += `${activity.name},${activity.icon},${new Date(detail.date).toISOString()}\n`;
       });
     });
 
-    const file = new File(Paths.cache, 'activities.csv');
-    await file.write(csvContent);
-    await Sharing.shareAsync(file.uri);
+    if (Platform.OS === 'web') {
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.href = url;
+      link.setAttribute('download', 'activities.csv');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } else {
+      const file = new File(Paths.cache, 'activities.csv');
+      await file.write(csvContent);
+      await Sharing.shareAsync(file.uri);
+    }
   } catch (error) {
     console.error('Failed to download CSV', error);
     alert('Failed to download CSV.');
@@ -43,19 +55,32 @@ export const uploadCsv = async () => {
     if (result.canceled) {
       return;
     }
-    const file = new File(result.assets[0].uri);
-    const csvContent = await file.text();
+    let csvContent = '';
+    if (Platform.OS === 'web') {
+      const file = result.assets[0].file;
+      if (file) {
+        csvContent = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onload = () => resolve(reader.result as string);
+          reader.onerror = reject;
+          reader.readAsText(file);
+        });
+      }
+    } else {
+      const file = new File(result.assets[0].uri);
+      csvContent = await file.text();
+    }
     const lines = csvContent.split('\n');
 
     const activitiesJson = await AsyncStorage.getItem('@activities');
     const activityDetailsJson = await AsyncStorage.getItem('@activityDetails');
 
-    const activities = activitiesJson ? JSON.parse(activitiesJson) : [];
+    const   activities = activitiesJson ? JSON.parse(activitiesJson) : [];
     const activityDetails = activityDetailsJson ? JSON.parse(activityDetailsJson) : {};
 
     lines.slice(1).forEach(line => {
       if (!line) return;
-      const [activityName, dateString] = line.split(',');
+      const [activityName, icon, dateString] = line.split(',');
 
       let activity = activities.find((a: any) => a.name === activityName);
       if (!activity) {
@@ -63,9 +88,14 @@ export const uploadCsv = async () => {
           id: Date.now().toString() + Math.random(),
           name: activityName,
           lastDone: 'Never',
+          icon: icon,
         };
         activities.push(activity);
         activityDetails[activity.id] = [];
+      }else{
+        if(activity.icon !== icon){
+          activity.icon = icon;
+        }
       }
 
       const date = new Date(dateString);
