@@ -1,13 +1,55 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import ActivityListItem from '../src/components/ActivityListItem';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useFocusEffect } from 'expo-router';
-import Animated, { useSharedValue, useAnimatedStyle, withTiming } from 'react-native-reanimated';
+import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS } from 'react-native-reanimated';
 import { useActivityData } from '../src/hooks/useActivityData';
-import Toast from 'react-native-root-toast';
+
+type FloatingIcon = {
+  id: number;
+  icon: string;
+  x: number;
+  y: number;
+};
+
+const FloatingIconComponent = ({ icon, onAnimationComplete, startX, startY }) => {
+  const translateY = useSharedValue(startY);
+  const translateX = useSharedValue(startX);
+  const opacity = useSharedValue(1);
+  const scale = useSharedValue(1);
+
+  React.useEffect(() => {
+    translateY.value = withTiming(startY - 200, {
+      duration: 500,
+      easing: Easing.out(Easing.linear),
+    }, () => runOnJS(onAnimationComplete)());
+    opacity.value = withTiming(0, {
+      duration: 500,
+      easing: Easing.in(Easing.ease),
+    });
+    scale.value = withTiming(0.5, {
+      duration: 500,
+      easing: Easing.in(Easing.ease),
+    });
+  }, []);
+
+  const animatedStyle = useAnimatedStyle(() => {
+    return {
+      transform: [{ translateX: translateX.value }, { translateY: translateY.value }, { scale: scale.value }],
+      opacity: opacity.value,
+      position: 'absolute',
+    };
+  });
+
+  return (
+    <Animated.View style={animatedStyle}>
+      <Icon name={icon} size={30} color={theme.colors.text} />
+    </Animated.View>
+  );
+};
 
 const ActivitiesScreen: React.FC = () => {
   const router = useRouter();
@@ -15,6 +57,8 @@ const ActivitiesScreen: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
   const rotation = useSharedValue(0);
+  const [floatingIcons, setFloatingIcons] = useState<FloatingIcon[]>([]);
+  const flatListRef = useRef<FlatList>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -36,20 +80,19 @@ const ActivitiesScreen: React.FC = () => {
     deleteActivity(activityId);
   };
 
-  const handleAddTime = (activityId: string) => {
-    addActivityEntry(activityId);
-    const activity = activities.find(a => a.id === activityId);
-    if (activity) {
-      Toast.show(`Added new entry for ${activity.name}`, {
-        duration: Toast.durations.SHORT,
-        position: Toast.positions.BOTTOM,
-        shadow: true,
-        animation: true,
-        hideOnPress: true,
-        delay: 0,
-      });
-    }
+  const handleAddTime = (activityId: string, icon: string, x: number, y: number) => {
+    addActivityEntry(activityId, new Date());
+
+    const newIcon: FloatingIcon = {
+      id: Date.now(),
+      icon: icon,
+      x: x,
+      y: y,
+    };
+
+    setFloatingIcons(prev => [...prev, newIcon]);
   };
+
 
   const toggleEditMode = () => {
     setIsEditMode(!isEditMode);
@@ -83,8 +126,9 @@ const ActivitiesScreen: React.FC = () => {
         />
       </View>
       <FlatList
+        ref={flatListRef}
         data={filteredActivities}
-        renderItem={({ item }) => {
+        renderItem={({ item, index }) => {
           const lastEntry = activityDetails[item.id]?.[0];
           const lastEntryDate = lastEntry ? lastEntry.date : null;
           return (
@@ -93,7 +137,7 @@ const ActivitiesScreen: React.FC = () => {
               onPress={() => router.push(`/ActivityDetail?activityId=${item.id}`)}
               isEditMode={isEditMode}
               onDelete={() => handleDelete(item.id)}
-              onAddTime={() => handleAddTime(item.id)}
+              onAddTime={(x, y) => handleAddTime(item.id, item.icon, x, y)}
               lastEntryDate={lastEntryDate}
             />
           );
@@ -101,6 +145,17 @@ const ActivitiesScreen: React.FC = () => {
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
       />
+      {floatingIcons.map(icon => (
+        <FloatingIconComponent
+          key={icon.id}
+          icon={icon.icon}
+          startX={icon.x}
+          startY={icon.y}
+          onAnimationComplete={() =>
+            setFloatingIcons(prev => prev.filter(i => i.id !== icon.id))
+          }
+        />
+      ))}
       <TouchableOpacity
         style={styles.fab}
         onPress={() => router.push('/AddActivity')}

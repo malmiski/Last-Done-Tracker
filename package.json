@@ -1,0 +1,5 @@
+{
+  "dependencies": {
+    "expo-crypto": "^15.0.7"
+  }
+}
