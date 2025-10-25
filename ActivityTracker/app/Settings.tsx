@@ -48,8 +48,9 @@ const SettingsScreen: React.FC = () => {
   const handlePinLockToggle = (value: boolean) => {
     if (value) {
       router.push('/SetPin');
-    }else{
+    } else {
       setPinLock('');
+      AsyncStorage.setItem('@user_pin', '');
     }
   };
 

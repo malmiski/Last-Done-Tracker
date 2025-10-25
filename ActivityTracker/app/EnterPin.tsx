@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import theme from '../src/theme/theme';
 import PinInput from '../src/components/PinInput';
 import NumericKeypad from '../src/components/NumericKeypad';
+import { hashPin } from '../src/utils/crypto';
 
 const EnterPinScreen: React.FC = () => {
   const router = useRouter();
@@ -24,8 +25,8 @@ const EnterPinScreen: React.FC = () => {
   const handleSubmit = async () => {
     try {
       const storedPin = await AsyncStorage.getItem('@user_pin');
-      console.log("Stored pin is" + storedPin);
-      if (storedPin === null || storedPin === '' || pin === storedPin) {
+      const hashedPin = await hashPin(pin);
+      if (storedPin === null || storedPin === '' || hashedPin === storedPin) {
         router.replace('/Activities');
       } else {
         Alert.alert('Invalid PIN', 'The PIN you entered is incorrect.');

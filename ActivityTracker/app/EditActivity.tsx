@@ -1,30 +1,31 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import React, { useCallback, useState, useEffect, act } from 'react';
+import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import IconGrid from '../src/components/IconGrid';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
 
-const AddActivityScreen: React.FC = () => {
+const EditActivityScreen: React.FC = () => {
   const router = useRouter();
-  const { addActivity } = useActivityData();
+  const { activityId } = useLocalSearchParams<{ activityId: string }>();
+  const { getActivityById, updateActivity } = useActivityData();
   const [activityName, setActivityName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('run');
 
+  useEffect(() => {
+  const activity = getActivityById(activityId);
+      if (activity) {
+        setActivityName(activity.name);
+        setSelectedIcon(activity.icon);
+      }
+    }, [activityId, getActivityById]);
+
   const handleSave = async () => {
     if (activityName.trim() === '') return;
-    try {
-      await addActivity({ name: activityName, icon: selectedIcon });
-      router.back();
-    } catch (error) {
-      if (error instanceof Error) {
-        Alert.alert('Error', error.message);
-      } else {
-        Alert.alert('Error', 'An unknown error occurred.');
-      }
-    }
+    await updateActivity({ id: activityId, name: activityName, icon: selectedIcon });
+    router.back();
   };
 
   return (
@@ -33,7 +34,7 @@ const AddActivityScreen: React.FC = () => {
         <TouchableOpacity onPress={() => router.back()}>
           <Icon name="close" size={30} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Add Activity</Text>
+        <Text style={styles.title}>Edit Activity</Text>
         <View style={{ width: 30 }} />
       </View>
       <ScrollView>
@@ -56,7 +57,7 @@ const AddActivityScreen: React.FC = () => {
           style={styles.button}
           onPress={handleSave}
         >
-          <Text style={styles.buttonText}>Save Activity</Text>
+          <Text style={styles.buttonText}>Save Changes</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -114,4 +115,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default AddActivityScreen;
+export default EditActivityScreen;
