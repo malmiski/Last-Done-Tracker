@@ -10,12 +10,19 @@ interface ActivityListItemProps {
   onPress: () => void;
   isEditMode: boolean;
   onDelete: () => void;
-  onAddTime: () => void;
+  onAddTime: (x: number, y: number) => void;
   lastEntryDate: Date | null;
 }
 
 const ActivityListItem: React.FC<ActivityListItemProps> = ({ item, onPress, isEditMode, onDelete, onAddTime, lastEntryDate }) => {
   const [timeAgo, setTimeAgo] = useState(lastEntryDate ? formatTimeAgo(lastEntryDate) : 'Never');
+  const addButtonRef = React.useRef<TouchableOpacity>(null);
+
+  const handleAddTime = () => {
+    addButtonRef.current?.measure((_fx, _fy, _width, _height, px, py) => {
+      onAddTime(px, py);
+    });
+  };
 
   useEffect(() => {
     if (lastEntryDate) {
@@ -40,7 +47,7 @@ const ActivityListItem: React.FC<ActivityListItemProps> = ({ item, onPress, isEd
           <Icon name="trash-can-outline" size={24} color={theme.colors.text} />
         </TouchableOpacity>
       ) : (
-        <TouchableOpacity onPress={onAddTime} style={styles.addButton}>
+        <TouchableOpacity ref={addButtonRef} onPress={handleAddTime} style={styles.addButton}>
           <Icon name="plus" size={32} color={theme.colors.primary} />
         </TouchableOpacity>
       )}

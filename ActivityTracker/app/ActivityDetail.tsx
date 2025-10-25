@@ -1,20 +1,27 @@
-import React from 'react';
+import React, { useState, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import ActivityHistoryItem from '../src/components/ActivityHistoryItem';
 import { useActivityData } from '../src/hooks/useActivityData';
 
 const ActivityDetailScreen: React.FC = () => {
   const router = useRouter();
   const { activityId } = useLocalSearchParams<{ activityId: string }>();
-  const { activityDetails, getActivityById, addActivityEntry, deleteActivityEntry } = useActivityData();
+  const { activityDetails, getActivityById, addActivityEntry, deleteActivityEntry, refreshData } = useActivityData();
+
+  useFocusEffect(
+    useCallback(() => {
+      if (refreshData) {
+        refreshData();
+      }
+    }, [refreshData])
+  );
 
   const activity = getActivityById(activityId);
-  const history = activityDetails[activityId] || [];
-
+  const history = (activityDetails[activityId] || []).toSorted((a, b) => b.date.getTime() - a.date.getTime());
   if (!activity) {
     return (
       <SafeAreaView style={styles.container}>
@@ -26,13 +33,18 @@ const ActivityDetailScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.replace("/Activities")}>
           <Icon name="arrow-left" size={30} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>{activity.name}</Text>
+        <View style={styles.headerButtons}>
+        <TouchableOpacity onPress={() => router.push(`/EditActivity?activityId=${activityId}`)} style={{paddingRight:10}}>
+          <Icon name="pencil-outline" size={30} color={theme.colors.text}  />
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => router.push(`/GraphView?activityId=${activityId}`)}>
           <Icon name="chart-line" size={30} color={theme.colors.text} />
         </TouchableOpacity>
+        </View>
       </View>
       <FlatList
         data={history}
@@ -48,7 +60,7 @@ const ActivityDetailScreen: React.FC = () => {
       />
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => addActivityEntry(activityId)}
+        onPress={() => addActivityEntry(activityId, new Date())}
       >
         <Icon name="plus" size={30} color={theme.colors.background} />
         <Text style={styles.fabText}>Add New Entry</Text>
@@ -69,6 +81,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 20,
     paddingBottom: 10,
+  },
+  headerButtons: {
+    flexDirection: 'row',
   },
   title: {
     color: theme.colors.text,

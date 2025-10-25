@@ -1,11 +1,43 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect, createElement } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
-import DateTimePicker from '@react-native-community/datetimepicker';
+const WebDatePicker = (date, setDate) => {
+  return createElement('input', {
+    type: 'date',
+    value: date.toISOString().split('T')[0],
+    onChange: (event) => {
+      const newDate = new Date(date);
+      const dateString = event.target.value;
+      const [year, month, day] = dateString.split('-').map(Number);
+      if(!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+        newDate.setFullYear(year, month - 1, day);
+        setDate(newDate);
+      }
+    },
+    style: { height: 30, padding: 5, border: "2px solid #677788", borderRadius: 5, width: 250 }
+  })
+}
+const WebTimePicker = (date, setDate) => {
+  return createElement('input', {
+    type: 'time',
+    step: 1,
+    value: date.toTimeString().slice(0,8),
+    onChange: (event) => {
+      const newDate = new Date(date);
+      const timeString = event.target.value;
+      const [hours, minutes, seconds] = timeString.split(':').map(Number);
+      if(!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
+        newDate.setHours(hours, minutes, seconds);
+        setDate(newDate);
+      }
+    },
+    style: { height: 30, padding: 5, border: "2px solid #677788", borderRadius: 5, width: 250 }
+  })
+}
 
 const EditEntryScreen: React.FC = () => {
   const router = useRouter();
@@ -16,8 +48,8 @@ const EditEntryScreen: React.FC = () => {
   const entry = activityDetails[activityId]?.find(e => e.id === entryId);
 
   const [date, setDate] = useState(entry ? entry.date : new Date());
-  const [mode, setMode] = useState<'date' | 'time'>('date');
-  const [show, setShow] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showTimePicker, setShowTimePicker] = useState(false);
 
   useEffect(() => {
     if (entry) {
@@ -25,21 +57,10 @@ const EditEntryScreen: React.FC = () => {
     }
   }, [entry]);
 
-  const onChange = (event: any, selectedDate?: Date) => {
-    const currentDate = selectedDate || date;
-    setShow(Platform.OS === 'ios');
-    setDate(currentDate);
-  };
-
-  const showMode = (currentMode: 'date' | 'time') => {
-    setShow(true);
-    setMode(currentMode);
-  };
-
   const handleSave = () => {
     if (activityId && entryId) {
       updateActivityEntry(activityId, entryId, date);
-      router.back();
+      router.replace("/ActivityDetail?activityId="+activityId);
     }
   };
 
@@ -54,7 +75,7 @@ const EditEntryScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.replace("/ActivityDetail?activityId="+activityId)}>
           <Icon name="close" size={30} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Edit Entry for {activity.name}</Text>
@@ -63,23 +84,19 @@ const EditEntryScreen: React.FC = () => {
       <View style={styles.content}>
         <Text style={styles.label}>Date / Time</Text>
         <View style={styles.dateContainer}>
-          <TouchableOpacity onPress={() => showMode('date')} style={styles.datePickerButton}>
-            <Text style={styles.datePickerText}>{date.toLocaleDateString()}</Text>
+          <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.datePickerButton}>
+            <Text style={styles.datePickerText}>{date.toLocaleDateString()} </Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => showMode('time')} style={styles.datePickerButton}>
+          <TouchableOpacity onPress={() => setShowTimePicker(true)} style={styles.datePickerButton}>
             <Text style={styles.datePickerText}>{date.toLocaleTimeString()}</Text>
           </TouchableOpacity>
         </View>
-        {show && (
-          <DateTimePicker
-            testID="dateTimePicker"
-            value={date}
-            mode={mode}
-            is24Hour={true}
-            display="default"
-            onChange={onChange}
-          />
+        {showDatePicker && (
+          WebDatePicker(date, setDate)
         )}
+        {showTimePicker &&
+          WebTimePicker(date, setDate)
+        }
       </View>
       <View style={styles.footer}>
         <TouchableOpacity style={styles.button} onPress={handleSave}>
