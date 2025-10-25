@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -25,9 +25,9 @@ export const downloadCsv = async () => {
       });
     });
 
-    const uri = FileSystem.documentDirectory + 'activities.csv';
-    await FileSystem.writeAsStringAsync(uri, csvContent);
-    await Sharing.shareAsync(uri);
+    const file = new File(Paths.cache, 'activities.csv');
+    await file.write(csvContent);
+    await Sharing.shareAsync(file.uri);
   } catch (error) {
     console.error('Failed to download CSV', error);
     alert('Failed to download CSV.');
@@ -43,8 +43,8 @@ export const uploadCsv = async () => {
     if (result.canceled) {
       return;
     }
-    const uri = result.assets[0].uri;
-    const csvContent = await FileSystem.readAsStringAsync(uri);
+    const file = new File(result.assets[0].uri);
+    const csvContent = await file.text();
     const lines = csvContent.split('\n');
 
     const activitiesJson = await AsyncStorage.getItem('@activities');
