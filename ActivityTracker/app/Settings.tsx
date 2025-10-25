@@ -5,12 +5,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useFocusEffect } from 'expo-router';
+import { downloadCsv, uploadCsv } from '../src/utils/csv';
 
 const SettingsScreen: React.FC = () => {
   const router = useRouter();
   const [pinLock, setPinLock] = useState('');
-  const [activityReminders, setActivityReminders] = useState(false);
-  const [cloudBackup, setCloudBackup] = useState(true);
 
   useEffect(() => {
     const loadPinLockState = async () => {
@@ -78,31 +77,21 @@ const SettingsScreen: React.FC = () => {
           />
         </View>
 
-        <Text style={styles.sectionTitle}>General</Text>
-        <View style={styles.setting}>
+        <Text style={styles.sectionTitle}>Data Management</Text>
+        <TouchableOpacity style={styles.setting} onPress={downloadCsv}>
           <View>
-            <Text style={styles.settingText}>Activity Reminders</Text>
-            <Text style={styles.settingSubtext}>Receive reminders for activities</Text>
+            <Text style={styles.settingText}>Download CSV</Text>
+            <Text style={styles.settingSubtext}>Download all your activities and data</Text>
           </View>
-          <Switch
-            trackColor={{ false: theme.colors.PINdot, true: theme.colors.primary }}
-            thumbColor={theme.colors.text}
-            onValueChange={setActivityReminders}
-            value={activityReminders}
-          />
-        </View>
-        <View style={styles.setting}>
+          <Icon name="download" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.setting} onPress={uploadCsv}>
           <View>
-            <Text style={styles.settingText}>Cloud Backup</Text>
-            <Text style={styles.settingSubtext}>Automatically back up your data</Text>
+            <Text style={styles.settingText}>Upload CSV</Text>
+            <Text style={styles.settingSubtext}>Upload a CSV with your data</Text>
           </View>
-          <Switch
-            trackColor={{ false: theme.colors.PINdot, true: theme.colors.primary }}
-            thumbColor={theme.colors.text}
-            onValueChange={setCloudBackup}
-            value={cloudBackup}
-          />
-        </View>
+          <Icon name="upload" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
       </View>
       <View style={styles.footer}>
         <TouchableOpacity
