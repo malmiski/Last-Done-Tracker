@@ -3,6 +3,7 @@ import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
+import { generateActivityId } from './crypto';
 
 export const downloadCsv = async () => {
   try {
@@ -78,14 +79,15 @@ export const uploadCsv = async () => {
     const   activities = activitiesJson ? JSON.parse(activitiesJson) : [];
     const activityDetails = activityDetailsJson ? JSON.parse(activityDetailsJson) : {};
 
-    lines.slice(1).forEach(line => {
-      if (!line) return;
+    for (const line of lines.slice(1)) {
+      if (!line) continue;
       const [activityName, icon, dateString] = line.split(',');
 
       let activity = activities.find((a: any) => a.name === activityName);
       if (!activity) {
+        const newId = await generateActivityId(activityName);
         activity = {
-          id: Date.now().toString() + Math.random(),
+          id: newId,
           name: activityName,
           lastDone: 'Never',
           icon: icon,
@@ -103,11 +105,11 @@ export const uploadCsv = async () => {
 
       if (!exists) {
         activityDetails[activity.id].push({
-          id: Date.now().toString() + Math.random(),
+          id: await generateActivityId(Math.random().toString()),
           date,
         });
       }
-    });
+    }
 
     await AsyncStorage.setItem('@activities', JSON.stringify(activities));
     await AsyncStorage.setItem('@activityDetails', JSON.stringify(activityDetails));

@@ -48,15 +48,16 @@ const SettingsScreen: React.FC = () => {
   const handlePinLockToggle = (value: boolean) => {
     if (value) {
       router.push('/SetPin');
-    }else{
+    } else {
       setPinLock('');
+      AsyncStorage.setItem('@user_pin', '');
     }
   };
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()}>
+        <TouchableOpacity onPress={() => router.replace("/Activities")}>
           <Icon name="arrow-left" size={30} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Settings</Text>

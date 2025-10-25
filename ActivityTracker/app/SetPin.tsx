@@ -5,6 +5,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import theme from '../src/theme/theme';
 import PinInputBox from '../src/components/PinInputBox';
 import { useRouter } from 'expo-router';
+import { hashPin } from '../src/utils/crypto';
 
 const SetPinScreen: React.FC = () => {
   const router = useRouter();
@@ -21,7 +22,8 @@ const SetPinScreen: React.FC = () => {
       return;
     }
     try {
-      await AsyncStorage.setItem('@user_pin', pin);
+      const hashedPin = await hashPin(pin);
+      await AsyncStorage.setItem('@user_pin', hashedPin);
       Alert.alert('PIN Saved', 'Your new PIN has been saved successfully.');
       router.replace('/EnterPin');
     } catch (e) {
@@ -42,7 +44,7 @@ const SetPinScreen: React.FC = () => {
       </View>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.button} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.button} onPress={() => router.replace("/Settings")}>
           <Text style={styles.buttonText}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSave}>

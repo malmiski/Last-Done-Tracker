@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { activities as initialActivities, Activity } from '../data/activities';
 import { activityDetails as initialActivityDetails, ActivityEntry } from '../data/activity-details';
+import { generateActivityId } from '../utils/crypto';
 
 const ACTIVITIES_KEY = '@activities';
 const ACTIVITY_DETAILS_KEY = '@activityDetails';
@@ -54,7 +55,11 @@ export const useActivityData = () => {
   };
 
   const addActivity = async (newActivity: Omit<Activity, 'id' | 'lastDone'>) => {
-    const newId = Date.now().toString();
+    const newId = await generateActivityId(newActivity.name);
+    if (activities.some(a => a.id === newId)) {
+      throw new Error('An activity with this name already exists.');
+    }
+
     const activityToAdd: Activity = {
       ...newActivity,
       id: newId,
@@ -70,10 +75,18 @@ export const useActivityData = () => {
     return activityToAdd;
   };
 
-  const addActivityEntry = async (activityId: string) => {
+  const updateActivity = async (updatedActivity: Activity) => {
+    const updatedActivities = activities.map(a =>
+      a.id === updatedActivity.id ? updatedActivity : a
+    );
+    setActivities(updatedActivities);
+    await saveData(ACTIVITIES_KEY, updatedActivities);
+  };
+
+  const addActivityEntry = async (activityId: string, date: Date) => {
     const newEntry: ActivityEntry = {
-      id: Date.now().toString(),
-      date: new Date(),
+      id: await generateActivityId(Math.random().toString()),
+      date: date,
     };
     const updatedDetails = { ...activityDetails };
     updatedDetails[activityId] = [newEntry, ...(updatedDetails[activityId] || [])];
@@ -118,6 +131,7 @@ export const useActivityData = () => {
     activityDetails,
     loading,
     addActivity,
+    updateActivity,
     addActivityEntry,
     updateActivityEntry,
     deleteActivityEntry,
