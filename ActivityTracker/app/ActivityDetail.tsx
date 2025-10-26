@@ -22,7 +22,7 @@ const ActivityDetailScreen: React.FC = () => {
   );
 
   const activity = getActivityById(activityId);
-  const history = (activityDetails[activityId] || []).toSorted((a, b) => b.date.getTime() - a.date.getTime());
+  const history = (activityDetails[activityId] || []).sort((a, b) => b.date.getTime() - a.date.getTime());
   if (!activity) {
     return (
       <SafeAreaView style={styles.container}>
@@ -47,12 +47,6 @@ const ActivityDetailScreen: React.FC = () => {
         </TouchableOpacity>
         </View>
       </View>
-      <DateTimePicker
-        value={new Date(selectedDate)}
-        mode="date"
-        display="inline"
-        onChange={(event, date) => setSelectedDate(date.toISOString().split('T')[0])}
-      />
       <FlatList
         data={history}
         renderItem={({ item }) => (

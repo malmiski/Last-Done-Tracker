@@ -7,7 +7,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
-const WebDatePicker = (date, setDate) => {
+const WebDatePicker = (date, setDate, setShowDatePicker) => {
   const setCalendarDate = (event) => {
     const newDate = new Date(date);
     const dateString = event.target.value;
@@ -16,7 +16,9 @@ const WebDatePicker = (date, setDate) => {
       newDate.setFullYear(year, month - 1, day);
       setDate(newDate);
     }
+    setShowDatePicker(false);
   };
+
   if (Platform.OS === 'web') {
     return createElement('input', {
       type: 'date',
@@ -30,12 +32,12 @@ const WebDatePicker = (date, setDate) => {
       value={new Date(date)}
       mode="date"
       display="inline"
-      onChange={(event, date) => setCalendarDate(event)}
+      onChange={(event, date) => setCalendarDate({target: {value: date.toISOString().split('T')[0]}})}
     />
 
   }
 }
-const WebTimePicker = (date, setDate) => {
+const WebTimePicker = (date, setDate, setShowTimePicker) => {
   const setDateTime = (event) => {
     const newDate = new Date(date);
     const timeString = event.target.value;
@@ -44,6 +46,7 @@ const WebTimePicker = (date, setDate) => {
       newDate.setHours(hours, minutes, seconds);
       setDate(newDate);
     }
+      setShowTimePicker(false);
   };
   if (Platform.OS === 'web') {
     return createElement('input', {
@@ -58,8 +61,13 @@ const WebTimePicker = (date, setDate) => {
       value={new Date(date)}
       mode="time"
       display="inline"
-      onChange={(event, date) => {
-        setDateTime(event);
+      onChange={(event, time) => {
+        var [hours, minutes, seconds] = time.toLocaleTimeString().substring(0, time.toLocaleTimeString().length - 3).split(":");
+        const add12Hours = time.toLocaleTimeString().substring(time.toLocaleTimeString().length - 2) == 'PM';
+        if(add12Hours){
+          hours = parseInt(hours) + 12;
+        }
+        setDateTime({target: {value: hours + ":" + minutes + ":" + seconds}});
       }}
     />;
   }
@@ -118,10 +126,10 @@ const EditEntryScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
         {showDatePicker && (
-          WebDatePicker(date, setDate)
+          WebDatePicker(date, setDate, setShowDatePicker)
         )}
         {showTimePicker &&
-          WebTimePicker(date, setDate)
+          WebTimePicker(date, setDate, setShowTimePicker)
         }
       </View>
       <View style={styles.footer}>

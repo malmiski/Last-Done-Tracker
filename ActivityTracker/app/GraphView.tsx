@@ -82,7 +82,7 @@ const GraphViewScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => {router.replace("/ActivityDetail?activityid="+activityId)}}>
+        <TouchableOpacity onPress={() => {console.log(activityId); router.replace("/ActivityDetail?activityId="+activityId)}}>
           <Icon name="arrow-left" size={30} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>{activity.name} Graph</Text>
