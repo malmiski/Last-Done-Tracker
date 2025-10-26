@@ -6,6 +6,7 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import ActivityHistoryItem from '../src/components/ActivityHistoryItem';
 import { useActivityData } from '../src/hooks/useActivityData';
+import DateTimePicker from '@react-native-community/datetimepicker';
 
 const ActivityDetailScreen: React.FC = () => {
   const router = useRouter();
@@ -46,6 +47,12 @@ const ActivityDetailScreen: React.FC = () => {
         </TouchableOpacity>
         </View>
       </View>
+      <DateTimePicker
+        value={new Date(selectedDate)}
+        mode="date"
+        display="inline"
+        onChange={(event, date) => setSelectedDate(date.toISOString().split('T')[0])}
+      />
       <FlatList
         data={history}
         renderItem={({ item }) => (
