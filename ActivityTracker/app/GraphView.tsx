@@ -82,7 +82,7 @@ const GraphViewScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => {console.log(activityId); router.replace("/ActivityDetail?activityId="+activityId)}}>
+        <TouchableOpacity onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace("/ActivityDetail?activityId=" + activityId) } }}>
           <Icon name="arrow-left" size={30} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>{activity.name} Graph</Text>
@@ -91,7 +91,7 @@ const GraphViewScreen: React.FC = () => {
 
       <View style={styles.chartContainer}>
         {chartData.length > 0 ? (
-           <LineChart
+          <LineChart
             data={chartData}
             height={220}
             width={screenWidth - 80}

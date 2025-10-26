@@ -17,7 +17,11 @@ const AddActivityScreen: React.FC = () => {
     if (activityName.trim() === '') return;
     try {
       await addActivity({ name: activityName, icon: selectedIcon });
-      router.replace("/Activities");
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/Activities");
+      }
     } catch (error) {
       if (error instanceof Error) {
         Alert.alert('Error', error.message);
@@ -30,7 +34,7 @@ const AddActivityScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace("/Activities")}>
+        <TouchableOpacity onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace("/Activities"); } }}>
           <Icon name="close" size={30} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Add Activity</Text>

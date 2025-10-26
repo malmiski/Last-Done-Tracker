@@ -25,7 +25,11 @@ const SetPinScreen: React.FC = () => {
       const hashedPin = await hashPin(pin);
       await AsyncStorage.setItem('@user_pin', hashedPin);
       Alert.alert('PIN Saved', 'Your new PIN has been saved successfully.');
-      router.replace('/EnterPin');
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/EnterPin');
+      }
     } catch (e) {
       Alert.alert('Error', 'Failed to save PIN.');
     }
@@ -44,7 +48,7 @@ const SetPinScreen: React.FC = () => {
       </View>
 
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.button} onPress={() => router.replace("/Settings")}>
+        <TouchableOpacity style={styles.button} onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace("/Settings") } }}>
           <Text style={styles.buttonText}>Cancel</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.button, styles.saveButton]} onPress={handleSave}>

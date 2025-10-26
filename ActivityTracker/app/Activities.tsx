@@ -104,7 +104,7 @@ const ActivitiesScreen: React.FC = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Activities</Text>
         <View style={styles.headerButtons}>
-          <TouchableOpacity onPress={toggleEditMode} style={{marginRight: 15}}>
+          <TouchableOpacity onPress={toggleEditMode} style={{ marginRight: 15 }}>
             <Animated.View style={animatedStyle}>
               <Icon name={isEditMode ? "check" : "pencil-outline"} size={30} color={theme.colors.text} />
             </Animated.View>

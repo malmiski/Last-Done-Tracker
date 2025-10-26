@@ -15,12 +15,12 @@ const EditActivityScreen: React.FC = () => {
   const [selectedIcon, setSelectedIcon] = useState('run');
 
   useEffect(() => {
-  const activity = getActivityById(activityId);
-      if (activity) {
-        setActivityName(activity.name);
-        setSelectedIcon(activity.icon);
-      }
-    }, [activityId, getActivityById]);
+    const activity = getActivityById(activityId);
+    if (activity) {
+      setActivityName(activity.name);
+      setSelectedIcon(activity.icon);
+    }
+  }, [activityId, getActivityById]);
 
   const handleSave = async () => {
     if (activityName.trim() === '') return;

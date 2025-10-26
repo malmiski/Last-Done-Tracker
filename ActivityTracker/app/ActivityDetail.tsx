@@ -34,17 +34,17 @@ const ActivityDetailScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace("/Activities")}>
+        <TouchableOpacity onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace("/Activities"); } }}>
           <Icon name="arrow-left" size={30} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>{activity.name}</Text>
         <View style={styles.headerButtons}>
-        <TouchableOpacity onPress={() => router.push(`/EditActivity?activityId=${activityId}`)} style={{paddingRight:10}}>
-          <Icon name="pencil-outline" size={30} color={theme.colors.text}  />
-        </TouchableOpacity>
-        <TouchableOpacity onPress={() => router.push(`/GraphView?activityId=${activityId}`)}>
-          <Icon name="chart-line" size={30} color={theme.colors.text} />
-        </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push(`/EditActivity?activityId=${activityId}`)} style={{ paddingRight: 10 }}>
+            <Icon name="pencil-outline" size={30} color={theme.colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => router.push(`/GraphView?activityId=${activityId}`)}>
+            <Icon name="chart-line" size={30} color={theme.colors.text} />
+          </TouchableOpacity>
         </View>
       </View>
       <FlatList

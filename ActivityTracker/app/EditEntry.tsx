@@ -32,7 +32,7 @@ const WebDatePicker = (date, setDate, setShowDatePicker) => {
       value={new Date(date)}
       mode="date"
       display="inline"
-      onChange={(event, date) => setCalendarDate({target: {value: date.toISOString().split('T')[0]}})}
+      onChange={(event, date) => setCalendarDate({ target: { value: date.toISOString().split('T')[0] } })}
     />
 
   }
@@ -46,7 +46,7 @@ const WebTimePicker = (date, setDate, setShowTimePicker) => {
       newDate.setHours(hours, minutes, seconds);
       setDate(newDate);
     }
-      setShowTimePicker(false);
+    setShowTimePicker(false);
   };
   if (Platform.OS === 'web') {
     return createElement('input', {
@@ -64,10 +64,10 @@ const WebTimePicker = (date, setDate, setShowTimePicker) => {
       onChange={(event, time) => {
         var [hours, minutes, seconds] = time.toLocaleTimeString().substring(0, time.toLocaleTimeString().length - 3).split(":");
         const add12Hours = time.toLocaleTimeString().substring(time.toLocaleTimeString().length - 2) == 'PM';
-        if(add12Hours){
+        if (add12Hours) {
           hours = parseInt(hours) + 12;
         }
-        setDateTime({target: {value: hours + ":" + minutes + ":" + seconds}});
+        setDateTime({ target: { value: hours + ":" + minutes + ":" + seconds } });
       }}
     />;
   }
@@ -94,7 +94,11 @@ const EditEntryScreen: React.FC = () => {
   const handleSave = () => {
     if (activityId && entryId) {
       updateActivityEntry(activityId, entryId, date);
-      router.replace("/ActivityDetail?activityId=" + activityId);
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace("/ActivityDetail?activityId=" + activityId);
+      }
     }
   };
 
@@ -109,7 +113,13 @@ const EditEntryScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.replace("/ActivityDetail?activityId=" + activityId)}>
+        <TouchableOpacity onPress={() => {
+          if (router.canGoBack()) {
+            router.back();
+          } else {
+            router.replace("/ActivityDetail?activityId=" + activityId);
+          }
+        }}>
           <Icon name="close" size={30} color={theme.colors.text} />
         </TouchableOpacity>
         <Text style={styles.title}>Edit Entry for {activity.name}</Text>

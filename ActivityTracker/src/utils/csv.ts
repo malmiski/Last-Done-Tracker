@@ -76,7 +76,7 @@ export const uploadCsv = async () => {
     const activitiesJson = await AsyncStorage.getItem('@activities');
     const activityDetailsJson = await AsyncStorage.getItem('@activityDetails');
 
-    const   activities = activitiesJson ? JSON.parse(activitiesJson) : [];
+    const activities = activitiesJson ? JSON.parse(activitiesJson) : [];
     const activityDetails = activityDetailsJson ? JSON.parse(activityDetailsJson) : {};
 
     for (const line of lines.slice(1)) {
@@ -94,8 +94,8 @@ export const uploadCsv = async () => {
         };
         activities.push(activity);
         activityDetails[activity.id] = [];
-      }else{
-        if(activity.icon !== icon){
+      } else {
+        if (activity.icon !== icon) {
           activity.icon = icon;
         }
       }
