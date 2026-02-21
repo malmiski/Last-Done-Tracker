@@ -31,6 +31,11 @@ const ActivityDetailScreen: React.FC = () => {
     );
   }
 
+  const handleAddEntry = async () => {
+    const newEntryId = await addActivityEntry(activityId, new Date());
+    router.push(`/EditEntry?activityId=${activityId}&entryId=${newEntryId}`);
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
@@ -52,6 +57,7 @@ const ActivityDetailScreen: React.FC = () => {
         renderItem={({ item }) => (
           <ActivityHistoryItem
             date={item.date}
+            notes={item.notes}
             onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
             onDelete={() => deleteActivityEntry(activityId, item.id)}
           />
@@ -61,7 +67,7 @@ const ActivityDetailScreen: React.FC = () => {
       />
       <TouchableOpacity
         style={styles.fab}
-        onPress={() => addActivityEntry(activityId, new Date())}
+        onPress={handleAddEntry}
       >
         <Icon name="plus" size={30} color={theme.colors.background} />
         <Text style={styles.fabText}>Add New Entry</Text>

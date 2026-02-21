@@ -1,5 +1,5 @@
 import React, { useCallback, useState, useEffect, createElement } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
@@ -82,18 +82,20 @@ const EditEntryScreen: React.FC = () => {
   const entry = activityDetails[activityId]?.find(e => e.id === entryId);
 
   const [date, setDate] = useState(entry ? entry.date : new Date());
+  const [notes, setNotes] = useState(entry ? entry.notes || '' : '');
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [showTimePicker, setShowTimePicker] = useState(false);
 
   useEffect(() => {
     if (entry) {
       setDate(entry.date);
+      setNotes(entry.notes || '');
     }
   }, [entry]);
 
   const handleSave = () => {
     if (activityId && entryId) {
-      updateActivityEntry(activityId, entryId, date);
+      updateActivityEntry(activityId, entryId, date, notes);
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -141,6 +143,15 @@ const EditEntryScreen: React.FC = () => {
         {showTimePicker &&
           WebTimePicker(date, setDate, setShowTimePicker)
         }
+        <Text style={[styles.label, { marginTop: 20 }]}>Notes</Text>
+        <TextInput
+          style={styles.notesInput}
+          placeholder="Add notes here..."
+          placeholderTextColor={theme.colors.subtext}
+          value={notes}
+          onChangeText={setNotes}
+          multiline
+        />
       </View>
       <View style={styles.footer}>
         <TouchableOpacity style={styles.button} onPress={handleSave}>
@@ -193,6 +204,15 @@ const styles = StyleSheet.create({
   datePickerText: {
     color: theme.colors.primary,
     fontSize: 18,
+  },
+  notesInput: {
+    backgroundColor: theme.colors.card,
+    borderRadius: 10,
+    padding: 15,
+    color: theme.colors.text,
+    fontSize: 16,
+    height: 150,
+    textAlignVertical: 'top',
   },
   footer: {
     padding: 20,

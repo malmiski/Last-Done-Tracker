@@ -41,6 +41,7 @@ local.properties
 .metro-cache/
 
 # Misc
+expo.log
 .DS_Store
 *.orig
 vendor/

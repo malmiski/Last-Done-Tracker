@@ -83,22 +83,25 @@ export const useActivityData = () => {
     await saveData(ACTIVITIES_KEY, updatedActivities);
   };
 
-  const addActivityEntry = async (activityId: string, date: Date) => {
+  const addActivityEntry = async (activityId: string, date: Date, notes?: string) => {
     const newEntry: ActivityEntry = {
       id: await generateActivityId(Math.random().toString()),
       date: date,
+      notes: notes,
     };
     const updatedDetails = { ...activityDetails };
     updatedDetails[activityId] = [newEntry, ...(updatedDetails[activityId] || [])];
     setActivityDetails(updatedDetails);
     await saveData(ACTIVITY_DETAILS_KEY, updatedDetails);
+    return newEntry.id;
   };
 
-  const updateActivityEntry = async (activityId: string, entryId: string, newDate: Date) => {
+  const updateActivityEntry = async (activityId: string, entryId: string, newDate: Date, notes?: string) => {
     const updatedDetails = { ...activityDetails };
     const entryIndex = updatedDetails[activityId].findIndex(entry => entry.id === entryId);
     if (entryIndex > -1) {
       updatedDetails[activityId][entryIndex].date = newDate;
+      updatedDetails[activityId][entryIndex].notes = notes;
       setActivityDetails(updatedDetails);
       await saveData(ACTIVITY_DETAILS_KEY, updatedDetails);
     }
