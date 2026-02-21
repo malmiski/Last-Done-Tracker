@@ -18,12 +18,27 @@ export const downloadCsv = async () => {
     const activities = JSON.parse(activitiesJson);
     const activityDetails = JSON.parse(activityDetailsJson);
 
-    let csvContent = 'Activity,Icon,Date\n';
+    let csvContent = 'Activity,Icon,Date,Notes\n';
+
+    const escapeCSV = (field: string) => {
+      if (field === undefined || field === null) return '';
+      const stringField = String(field).replace(/\n/g, ' '); // Replace newlines with spaces for simplicity
+      if (stringField.includes(',') || stringField.includes('"')) {
+        return `"${stringField.replace(/"/g, '""')}"`;
+      }
+      return stringField;
+    };
 
     activities.forEach((activity: any) => {
       const details = activityDetails[activity.id] || [];
       details.forEach((detail: any) => {
-        csvContent += `${activity.name},${activity.icon},${new Date(detail.date).toISOString()}\n`;
+        const row = [
+          activity.name,
+          activity.icon,
+          new Date(detail.date).toISOString(),
+          detail.notes || ''
+        ].map(escapeCSV).join(',');
+        csvContent += row + '\n';
       });
     });
 
@@ -79,9 +94,33 @@ export const uploadCsv = async () => {
     const activities = activitiesJson ? JSON.parse(activitiesJson) : [];
     const activityDetails = activityDetailsJson ? JSON.parse(activityDetailsJson) : {};
 
+    const parseCSVLine = (line: string) => {
+      const result = [];
+      let cur = '';
+      let inQuotes = false;
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          if (inQuotes && line[i + 1] === '"') {
+            cur += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === ',' && !inQuotes) {
+          result.push(cur);
+          cur = '';
+        } else {
+          cur += char;
+        }
+      }
+      result.push(cur);
+      return result;
+    };
+
     for (const line of lines.slice(1)) {
       if (!line) continue;
-      const [activityName, icon, dateString] = line.split(',');
+      const [activityName, icon, dateString, notes] = parseCSVLine(line);
 
       let activity = activities.find((a: any) => a.name === activityName);
       if (!activity) {
@@ -107,7 +146,14 @@ export const uploadCsv = async () => {
         activityDetails[activity.id].push({
           id: await generateActivityId(Math.random().toString()),
           date,
+          notes: notes || undefined,
         });
+      } else {
+        // Update notes if they exist in CSV but not in current data, or if they are different
+        const entryIndex = activityDetails[activity.id].findIndex((d: any) => new Date(d.date).getTime() === date.getTime());
+        if (entryIndex > -1) {
+          activityDetails[activity.id][entryIndex].notes = notes || activityDetails[activity.id][entryIndex].notes;
+        }
       }
     }
 

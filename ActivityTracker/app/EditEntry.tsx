@@ -33,7 +33,9 @@ const EditEntryScreen: React.FC = () => {
     const numSecond = parseInt(second, 10);
 
     const isMonthValid = !isNaN(numMonth) && numMonth >= 1 && numMonth <= 12;
-    const isDayValid = !isNaN(numDay) && numDay >= 1 && numDay <= 31;
+    const isDayValid = !isNaN(numMonth) && !isNaN(numDay) && !isNaN(numYear) &&
+                       numMonth >= 1 && numMonth <= 12 &&
+                       numDay >= 1 && numDay <= new Date(numYear, numMonth, 0).getDate();
     const isYearValid = !isNaN(numYear) && numYear > 0;
     const isHourValid = !isNaN(numHour) && numHour >= 1 && numHour <= 12;
     const isMinuteValid = !isNaN(numMinute) && numMinute >= 0 && numMinute <= 59;
