@@ -3,6 +3,7 @@ const colors = {
   card: '#2C2C2E',
   text: '#FFFFFF',
   primary: '#34C759', // A vibrant green
+  disabled: '#555555',
   notification: '#FF3B30', // A standard red
   border: '#38383A',
   subtext: '#8E8E93',

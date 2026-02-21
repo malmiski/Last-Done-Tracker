@@ -1,77 +1,10 @@
-import React, { useCallback, useState, useEffect, createElement } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Platform, TextInput } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
-import DateTimePicker from '@react-native-community/datetimepicker';
-
-const WebDatePicker = (date, setDate, setShowDatePicker) => {
-  const setCalendarDate = (event) => {
-    const newDate = new Date(date);
-    const dateString = event.target.value;
-    const [year, month, day] = dateString.split('-').map(Number);
-    if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-      newDate.setFullYear(year, month - 1, day);
-      setDate(newDate);
-    }
-    setShowDatePicker(false);
-  };
-
-  if (Platform.OS === 'web') {
-    return createElement('input', {
-      type: 'date',
-      value: date.toISOString().split('T')[0],
-      onChange: setCalendarDate
-      ,
-      style: { height: 30, padding: 5, border: "2px solid #677788", borderRadius: 5, width: 250 }
-    })
-  } else {
-    return <DateTimePicker
-      value={new Date(date)}
-      mode="date"
-      display="inline"
-      onChange={(event, date) => setCalendarDate({ target: { value: date.toISOString().split('T')[0] } })}
-    />
-
-  }
-}
-const WebTimePicker = (date, setDate, setShowTimePicker) => {
-  const setDateTime = (event) => {
-    const newDate = new Date(date);
-    const timeString = event.target.value;
-    const [hours, minutes, seconds] = timeString.split(':').map(Number);
-    if (!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
-      newDate.setHours(hours, minutes, seconds);
-      setDate(newDate);
-    }
-    setShowTimePicker(false);
-  };
-  if (Platform.OS === 'web') {
-    return createElement('input', {
-      type: 'time',
-      step: 1,
-      value: date.toTimeString().slice(0, 8),
-      onChange: setDateTime,
-      style: { height: 30, padding: 5, border: "2px solid #677788", borderRadius: 5, width: 250 }
-    })
-  } else {
-    return <DateTimePicker
-      value={new Date(date)}
-      mode="time"
-      display="inline"
-      onChange={(event, time) => {
-        var [hours, minutes, seconds] = time.toLocaleTimeString().substring(0, time.toLocaleTimeString().length - 3).split(":");
-        const add12Hours = time.toLocaleTimeString().substring(time.toLocaleTimeString().length - 2) == 'PM';
-        if (add12Hours) {
-          hours = parseInt(hours) + 12;
-        }
-        setDateTime({ target: { value: hours + ":" + minutes + ":" + seconds } });
-      }}
-    />;
-  }
-}
 
 const EditEntryScreen: React.FC = () => {
   const router = useRouter();
@@ -81,25 +14,73 @@ const EditEntryScreen: React.FC = () => {
   const activity = getActivityById(activityId);
   const entry = activityDetails[activityId]?.find(e => e.id === entryId);
 
-  const [date, setDate] = useState(entry ? entry.date : new Date());
-  const [notes, setNotes] = useState(entry ? entry.notes || '' : '');
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showTimePicker, setShowTimePicker] = useState(false);
+  const [year, setYear] = useState('');
+  const [month, setMonth] = useState('');
+  const [day, setDay] = useState('');
+  const [hour, setHour] = useState('');
+  const [minute, setMinute] = useState('');
+  const [second, setSecond] = useState('');
+  const [ampm, setAmpm] = useState('');
+  const [notes, setNotes] = useState('');
+  const [isFormValidState, setIsFormValidState] = useState(false);
+
+  const isFormValid = () => {
+    const numMonth = parseInt(month, 10);
+    const numDay = parseInt(day, 10);
+    const numYear = parseInt(year, 10);
+    const numHour = parseInt(hour, 10);
+    const numMinute = parseInt(minute, 10);
+    const numSecond = parseInt(second, 10);
+
+    const isMonthValid = !isNaN(numMonth) && numMonth >= 1 && numMonth <= 12;
+    const isDayValid = !isNaN(numDay) && numDay >= 1 && numDay <= 31;
+    const isYearValid = !isNaN(numYear) && numYear > 0;
+    const isHourValid = !isNaN(numHour) && numHour >= 1 && numHour <= 12;
+    const isMinuteValid = !isNaN(numMinute) && numMinute >= 0 && numMinute <= 59;
+    const isSecondValid = !isNaN(numSecond) && numSecond >= 0 && numSecond <= 59;
+    const isAmpmValid = ampm.toUpperCase() === 'AM' || ampm.toUpperCase() === 'PM';
+
+    return isMonthValid && isDayValid && isYearValid && isHourValid && isMinuteValid && isSecondValid && isAmpmValid;
+  };
+
 
   useEffect(() => {
     if (entry) {
-      setDate(entry.date);
+      const entryDate = new Date(entry.date);
+      setYear(entryDate.getFullYear().toString());
+      setMonth((entryDate.getMonth() + 1).toString());
+      setDay(entryDate.getDate().toString());
+      let hours = entryDate.getHours();
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12; // the hour '0' should be '12'
+      setHour(hours.toString());
+      setMinute(entryDate.getMinutes().toString().padStart(2, '0'));
+      setSecond(entryDate.getSeconds().toString().padStart(2, '0'));
+      setAmpm(ampm);
       setNotes(entry.notes || '');
     }
   }, [entry]);
 
+  useEffect(() => {
+    setIsFormValidState(isFormValid());
+  }, [year, month, day, hour, minute, second, ampm]);
+
   const handleSave = () => {
-    if (activityId && entryId) {
-      updateActivityEntry(activityId, entryId, date, notes);
+    if (activityId && entryId && isFormValid()) {
+      let hours = parseInt(hour, 10);
+      if (ampm.toUpperCase() === 'PM' && hours < 12) {
+        hours += 12;
+      }
+      if (ampm.toUpperCase() === 'AM' && hours === 12) {
+        hours = 0;
+      }
+      const newDate = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10), hours, parseInt(minute, 10), parseInt(second, 10));
+      updateActivityEntry(activityId, entryId, newDate, notes);
       if (router.canGoBack()) {
         router.back();
       } else {
-        router.replace("/ActivityDetail?activityId=" + activityId);
+        router.replace(`/ActivityDetail?activityId=${activityId}`);
       }
     }
   };
@@ -119,7 +100,7 @@ const EditEntryScreen: React.FC = () => {
           if (router.canGoBack()) {
             router.back();
           } else {
-            router.replace("/ActivityDetail?activityId=" + activityId);
+            router.replace(`/ActivityDetail?activityId=${activityId}`);
           }
         }}>
           <Icon name="close" size={30} color={theme.colors.text} />
@@ -128,21 +109,71 @@ const EditEntryScreen: React.FC = () => {
         <View style={{ width: 30 }} />
       </View>
       <View style={styles.content}>
-        <Text style={styles.label}>Date / Time</Text>
-        <View style={styles.dateContainer}>
-          <TouchableOpacity onPress={() => setShowDatePicker(true)} style={styles.datePickerButton}>
-            <Text style={styles.datePickerText}>{date.toLocaleDateString()} </Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowTimePicker(true)} style={styles.datePickerButton}>
-            <Text style={styles.datePickerText}>{date.toLocaleTimeString()}</Text>
-          </TouchableOpacity>
+        <Text style={styles.label}>Date</Text>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            placeholder="MM"
+            value={month}
+            onChangeText={setMonth}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+          <Text style={styles.separator}>/</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="DD"
+            value={day}
+            onChangeText={setDay}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+          <Text style={styles.separator}>/</Text>
+          <TextInput
+            style={[styles.input, {width: 80}] }
+            placeholder="YYYY"
+            value={year}
+            onChangeText={setYear}
+            keyboardType="number-pad"
+            maxLength={4}
+          />
         </View>
-        {showDatePicker && (
-          WebDatePicker(date, setDate, setShowDatePicker)
-        )}
-        {showTimePicker &&
-          WebTimePicker(date, setDate, setShowTimePicker)
-        }
+        <Text style={styles.label}>Time</Text>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            placeholder="HH"
+            value={hour}
+            onChangeText={setHour}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+          <Text style={styles.separator}>:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="MM"
+            value={minute}
+            onChangeText={setMinute}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+          <Text style={styles.separator}>:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="SS"
+            value={second}
+            onChangeText={setSecond}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+          <TextInput
+            style={[styles.input, { width: 60 , marginLeft: 15}]}
+            placeholder="AM/PM"
+            value={ampm}
+            onChangeText={setAmpm}
+            maxLength={2}
+          />
+        </View>
         <Text style={[styles.label, { marginTop: 20 }]}>Notes</Text>
         <TextInput
           style={styles.notesInput}
@@ -154,7 +185,7 @@ const EditEntryScreen: React.FC = () => {
         />
       </View>
       <View style={styles.footer}>
-        <TouchableOpacity style={styles.button} onPress={handleSave}>
+        <TouchableOpacity style={[styles.button, !isFormValidState && styles.disabledButton]} onPress={handleSave} disabled={!isFormValidState}>
           <Text style={styles.buttonText}>Save Changes</Text>
         </TouchableOpacity>
       </View>
@@ -191,19 +222,24 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginBottom: 15,
   },
-  dateContainer: {
+  inputRow: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    alignItems: 'center',
     marginBottom: 20,
   },
-  datePickerButton: {
+  input: {
     backgroundColor: theme.colors.card,
+    color: theme.colors.text,
     padding: 15,
     borderRadius: 10,
-  },
-  datePickerText: {
-    color: theme.colors.primary,
     fontSize: 18,
+    width: 60,
+    textAlign: 'center',
+  },
+  separator: {
+    color: theme.colors.text,
+    fontSize: 18,
+    marginHorizontal: 10,
   },
   notesInput: {
     backgroundColor: theme.colors.card,
@@ -222,6 +258,9 @@ const styles = StyleSheet.create({
     borderRadius: 30,
     padding: 20,
     alignItems: 'center',
+  },
+  disabledButton: {
+    backgroundColor: theme.colors.disabled,
   },
   buttonText: {
     color: theme.colors.background,
