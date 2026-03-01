@@ -18,7 +18,7 @@ export const downloadCsv = async () => {
     const activities = JSON.parse(activitiesJson);
     const activityDetails = JSON.parse(activityDetailsJson);
 
-    let csvContent = 'Activity,Icon,Date,Notes\n';
+    let csvContent = 'Activity,Icon,Date,Notes,Image\n';
 
     const escapeCSV = (field: string) => {
       if (field === undefined || field === null) return '';
@@ -36,7 +36,8 @@ export const downloadCsv = async () => {
           activity.name,
           activity.icon,
           new Date(detail.date).toISOString(),
-          detail.notes || ''
+          detail.notes || '',
+          detail.image || ''
         ].map(escapeCSV).join(',');
         csvContent += row + '\n';
       });
@@ -120,7 +121,7 @@ export const uploadCsv = async () => {
 
     for (const line of lines.slice(1)) {
       if (!line) continue;
-      const [activityName, icon, dateString, notes] = parseCSVLine(line);
+      const [activityName, icon, dateString, notes, image] = parseCSVLine(line);
 
       let activity = activities.find((a: any) => a.name === activityName);
       if (!activity) {
@@ -147,12 +148,14 @@ export const uploadCsv = async () => {
           id: await generateActivityId(Math.random().toString()),
           date,
           notes: notes || undefined,
+          image: image || undefined,
         });
       } else {
-        // Update notes if they exist in CSV but not in current data, or if they are different
+        // Update notes and image if they exist in CSV but not in current data, or if they are different
         const entryIndex = activityDetails[activity.id].findIndex((d: any) => new Date(d.date).getTime() === date.getTime());
         if (entryIndex > -1) {
           activityDetails[activity.id][entryIndex].notes = notes || activityDetails[activity.id][entryIndex].notes;
+          activityDetails[activity.id][entryIndex].image = image || activityDetails[activity.id][entryIndex].image;
         }
       }
     }

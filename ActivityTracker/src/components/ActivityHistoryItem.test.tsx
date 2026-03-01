@@ -34,6 +34,23 @@ describe('ActivityHistoryItem', () => {
     expect(tree.toJSON()).toMatchSnapshot();
   });
 
+  it('renders correctly with an image', async () => {
+    const date = new Date('2023-01-01T12:00:00Z');
+    let tree;
+    await act(async () => {
+      tree = renderer.create(
+        <ActivityHistoryItem
+          date={date}
+          image="data:image/jpeg;base64,mock"
+          onEdit={() => {}}
+          onDelete={() => {}}
+        />
+      );
+    });
+    expect(tree.toJSON()).not.toBeNull();
+    expect(tree.toJSON()).toMatchSnapshot();
+  });
+
   it('renders correctly without notes', async () => {
     const date = new Date('2023-01-01T12:00:00Z');
     let tree;

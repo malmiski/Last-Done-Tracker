@@ -1,11 +1,12 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
 
 interface ActivityHistoryItemProps {
   date: Date;
   notes?: string;
+  image?: string;
   onEdit: () => void;
   onDelete: () => void;
 }
@@ -22,11 +23,17 @@ const formatDate = (date: Date) => {
   });
 };
 
-const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({ date, notes, onEdit, onDelete }) => {
+const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({ date, notes, image, onEdit, onDelete }) => {
   const firstLine = notes ? notes.split('\n')[0] : '';
 
   return (
     <View style={styles.container}>
+      {image ? (
+        <Image
+          source={{ uri: image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}` }}
+          style={styles.thumbnail}
+        />
+      ) : null}
       <View style={styles.textContainer}>
         <Text style={styles.dateText}>{formatDate(date)}</Text>
         {firstLine ? (
@@ -54,8 +61,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.card,
     borderRadius: 15,
-    padding: 20,
+    padding: 15,
     marginBottom: 15,
+  },
+  thumbnail: {
+    width: 50,
+    height: 50,
+    borderRadius: 5,
+    marginRight: 15,
   },
   dateText: {
     color: theme.colors.text,

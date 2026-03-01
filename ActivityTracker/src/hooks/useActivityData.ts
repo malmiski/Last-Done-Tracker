@@ -83,11 +83,12 @@ export const useActivityData = () => {
     await saveData(ACTIVITIES_KEY, updatedActivities);
   };
 
-  const addActivityEntry = async (activityId: string, date: Date, notes?: string) => {
+  const addActivityEntry = async (activityId: string, date: Date, notes?: string, image?: string) => {
     const newEntry: ActivityEntry = {
       id: await generateActivityId(Math.random().toString()),
       date: date,
       notes: notes,
+      image: image,
     };
     const updatedDetails = { ...activityDetails };
     updatedDetails[activityId] = [newEntry, ...(updatedDetails[activityId] || [])];
@@ -96,12 +97,13 @@ export const useActivityData = () => {
     return newEntry.id;
   };
 
-  const updateActivityEntry = async (activityId: string, entryId: string, newDate: Date, notes?: string) => {
+  const updateActivityEntry = async (activityId: string, entryId: string, newDate: Date, notes?: string, image?: string) => {
     const updatedDetails = { ...activityDetails };
     const entryIndex = updatedDetails[activityId].findIndex(entry => entry.id === entryId);
     if (entryIndex > -1) {
       updatedDetails[activityId][entryIndex].date = newDate;
       updatedDetails[activityId][entryIndex].notes = notes;
+      updatedDetails[activityId][entryIndex].image = image;
       setActivityDetails(updatedDetails);
       await saveData(ACTIVITY_DETAILS_KEY, updatedDetails);
     }

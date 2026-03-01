@@ -51,9 +51,9 @@ describe('CSV Utils', () => {
     jest.clearAllMocks();
   });
 
-  it('should include notes in exported CSV', async () => {
+  it('should include notes and image in exported CSV', async () => {
     const activities = [{ id: '1', name: 'Test', icon: 'run' }];
-    const details = { '1': [{ id: 'e1', date: new Date('2023-01-01T12:00:00Z'), notes: 'Test Note' }] };
+    const details = { '1': [{ id: 'e1', date: new Date('2023-01-01T12:00:00Z'), notes: 'Test Note', image: 'data:image/jpeg;base64,mock' }] };
 
     (AsyncStorage.getItem as jest.Mock)
       .mockResolvedValueOnce(JSON.stringify(activities))
@@ -65,8 +65,8 @@ describe('CSV Utils', () => {
     expect(document.createElement).toHaveBeenCalledWith('a');
   });
 
-  it('should import notes from CSV', async () => {
-    const csvContent = 'Activity,Icon,Date,Notes\nTest,run,2023-01-01T12:00:00Z,"Test Note with , comma"';
+  it('should import notes and image from CSV', async () => {
+    const csvContent = 'Activity,Icon,Date,Notes,Image\nTest,run,2023-01-01T12:00:00Z,"Test Note with , comma","data:image/jpeg;base64,mock"';
 
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
       canceled: false,
@@ -91,5 +91,6 @@ describe('CSV Utils', () => {
 
     expect(AsyncStorage.setItem).toHaveBeenCalledWith('@activities', expect.stringContaining('Test'));
     expect(AsyncStorage.setItem).toHaveBeenCalledWith('@activityDetails', expect.stringContaining('Test Note with , comma'));
+    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@activityDetails', expect.stringContaining('data:image/jpeg;base64,mock'));
   });
 });

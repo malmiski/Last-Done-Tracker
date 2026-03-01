@@ -58,6 +58,7 @@ const ActivityDetailScreen: React.FC = () => {
           <ActivityHistoryItem
             date={item.date}
             notes={item.notes}
+            image={item.image}
             onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
             onDelete={() => deleteActivityEntry(activityId, item.id)}
           />
