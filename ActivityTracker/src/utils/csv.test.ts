@@ -1,11 +1,25 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { downloadCsv, uploadCsv } from './csv';
 import * as DocumentPicker from 'expo-document-picker';
+import * as database from './database';
 
 // Mocking dependencies
+jest.mock('./database', () => ({
+  getActivities: jest.fn(),
+  getEntries: jest.fn(),
+  addActivity: jest.fn(),
+  updateActivity: jest.fn(),
+  addEntry: jest.fn(),
+  updateEntry: jest.fn(),
+}));
+
+jest.mock('expo-sqlite', () => ({
+  openDatabaseAsync: jest.fn(),
+}));
+
 jest.mock('@react-native-async-storage/async-storage', () => ({
   getItem: jest.fn(),
   setItem: jest.fn(),
+  removeItem: jest.fn(),
 }));
 
 jest.mock('expo-file-system', () => ({
@@ -51,31 +65,29 @@ describe('CSV Utils', () => {
     jest.clearAllMocks();
   });
 
-  it('should include notes and image in exported CSV', async () => {
-    const activities = [{ id: '1', name: 'Test', icon: 'run' }];
-    const details = { '1': [{ id: 'e1', date: new Date('2023-01-01T12:00:00Z'), notes: 'Test Note', image: 'data:image/jpeg;base64,mock' }] };
+  it('should include IDs in exported CSV', async () => {
+    const activities = [{ id: '1', name: 'Test', icon: 'run', lastDone: 'Never' }];
+    const entries = [{ id: 'e1', date: new Date('2023-01-01T12:00:00Z'), notes: 'Test Note', image: 'data:image/jpeg;base64,mock' }];
 
-    (AsyncStorage.getItem as jest.Mock)
-      .mockResolvedValueOnce(JSON.stringify(activities))
-      .mockResolvedValueOnce(JSON.stringify(details));
+    (database.getActivities as jest.Mock).mockResolvedValue(activities);
+    (database.getEntries as jest.Mock).mockResolvedValue(entries);
 
     await downloadCsv();
-    expect(AsyncStorage.getItem).toHaveBeenCalledWith('@activities');
-    expect(AsyncStorage.getItem).toHaveBeenCalledWith('@activityDetails');
+    expect(database.getActivities).toHaveBeenCalled();
+    expect(database.getEntries).toHaveBeenCalledWith('1');
     expect(document.createElement).toHaveBeenCalledWith('a');
   });
 
-  it('should import notes and image from CSV', async () => {
-    const csvContent = 'Activity,Icon,Date,Notes,Image\nTest,run,2023-01-01T12:00:00Z,"Test Note with , comma","data:image/jpeg;base64,mock"';
+  it('should import from CSV with IDs', async () => {
+    const csvContent = 'ActivityID,Activity,Icon,EntryID,Date,Notes,Image\n1,Test,run,e1,2023-01-01T12:00:00Z,"Test Note","data:image/jpeg;base64,mock"';
 
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
       canceled: false,
       assets: [{ file: {} }] // mock file object
     });
 
-    (AsyncStorage.getItem as jest.Mock)
-      .mockResolvedValueOnce(JSON.stringify([])) // activities
-      .mockResolvedValueOnce(JSON.stringify({})); // activityDetails
+    (database.getActivities as jest.Mock).mockResolvedValue([]);
+    (database.getEntries as jest.Mock).mockResolvedValue([]);
 
     // Mock FileReader for web
     const mockFileReader = {
@@ -89,8 +101,7 @@ describe('CSV Utils', () => {
 
     await uploadCsv();
 
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@activities', expect.stringContaining('Test'));
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@activityDetails', expect.stringContaining('Test Note with , comma'));
-    expect(AsyncStorage.setItem).toHaveBeenCalledWith('@activityDetails', expect.stringContaining('data:image/jpeg;base64,mock'));
+    expect(database.addActivity).toHaveBeenCalledWith(expect.objectContaining({ id: '1', name: 'Test' }));
+    expect(database.addEntry).toHaveBeenCalledWith('1', expect.objectContaining({ id: 'e1', notes: 'Test Note' }));
   });
 });

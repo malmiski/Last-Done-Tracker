@@ -6,6 +6,7 @@ import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { downloadCsv, uploadCsv } from '../src/utils/csv';
+import { exportDatabase, importDatabase } from '../src/utils/database';
 
 const SettingsScreen: React.FC = () => {
   const router = useRouter();
@@ -92,6 +93,20 @@ const SettingsScreen: React.FC = () => {
             <Text style={styles.settingSubtext}>Upload a CSV with your data</Text>
           </View>
           <Icon name="upload" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.setting} onPress={exportDatabase}>
+          <View>
+            <Text style={styles.settingText}>Export Database</Text>
+            <Text style={styles.settingSubtext}>Backup your SQLite database</Text>
+          </View>
+          <Icon name="database-export" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.setting} onPress={importDatabase}>
+          <View>
+            <Text style={styles.settingText}>Import Database</Text>
+            <Text style={styles.settingSubtext}>Restore from a SQLite database backup</Text>
+          </View>
+          <Icon name="database-import" size={24} color={theme.colors.text} />
         </TouchableOpacity>
       </View>
       <View style={styles.footer}>

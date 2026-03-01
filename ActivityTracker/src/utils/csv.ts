@@ -1,24 +1,20 @@
 import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 import { generateActivityId } from './crypto';
+import * as database from './database';
 
 export const downloadCsv = async () => {
   try {
-    const activitiesJson = await AsyncStorage.getItem('@activities');
-    const activityDetailsJson = await AsyncStorage.getItem('@activityDetails');
+    const activities = await database.getActivities();
 
-    if (!activitiesJson || !activityDetailsJson) {
+    if (!activities || activities.length === 0) {
       alert('No data to download.');
       return;
     }
 
-    const activities = JSON.parse(activitiesJson);
-    const activityDetails = JSON.parse(activityDetailsJson);
-
-    let csvContent = 'Activity,Icon,Date,Notes,Image\n';
+    let csvContent = 'ActivityID,Activity,Icon,EntryID,Date,Notes,Image\n';
 
     const escapeCSV = (field: string) => {
       if (field === undefined || field === null) return '';
@@ -29,19 +25,21 @@ export const downloadCsv = async () => {
       return stringField;
     };
 
-    activities.forEach((activity: any) => {
-      const details = activityDetails[activity.id] || [];
+    for (const activity of activities) {
+      const details = await database.getEntries(activity.id);
       details.forEach((detail: any) => {
         const row = [
+          activity.id,
           activity.name,
           activity.icon,
+          detail.id,
           new Date(detail.date).toISOString(),
           detail.notes || '',
           detail.image || ''
         ].map(escapeCSV).join(',');
         csvContent += row + '\n';
       });
-    });
+    }
 
     if (Platform.OS === 'web') {
       const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -89,12 +87,6 @@ export const uploadCsv = async () => {
     }
     const lines = csvContent.split('\n');
 
-    const activitiesJson = await AsyncStorage.getItem('@activities');
-    const activityDetailsJson = await AsyncStorage.getItem('@activityDetails');
-
-    const activities = activitiesJson ? JSON.parse(activitiesJson) : [];
-    const activityDetails = activityDetailsJson ? JSON.parse(activityDetailsJson) : {};
-
     const parseCSVLine = (line: string) => {
       const result = [];
       let cur = '';
@@ -119,49 +111,73 @@ export const uploadCsv = async () => {
       return result;
     };
 
-    for (const line of lines.slice(1)) {
-      if (!line) continue;
-      const [activityName, icon, dateString, notes, image] = parseCSVLine(line);
+    const header = parseCSVLine(lines[0]);
+    const hasIds = header.includes('ActivityID') && header.includes('EntryID');
 
-      let activity = activities.find((a: any) => a.name === activityName);
+    // Basic schema validation
+    if (!header.includes('Activity') || !header.includes('Date')) {
+        alert('Invalid CSV format: Missing required columns (Activity, Date).');
+        return;
+    }
+
+    const activities = await database.getActivities();
+
+    for (const line of lines.slice(1)) {
+      if (!line || line.trim() === '') continue;
+      const values = parseCSVLine(line);
+
+      let activityId, activityName, icon, entryId, dateString, notes, image;
+
+      if (hasIds) {
+        if (values.length < 7) continue;
+        [activityId, activityName, icon, entryId, dateString, notes, image] = values;
+      } else {
+        if (values.length < 5) continue;
+        [activityName, icon, dateString, notes, image] = values;
+        activityId = await generateActivityId(activityName);
+        entryId = await generateActivityId(Math.random().toString());
+      }
+
+      if (!activityName || !dateString) continue;
+
+      let activity = activities.find((a: any) => a.id === activityId);
       if (!activity) {
-        const newId = await generateActivityId(activityName);
         activity = {
-          id: newId,
+          id: activityId,
           name: activityName,
           lastDone: 'Never',
           icon: icon,
         };
+        await database.addActivity(activity);
         activities.push(activity);
-        activityDetails[activity.id] = [];
       } else {
-        if (activity.icon !== icon) {
+        if (activity.icon !== icon || activity.name !== activityName) {
           activity.icon = icon;
+          activity.name = activityName;
+          await database.updateActivity(activity);
         }
       }
 
       const date = new Date(dateString);
-      const exists = activityDetails[activity.id].some((d: any) => new Date(d.date).getTime() === date.getTime());
+      const activityEntries = await database.getEntries(activityId);
+      const existingEntry = activityEntries.find((d: any) => d.id === entryId || new Date(d.date).getTime() === date.getTime());
 
-      if (!exists) {
-        activityDetails[activity.id].push({
-          id: await generateActivityId(Math.random().toString()),
+      if (!existingEntry) {
+        await database.addEntry(activityId, {
+          id: entryId,
           date,
           notes: notes || undefined,
           image: image || undefined,
         });
       } else {
-        // Update notes and image if they exist in CSV but not in current data, or if they are different
-        const entryIndex = activityDetails[activity.id].findIndex((d: any) => new Date(d.date).getTime() === date.getTime());
-        if (entryIndex > -1) {
-          activityDetails[activity.id][entryIndex].notes = notes || activityDetails[activity.id][entryIndex].notes;
-          activityDetails[activity.id][entryIndex].image = image || activityDetails[activity.id][entryIndex].image;
-        }
+        await database.updateEntry({
+          id: existingEntry.id,
+          date,
+          notes: notes || existingEntry.notes,
+          image: image || existingEntry.image,
+        });
       }
     }
-
-    await AsyncStorage.setItem('@activities', JSON.stringify(activities));
-    await AsyncStorage.setItem('@activityDetails', JSON.stringify(activityDetails));
 
     alert('CSV data uploaded successfully.');
   } catch (error) {

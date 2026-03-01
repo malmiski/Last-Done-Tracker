@@ -1,11 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { activities as initialActivities, Activity } from '../data/activities';
-import { activityDetails as initialActivityDetails, ActivityEntry } from '../data/activity-details';
+import { Activity } from '../data/activities';
+import { ActivityEntry } from '../data/activity-details';
 import { generateActivityId } from '../utils/crypto';
-
-const ACTIVITIES_KEY = '@activities';
-const ACTIVITY_DETAILS_KEY = '@activityDetails';
+import * as database from '../utils/database';
 
 export const useActivityData = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -15,26 +12,16 @@ export const useActivityData = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const storedActivities = await AsyncStorage.getItem(ACTIVITIES_KEY);
-      const storedActivityDetails = await AsyncStorage.getItem(ACTIVITY_DETAILS_KEY);
+      await database.initDatabase();
+      const storedActivities = await database.getActivities();
+      setActivities(storedActivities);
 
-      if (storedActivities !== null) {
-        setActivities(JSON.parse(storedActivities));
-      } else {
-        setActivities(initialActivities);
-        await AsyncStorage.setItem(ACTIVITIES_KEY, JSON.stringify(initialActivities));
+      const allDetails: { [key: string]: ActivityEntry[] } = {};
+      for (const activity of storedActivities) {
+        const entries = await database.getEntries(activity.id);
+        allDetails[activity.id] = entries;
       }
-
-      if (storedActivityDetails !== null) {
-        const parsedDetails = JSON.parse(storedActivityDetails, (key, value) => {
-          if (key === 'date') return new Date(value);
-          return value;
-        });
-        setActivityDetails(parsedDetails);
-      } else {
-        setActivityDetails(initialActivityDetails);
-        await AsyncStorage.setItem(ACTIVITY_DETAILS_KEY, JSON.stringify(initialActivityDetails));
-      }
+      setActivityDetails(allDetails);
     } catch (e) {
       console.error('Failed to load data.', e);
     } finally {
@@ -45,14 +32,6 @@ export const useActivityData = () => {
   useEffect(() => {
     loadData();
   }, [loadData]);
-
-  const saveData = async (key: string, data: any) => {
-    try {
-      await AsyncStorage.setItem(key, JSON.stringify(data));
-    } catch (e) {
-      console.error('Failed to save data.', e);
-    }
-  };
 
   const addActivity = async (newActivity: Omit<Activity, 'id' | 'lastDone'>) => {
     const newId = await generateActivityId(newActivity.name);
@@ -65,22 +44,17 @@ export const useActivityData = () => {
       id: newId,
       lastDone: 'Never',
     };
-    const updatedActivities = [...activities, activityToAdd];
-    setActivities(updatedActivities);
-    await saveData(ACTIVITIES_KEY, updatedActivities);
 
-    const updatedDetails = { ...activityDetails, [newId]: [] };
-    setActivityDetails(updatedDetails);
-    await saveData(ACTIVITY_DETAILS_KEY, updatedDetails);
+    await database.addActivity(activityToAdd);
+    setActivities(prev => [...prev, activityToAdd]);
+    setActivityDetails(prev => ({ ...prev, [newId]: [] }));
+
     return activityToAdd;
   };
 
   const updateActivity = async (updatedActivity: Activity) => {
-    const updatedActivities = activities.map(a =>
-      a.id === updatedActivity.id ? updatedActivity : a
-    );
-    setActivities(updatedActivities);
-    await saveData(ACTIVITIES_KEY, updatedActivities);
+    await database.updateActivity(updatedActivity);
+    setActivities(prev => prev.map(a => a.id === updatedActivity.id ? updatedActivity : a));
   };
 
   const addActivityEntry = async (activityId: string, date: Date, notes?: string, image?: string) => {
@@ -90,41 +64,61 @@ export const useActivityData = () => {
       notes: notes,
       image: image,
     };
-    const updatedDetails = { ...activityDetails };
-    updatedDetails[activityId] = [newEntry, ...(updatedDetails[activityId] || [])];
-    setActivityDetails(updatedDetails);
-    await saveData(ACTIVITY_DETAILS_KEY, updatedDetails);
+
+    await database.addEntry(activityId, newEntry);
+
+    setActivityDetails(prev => {
+      const updated = { ...prev };
+      updated[activityId] = [newEntry, ...(updated[activityId] || [])];
+      return updated;
+    });
+
+    // Update lastDone for the activity
+    const activity = activities.find(a => a.id === activityId);
+    if (activity) {
+        const updatedActivity = { ...activity, lastDone: date.toISOString() };
+        await updateActivity(updatedActivity);
+    }
+
     return newEntry.id;
   };
 
   const updateActivityEntry = async (activityId: string, entryId: string, newDate: Date, notes?: string, image?: string) => {
-    const updatedDetails = { ...activityDetails };
-    const entryIndex = updatedDetails[activityId].findIndex(entry => entry.id === entryId);
-    if (entryIndex > -1) {
-      updatedDetails[activityId][entryIndex].date = newDate;
-      updatedDetails[activityId][entryIndex].notes = notes;
-      updatedDetails[activityId][entryIndex].image = image;
-      setActivityDetails(updatedDetails);
-      await saveData(ACTIVITY_DETAILS_KEY, updatedDetails);
-    }
+    const entry: ActivityEntry = {
+        id: entryId,
+        date: newDate,
+        notes: notes,
+        image: image,
+    };
+    await database.updateEntry(entry);
+
+    setActivityDetails(prev => {
+      const updated = { ...prev };
+      const entryIndex = updated[activityId].findIndex(e => e.id === entryId);
+      if (entryIndex > -1) {
+        updated[activityId][entryIndex] = entry;
+      }
+      return updated;
+    });
   };
 
   const deleteActivityEntry = async (activityId: string, entryId: string) => {
-    const updatedDetails = { ...activityDetails };
-    updatedDetails[activityId] = updatedDetails[activityId].filter(entry => entry.id !== entryId);
-    setActivityDetails(updatedDetails);
-    await saveData(ACTIVITY_DETAILS_KEY, updatedDetails);
+    await database.deleteEntry(entryId);
+    setActivityDetails(prev => {
+      const updated = { ...prev };
+      updated[activityId] = updated[activityId].filter(entry => entry.id !== entryId);
+      return updated;
+    });
   };
 
   const deleteActivity = async (activityId: string) => {
-    const updatedActivities = activities.filter(a => a.id !== activityId);
-    setActivities(updatedActivities);
-    await saveData(ACTIVITIES_KEY, updatedActivities);
-
-    const updatedDetails = { ...activityDetails };
-    delete updatedDetails[activityId];
-    setActivityDetails(updatedDetails);
-    await saveData(ACTIVITY_DETAILS_KEY, updatedDetails);
+    await database.deleteActivity(activityId);
+    setActivities(prev => prev.filter(a => a.id !== activityId));
+    setActivityDetails(prev => {
+      const updated = { ...prev };
+      delete updated[activityId];
+      return updated;
+    });
   };
 
   const getActivityById = useCallback((activityId: string) => {
