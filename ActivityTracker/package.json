@@ -31,7 +31,7 @@
     "expo-modules-core": "~3.0.17",
     "expo-router": "^6.0.7",
     "expo-sharing": "^14.0.7",
-    "expo-sqlite": "^55.0.10",
+    "expo-sqlite": "~16.0.10",
     "expo-status-bar": "^3.0.8",
     "react": "19.1.0",
     "react-dom": "19.1.0",
