@@ -22,7 +22,7 @@ const ActivityDetailScreen: React.FC = () => {
   );
 
   const activity = getActivityById(activityId);
-  const history = (activityDetails[activityId] || []).sort((a, b) => b.date.getTime() - a.date.getTime());
+  const history = (activityDetails[activityId] || []).sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
   if (!activity) {
     return (
       <SafeAreaView style={styles.container}>
