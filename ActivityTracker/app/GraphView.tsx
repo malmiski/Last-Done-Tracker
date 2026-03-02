@@ -34,13 +34,13 @@ const GraphViewScreen: React.FC = () => {
     } else if (timeWindow === '30d') {
       startDate = subDays(now, 30);
     } else {
-      startDate = history.length > 0 ? new Date(history[history.length - 1].startDate) : now;
+      startDate = history.length > 0 ? new Date(history[history.length - 1].date) : now;
     }
 
-    const filteredHistory = history.filter(item => new Date(item.startDate) >= startDate);
+    const filteredHistory = history.filter(item => new Date(item.date) >= startDate);
 
     const entriesByDay = filteredHistory.reduce((acc, item) => {
-      const day = format(new Date(item.startDate), 'yyyy-MM-dd');
+      const day = format(new Date(item.date), 'yyyy-MM-dd');
       acc[day] = (acc[day] || 0) + 1;
       return acc;
     }, {} as Record<string, number>);
@@ -60,8 +60,8 @@ const GraphViewScreen: React.FC = () => {
     if (totalCount < 2) {
       return { totalCount, frequency: 'N/A' };
     }
-    const firstDate = new Date(history[history.length - 1].startDate);
-    const lastDate = new Date(history[0].startDate);
+    const firstDate = new Date(history[history.length - 1].date);
+    const lastDate = new Date(history[0].date);
     const totalDays = differenceInDays(lastDate, firstDate);
     const frequency = totalDays > 0 ? (totalCount / totalDays).toFixed(2) : totalCount;
 

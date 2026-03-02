@@ -1,17 +1,18 @@
 import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
-import ActivityHistoryItem from '../src/components/ActivityHistoryItem';
+import ActivityHistoryItem, { ImageMode } from '../src/components/ActivityHistoryItem';
 import { useActivityData } from '../src/hooks/useActivityData';
-import DateTimePicker from '@react-native-community/datetimepicker';
 
 const ActivityDetailScreen: React.FC = () => {
   const router = useRouter();
   const { activityId } = useLocalSearchParams<{ activityId: string }>();
   const { activityDetails, getActivityById, addActivityEntry, deleteActivityEntry, refreshData } = useActivityData();
+  const [imageMode, setImageMode] = useState<ImageMode>('small');
+  const [searchQuery, setSearchQuery] = useState('');
 
   useFocusEffect(
     useCallback(() => {
@@ -22,7 +23,12 @@ const ActivityDetailScreen: React.FC = () => {
   );
 
   const activity = getActivityById(activityId);
-  const history = (activityDetails[activityId] || []).sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+  const history = (activityDetails[activityId] || []).sort((a, b) => b.date.getTime() - a.date.getTime());
+
+  const filteredHistory = history.filter(item =>
+    (item.notes || '').toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   if (!activity) {
     return (
       <SafeAreaView style={styles.container}>
@@ -30,6 +36,25 @@ const ActivityDetailScreen: React.FC = () => {
       </SafeAreaView>
     );
   }
+
+  const cycleImageMode = () => {
+    setImageMode(prev => {
+      if (prev === 'small') return 'medium';
+      if (prev === 'medium') return 'large';
+      if (prev === 'large') return 'hidden';
+      return 'small';
+    });
+  };
+
+  const getImageModeIcon = () => {
+    switch (imageMode) {
+      case 'small': return 'image-size-select-small';
+      case 'medium': return 'image-size-select-actual';
+      case 'large': return 'image-size-select-large';
+      case 'hidden': return 'image-off-outline';
+      default: return 'image-size-select-small';
+    }
+  };
 
   const handleAddEntry = async () => {
     const now = new Date();
@@ -45,6 +70,9 @@ const ActivityDetailScreen: React.FC = () => {
         </TouchableOpacity>
         <Text style={styles.title}>{activity.name}</Text>
         <View style={styles.headerButtons}>
+          <TouchableOpacity onPress={cycleImageMode} style={{ paddingRight: 10 }}>
+            <Icon name={getImageModeIcon()} size={30} color={theme.colors.text} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push(`/EditActivity?activityId=${activityId}`)} style={{ paddingRight: 10 }}>
             <Icon name="pencil-outline" size={30} color={theme.colors.text} />
           </TouchableOpacity>
@@ -53,14 +81,25 @@ const ActivityDetailScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       </View>
+      <View style={styles.searchContainer}>
+        <Icon name="magnify" size={20} color={theme.colors.subtext} style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search notes..."
+          placeholderTextColor={theme.colors.subtext}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+      </View>
       <FlatList
-        data={history}
+        data={filteredHistory}
         renderItem={({ item }) => (
           <ActivityHistoryItem
             startDate={item.startDate}
             endDate={item.endDate}
             notes={item.notes}
             image={item.image}
+            imageMode={imageMode}
             onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
             onDelete={() => deleteActivityEntry(activityId, item.id)}
           />
@@ -100,9 +139,27 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
   },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    borderRadius: 10,
+    marginHorizontal: 20,
+    paddingHorizontal: 15,
+    marginVertical: 10,
+  },
+  searchIcon: {
+    marginRight: 10,
+  },
+  searchInput: {
+    flex: 1,
+    color: theme.colors.text,
+    fontSize: 17,
+    paddingVertical: 12,
+  },
   listContent: {
     paddingHorizontal: 20,
-    paddingTop: 20,
+    paddingTop: 10,
     paddingBottom: 100,
   },
   fab: {
