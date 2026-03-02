@@ -113,23 +113,13 @@ const migrateFromAsyncStorage = async (db: SQLite.SQLiteDatabase) => {
 
 export const getActivities = async (): Promise<Activity[]> => {
   const db = await getDb();
-  if (!db) {
-      // Fallback for web or failed DB
-      const stored = await AsyncStorage.getItem(ACTIVITIES_KEY);
-      return stored ? JSON.parse(stored) : initialActivities;
-  }
+  if (!db) return []; // Should not happen with Metro resolving to .web.ts
   return await db.getAllAsync<Activity>('SELECT * FROM activities');
 };
 
 export const addActivity = async (activity: Activity) => {
   const db = await getDb();
-  if (!db) {
-      const stored = await AsyncStorage.getItem(ACTIVITIES_KEY);
-      const activities = stored ? JSON.parse(stored) : [...initialActivities];
-      activities.push(activity);
-      await AsyncStorage.setItem(ACTIVITIES_KEY, JSON.stringify(activities));
-      return;
-  }
+  if (!db) return;
   await db.runAsync(
     'INSERT INTO activities (id, name, lastDone, icon) VALUES (?, ?, ?, ?)',
     [activity.id, activity.name, activity.lastDone, activity.icon]
@@ -138,14 +128,7 @@ export const addActivity = async (activity: Activity) => {
 
 export const updateActivity = async (activity: Activity) => {
   const db = await getDb();
-  if (!db) {
-    const stored = await AsyncStorage.getItem(ACTIVITIES_KEY);
-    if (stored) {
-        const activities = JSON.parse(stored).map((a: any) => a.id === activity.id ? activity : a);
-        await AsyncStorage.setItem(ACTIVITIES_KEY, JSON.stringify(activities));
-    }
-    return;
-  }
+  if (!db) return;
   await db.runAsync(
     'UPDATE activities SET name = ?, lastDone = ?, icon = ? WHERE id = ?',
     [activity.name, activity.lastDone, activity.icon, activity.id]
@@ -154,33 +137,13 @@ export const updateActivity = async (activity: Activity) => {
 
 export const deleteActivity = async (id: string) => {
   const db = await getDb();
-  if (!db) {
-    const storedA = await AsyncStorage.getItem(ACTIVITIES_KEY);
-    if (storedA) {
-        const activities = JSON.parse(storedA).filter((a: any) => a.id !== id);
-        await AsyncStorage.setItem(ACTIVITIES_KEY, JSON.stringify(activities));
-    }
-    const storedD = await AsyncStorage.getItem(ACTIVITY_DETAILS_KEY);
-    if (storedD) {
-        const details = JSON.parse(storedD);
-        delete details[id];
-        await AsyncStorage.setItem(ACTIVITY_DETAILS_KEY, JSON.stringify(details));
-    }
-    return;
-  }
+  if (!db) return;
   await db.runAsync('DELETE FROM activities WHERE id = ?', [id]);
 };
 
 export const getEntries = async (activityId: string): Promise<ActivityEntry[]> => {
   const db = await getDb();
-  if (!db) {
-      const stored = await AsyncStorage.getItem(ACTIVITY_DETAILS_KEY);
-      if (stored) {
-          const details = JSON.parse(stored, (key, value) => key === 'date' ? new Date(value) : value);
-          return details[activityId] || [];
-      }
-      return initialActivityDetails[activityId] || [];
-  }
+  if (!db) return [];
   const rows = await db.getAllAsync<any>('SELECT * FROM entries WHERE activityId = ? ORDER BY date DESC', [activityId]);
   return rows.map(row => ({
     id: row.id,
@@ -192,17 +155,7 @@ export const getEntries = async (activityId: string): Promise<ActivityEntry[]> =
 
 export const getAllEntries = async (): Promise<(ActivityEntry & { activityId: string })[]> => {
   const db = await getDb();
-  if (!db) {
-    const stored = await AsyncStorage.getItem(ACTIVITY_DETAILS_KEY);
-    const details = stored ? JSON.parse(stored, (key, value) => key === 'date' ? new Date(value) : value) : initialActivityDetails;
-    const allEntries: any[] = [];
-    Object.keys(details).forEach(activityId => {
-        details[activityId].forEach((entry: any) => {
-            allEntries.push({ ...entry, activityId });
-        });
-    });
-    return allEntries;
-  }
+  if (!db) return [];
   const rows = await db.getAllAsync<any>('SELECT * FROM entries');
   return rows.map(row => ({
     id: row.id,
@@ -215,13 +168,7 @@ export const getAllEntries = async (): Promise<(ActivityEntry & { activityId: st
 
 export const addEntry = async (activityId: string, entry: ActivityEntry) => {
   const db = await getDb();
-  if (!db) {
-    const stored = await AsyncStorage.getItem(ACTIVITY_DETAILS_KEY);
-    const details = stored ? JSON.parse(stored) : { ...initialActivityDetails };
-    details[activityId] = [entry, ...(details[activityId] || [])];
-    await AsyncStorage.setItem(ACTIVITY_DETAILS_KEY, JSON.stringify(details));
-    return;
-  }
+  if (!db) return;
   await db.runAsync(
     'INSERT INTO entries (id, activityId, date, notes, image) VALUES (?, ?, ?, ?, ?)',
     [entry.id, activityId, entry.date.toISOString(), entry.notes || null, entry.image || null]
@@ -230,21 +177,7 @@ export const addEntry = async (activityId: string, entry: ActivityEntry) => {
 
 export const updateEntry = async (entry: ActivityEntry) => {
   const db = await getDb();
-  if (!db) {
-      const stored = await AsyncStorage.getItem(ACTIVITY_DETAILS_KEY);
-      if (stored) {
-          const details = JSON.parse(stored);
-          for (const activityId in details) {
-              const index = details[activityId].findIndex((e: any) => e.id === entry.id);
-              if (index > -1) {
-                  details[activityId][index] = entry;
-                  break;
-              }
-          }
-          await AsyncStorage.setItem(ACTIVITY_DETAILS_KEY, JSON.stringify(details));
-      }
-      return;
-  }
+  if (!db) return;
   await db.runAsync(
     'UPDATE entries SET date = ?, notes = ?, image = ? WHERE id = ?',
     [entry.date.toISOString(), entry.notes || null, entry.image || null, entry.id]
@@ -253,17 +186,7 @@ export const updateEntry = async (entry: ActivityEntry) => {
 
 export const deleteEntry = async (id: string) => {
   const db = await getDb();
-  if (!db) {
-    const stored = await AsyncStorage.getItem(ACTIVITY_DETAILS_KEY);
-    if (stored) {
-        const details = JSON.parse(stored);
-        for (const activityId in details) {
-            details[activityId] = details[activityId].filter((e: any) => e.id !== id);
-        }
-        await AsyncStorage.setItem(ACTIVITY_DETAILS_KEY, JSON.stringify(details));
-    }
-    return;
-  }
+  if (!db) return;
   await db.runAsync('DELETE FROM entries WHERE id = ?', [id]);
 };
 
