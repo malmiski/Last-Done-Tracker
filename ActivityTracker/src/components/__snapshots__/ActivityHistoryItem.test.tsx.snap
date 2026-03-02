@@ -3,153 +3,620 @@
 exports[`ActivityHistoryItem only renders the first line of multi-line notes 1`] = `
 <View
   style={
-    {
-      "alignItems": "center",
-      "backgroundColor": "#F0F0F0",
-      "borderRadius": 15,
-      "flexDirection": "row",
-      "justifyContent": "space-between",
-      "marginBottom": 15,
-      "padding": 15,
-    }
+    [
+      {
+        "alignItems": "center",
+        "backgroundColor": "#F0F0F0",
+        "borderRadius": 15,
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "marginBottom": 15,
+        "padding": 15,
+      },
+      false,
+    ]
   }
 >
   <View
     style={
       {
+        "alignItems": "center",
         "flex": 1,
-      }
-    }
-  >
-    <Text
-      style={
-        {
-          "color": "#000000",
-          "fontSize": 16,
-        }
-      }
-    >
-      January 1, 2023 at 12:00:00 PM
-    </Text>
-    <Text
-      ellipsizeMode="tail"
-      numberOfLines={1}
-      style={
-        {
-          "color": "#666666",
-          "fontSize": 14,
-          "marginTop": 5,
-        }
-      }
-    >
-      Line 1
-    </Text>
-  </View>
-  <View
-    style={
-      {
         "flexDirection": "row",
+        "justifyContent": "space-between",
       }
     }
   >
     <View
-      accessibilityState={
-        {
-          "busy": undefined,
-          "checked": undefined,
-          "disabled": undefined,
-          "expanded": undefined,
-          "selected": undefined,
-        }
-      }
-      accessibilityValue={
-        {
-          "max": undefined,
-          "min": undefined,
-          "now": undefined,
-          "text": undefined,
-        }
-      }
-      accessible={true}
-      collapsable={false}
-      focusable={true}
-      onClick={[Function]}
-      onResponderGrant={[Function]}
-      onResponderMove={[Function]}
-      onResponderRelease={[Function]}
-      onResponderTerminate={[Function]}
-      onResponderTerminationRequest={[Function]}
-      onStartShouldSetResponder={[Function]}
       style={
         {
-          "marginLeft": 20,
-          "opacity": 1,
+          "flex": 1,
         }
       }
     >
-      <Icon
-        color="#666666"
-        name="pencil-outline"
-        size={24}
-      />
+      <Text
+        style={
+          {
+            "color": "#000000",
+            "fontSize": 16,
+          }
+        }
+      >
+        January 1, 2023 at 12:00:00 PM
+      </Text>
+      <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
+        style={
+          {
+            "color": "#666666",
+            "fontSize": 14,
+            "marginTop": 5,
+          }
+        }
+      >
+        Line 1
+      </Text>
     </View>
     <View
-      accessibilityState={
-        {
-          "busy": undefined,
-          "checked": undefined,
-          "disabled": undefined,
-          "expanded": undefined,
-          "selected": undefined,
-        }
-      }
-      accessibilityValue={
-        {
-          "max": undefined,
-          "min": undefined,
-          "now": undefined,
-          "text": undefined,
-        }
-      }
-      accessible={true}
-      collapsable={false}
-      focusable={true}
-      onClick={[Function]}
-      onResponderGrant={[Function]}
-      onResponderMove={[Function]}
-      onResponderRelease={[Function]}
-      onResponderTerminate={[Function]}
-      onResponderTerminationRequest={[Function]}
-      onStartShouldSetResponder={[Function]}
       style={
         {
-          "marginLeft": 20,
-          "opacity": 1,
+          "flexDirection": "row",
         }
       }
     >
-      <Icon
-        color="#666666"
-        name="trash-can-outline"
-        size={24}
-      />
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="pencil-outline"
+          size={24}
+        />
+      </View>
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="trash-can-outline"
+          size={24}
+        />
+      </View>
     </View>
   </View>
 </View>
 `;
 
-exports[`ActivityHistoryItem renders correctly with an image 1`] = `
+exports[`ActivityHistoryItem renders correctly with an image and hidden imageMode 1`] = `
 <View
   style={
-    {
-      "alignItems": "center",
-      "backgroundColor": "#F0F0F0",
-      "borderRadius": 15,
-      "flexDirection": "row",
-      "justifyContent": "space-between",
-      "marginBottom": 15,
-      "padding": 15,
+    [
+      {
+        "alignItems": "center",
+        "backgroundColor": "#F0F0F0",
+        "borderRadius": 15,
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "marginBottom": 15,
+        "padding": 15,
+      },
+      false,
+    ]
+  }
+>
+  <View
+    style={
+      {
+        "alignItems": "center",
+        "flex": 1,
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+      }
     }
+  >
+    <View
+      style={
+        {
+          "flex": 1,
+        }
+      }
+    >
+      <Text
+        style={
+          {
+            "color": "#000000",
+            "fontSize": 16,
+          }
+        }
+      >
+        January 1, 2023 at 12:00:00 PM
+      </Text>
+    </View>
+    <View
+      style={
+        {
+          "flexDirection": "row",
+        }
+      }
+    >
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="pencil-outline"
+          size={24}
+        />
+      </View>
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="trash-can-outline"
+          size={24}
+        />
+      </View>
+    </View>
+  </View>
+</View>
+`;
+
+exports[`ActivityHistoryItem renders correctly with an image and large imageMode 1`] = `
+<View
+  style={
+    [
+      {
+        "alignItems": "center",
+        "backgroundColor": "#F0F0F0",
+        "borderRadius": 15,
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "marginBottom": 15,
+        "padding": 15,
+      },
+      {
+        "alignItems": "stretch",
+        "flexDirection": "column",
+      },
+    ]
+  }
+>
+  <Image
+    source={
+      {
+        "uri": "data:image/jpeg;base64,mock",
+      }
+    }
+    style={
+      {
+        "borderRadius": 10,
+        "height": 200,
+        "marginBottom": 15,
+        "width": "100%",
+      }
+    }
+  />
+  <View
+    style={
+      {
+        "alignItems": "center",
+        "flex": 1,
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+      }
+    }
+  >
+    <View
+      style={
+        {
+          "flex": 1,
+        }
+      }
+    >
+      <Text
+        style={
+          {
+            "color": "#000000",
+            "fontSize": 16,
+          }
+        }
+      >
+        January 1, 2023 at 12:00:00 PM
+      </Text>
+    </View>
+    <View
+      style={
+        {
+          "flexDirection": "row",
+        }
+      }
+    >
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="pencil-outline"
+          size={24}
+        />
+      </View>
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="trash-can-outline"
+          size={24}
+        />
+      </View>
+    </View>
+  </View>
+</View>
+`;
+
+exports[`ActivityHistoryItem renders correctly with an image and medium imageMode 1`] = `
+<View
+  style={
+    [
+      {
+        "alignItems": "center",
+        "backgroundColor": "#F0F0F0",
+        "borderRadius": 15,
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "marginBottom": 15,
+        "padding": 15,
+      },
+      false,
+    ]
+  }
+>
+  <Image
+    source={
+      {
+        "uri": "data:image/jpeg;base64,mock",
+      }
+    }
+    style={
+      {
+        "borderRadius": 10,
+        "height": 100,
+        "marginRight": 15,
+        "width": 100,
+      }
+    }
+  />
+  <View
+    style={
+      {
+        "alignItems": "center",
+        "flex": 1,
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+      }
+    }
+  >
+    <View
+      style={
+        {
+          "flex": 1,
+        }
+      }
+    >
+      <Text
+        style={
+          {
+            "color": "#000000",
+            "fontSize": 16,
+          }
+        }
+      >
+        January 1, 2023 at 12:00:00 PM
+      </Text>
+    </View>
+    <View
+      style={
+        {
+          "flexDirection": "row",
+        }
+      }
+    >
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="pencil-outline"
+          size={24}
+        />
+      </View>
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="trash-can-outline"
+          size={24}
+        />
+      </View>
+    </View>
+  </View>
+</View>
+`;
+
+exports[`ActivityHistoryItem renders correctly with an image and small imageMode 1`] = `
+<View
+  style={
+    [
+      {
+        "alignItems": "center",
+        "backgroundColor": "#F0F0F0",
+        "borderRadius": 15,
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "marginBottom": 15,
+        "padding": 15,
+      },
+      false,
+    ]
   }
 >
   <Image
@@ -170,109 +637,120 @@ exports[`ActivityHistoryItem renders correctly with an image 1`] = `
   <View
     style={
       {
+        "alignItems": "center",
         "flex": 1,
-      }
-    }
-  >
-    <Text
-      style={
-        {
-          "color": "#000000",
-          "fontSize": 16,
-        }
-      }
-    >
-      January 1, 2023 at 12:00:00 PM
-    </Text>
-  </View>
-  <View
-    style={
-      {
         "flexDirection": "row",
+        "justifyContent": "space-between",
       }
     }
   >
     <View
-      accessibilityState={
-        {
-          "busy": undefined,
-          "checked": undefined,
-          "disabled": undefined,
-          "expanded": undefined,
-          "selected": undefined,
-        }
-      }
-      accessibilityValue={
-        {
-          "max": undefined,
-          "min": undefined,
-          "now": undefined,
-          "text": undefined,
-        }
-      }
-      accessible={true}
-      collapsable={false}
-      focusable={true}
-      onClick={[Function]}
-      onResponderGrant={[Function]}
-      onResponderMove={[Function]}
-      onResponderRelease={[Function]}
-      onResponderTerminate={[Function]}
-      onResponderTerminationRequest={[Function]}
-      onStartShouldSetResponder={[Function]}
       style={
         {
-          "marginLeft": 20,
-          "opacity": 1,
+          "flex": 1,
         }
       }
     >
-      <Icon
-        color="#666666"
-        name="pencil-outline"
-        size={24}
-      />
+      <Text
+        style={
+          {
+            "color": "#000000",
+            "fontSize": 16,
+          }
+        }
+      >
+        January 1, 2023 at 12:00:00 PM
+      </Text>
     </View>
     <View
-      accessibilityState={
-        {
-          "busy": undefined,
-          "checked": undefined,
-          "disabled": undefined,
-          "expanded": undefined,
-          "selected": undefined,
-        }
-      }
-      accessibilityValue={
-        {
-          "max": undefined,
-          "min": undefined,
-          "now": undefined,
-          "text": undefined,
-        }
-      }
-      accessible={true}
-      collapsable={false}
-      focusable={true}
-      onClick={[Function]}
-      onResponderGrant={[Function]}
-      onResponderMove={[Function]}
-      onResponderRelease={[Function]}
-      onResponderTerminate={[Function]}
-      onResponderTerminationRequest={[Function]}
-      onStartShouldSetResponder={[Function]}
       style={
         {
-          "marginLeft": 20,
-          "opacity": 1,
+          "flexDirection": "row",
         }
       }
     >
-      <Icon
-        color="#666666"
-        name="trash-can-outline"
-        size={24}
-      />
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="pencil-outline"
+          size={24}
+        />
+      </View>
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="trash-can-outline"
+          size={24}
+        />
+      </View>
     </View>
   </View>
 </View>
@@ -281,136 +759,150 @@ exports[`ActivityHistoryItem renders correctly with an image 1`] = `
 exports[`ActivityHistoryItem renders correctly with notes preview 1`] = `
 <View
   style={
-    {
-      "alignItems": "center",
-      "backgroundColor": "#F0F0F0",
-      "borderRadius": 15,
-      "flexDirection": "row",
-      "justifyContent": "space-between",
-      "marginBottom": 15,
-      "padding": 15,
-    }
+    [
+      {
+        "alignItems": "center",
+        "backgroundColor": "#F0F0F0",
+        "borderRadius": 15,
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "marginBottom": 15,
+        "padding": 15,
+      },
+      false,
+    ]
   }
 >
   <View
     style={
       {
+        "alignItems": "center",
         "flex": 1,
-      }
-    }
-  >
-    <Text
-      style={
-        {
-          "color": "#000000",
-          "fontSize": 16,
-        }
-      }
-    >
-      January 1, 2023 at 12:00:00 PM
-    </Text>
-    <Text
-      ellipsizeMode="tail"
-      numberOfLines={1}
-      style={
-        {
-          "color": "#666666",
-          "fontSize": 14,
-          "marginTop": 5,
-        }
-      }
-    >
-      Test Note
-    </Text>
-  </View>
-  <View
-    style={
-      {
         "flexDirection": "row",
+        "justifyContent": "space-between",
       }
     }
   >
     <View
-      accessibilityState={
-        {
-          "busy": undefined,
-          "checked": undefined,
-          "disabled": undefined,
-          "expanded": undefined,
-          "selected": undefined,
-        }
-      }
-      accessibilityValue={
-        {
-          "max": undefined,
-          "min": undefined,
-          "now": undefined,
-          "text": undefined,
-        }
-      }
-      accessible={true}
-      collapsable={false}
-      focusable={true}
-      onClick={[Function]}
-      onResponderGrant={[Function]}
-      onResponderMove={[Function]}
-      onResponderRelease={[Function]}
-      onResponderTerminate={[Function]}
-      onResponderTerminationRequest={[Function]}
-      onStartShouldSetResponder={[Function]}
       style={
         {
-          "marginLeft": 20,
-          "opacity": 1,
+          "flex": 1,
         }
       }
     >
-      <Icon
-        color="#666666"
-        name="pencil-outline"
-        size={24}
-      />
+      <Text
+        style={
+          {
+            "color": "#000000",
+            "fontSize": 16,
+          }
+        }
+      >
+        January 1, 2023 at 12:00:00 PM
+      </Text>
+      <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
+        style={
+          {
+            "color": "#666666",
+            "fontSize": 14,
+            "marginTop": 5,
+          }
+        }
+      >
+        Test Note
+      </Text>
     </View>
     <View
-      accessibilityState={
-        {
-          "busy": undefined,
-          "checked": undefined,
-          "disabled": undefined,
-          "expanded": undefined,
-          "selected": undefined,
-        }
-      }
-      accessibilityValue={
-        {
-          "max": undefined,
-          "min": undefined,
-          "now": undefined,
-          "text": undefined,
-        }
-      }
-      accessible={true}
-      collapsable={false}
-      focusable={true}
-      onClick={[Function]}
-      onResponderGrant={[Function]}
-      onResponderMove={[Function]}
-      onResponderRelease={[Function]}
-      onResponderTerminate={[Function]}
-      onResponderTerminationRequest={[Function]}
-      onStartShouldSetResponder={[Function]}
       style={
         {
-          "marginLeft": 20,
-          "opacity": 1,
+          "flexDirection": "row",
         }
       }
     >
-      <Icon
-        color="#666666"
-        name="trash-can-outline"
-        size={24}
-      />
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="pencil-outline"
+          size={24}
+        />
+      </View>
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="trash-can-outline"
+          size={24}
+        />
+      </View>
     </View>
   </View>
 </View>
@@ -419,123 +911,137 @@ exports[`ActivityHistoryItem renders correctly with notes preview 1`] = `
 exports[`ActivityHistoryItem renders correctly without notes 1`] = `
 <View
   style={
-    {
-      "alignItems": "center",
-      "backgroundColor": "#F0F0F0",
-      "borderRadius": 15,
-      "flexDirection": "row",
-      "justifyContent": "space-between",
-      "marginBottom": 15,
-      "padding": 15,
-    }
+    [
+      {
+        "alignItems": "center",
+        "backgroundColor": "#F0F0F0",
+        "borderRadius": 15,
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "marginBottom": 15,
+        "padding": 15,
+      },
+      false,
+    ]
   }
 >
   <View
     style={
       {
+        "alignItems": "center",
         "flex": 1,
-      }
-    }
-  >
-    <Text
-      style={
-        {
-          "color": "#000000",
-          "fontSize": 16,
-        }
-      }
-    >
-      January 1, 2023 at 12:00:00 PM
-    </Text>
-  </View>
-  <View
-    style={
-      {
         "flexDirection": "row",
+        "justifyContent": "space-between",
       }
     }
   >
     <View
-      accessibilityState={
-        {
-          "busy": undefined,
-          "checked": undefined,
-          "disabled": undefined,
-          "expanded": undefined,
-          "selected": undefined,
-        }
-      }
-      accessibilityValue={
-        {
-          "max": undefined,
-          "min": undefined,
-          "now": undefined,
-          "text": undefined,
-        }
-      }
-      accessible={true}
-      collapsable={false}
-      focusable={true}
-      onClick={[Function]}
-      onResponderGrant={[Function]}
-      onResponderMove={[Function]}
-      onResponderRelease={[Function]}
-      onResponderTerminate={[Function]}
-      onResponderTerminationRequest={[Function]}
-      onStartShouldSetResponder={[Function]}
       style={
         {
-          "marginLeft": 20,
-          "opacity": 1,
+          "flex": 1,
         }
       }
     >
-      <Icon
-        color="#666666"
-        name="pencil-outline"
-        size={24}
-      />
+      <Text
+        style={
+          {
+            "color": "#000000",
+            "fontSize": 16,
+          }
+        }
+      >
+        January 1, 2023 at 12:00:00 PM
+      </Text>
     </View>
     <View
-      accessibilityState={
-        {
-          "busy": undefined,
-          "checked": undefined,
-          "disabled": undefined,
-          "expanded": undefined,
-          "selected": undefined,
-        }
-      }
-      accessibilityValue={
-        {
-          "max": undefined,
-          "min": undefined,
-          "now": undefined,
-          "text": undefined,
-        }
-      }
-      accessible={true}
-      collapsable={false}
-      focusable={true}
-      onClick={[Function]}
-      onResponderGrant={[Function]}
-      onResponderMove={[Function]}
-      onResponderRelease={[Function]}
-      onResponderTerminate={[Function]}
-      onResponderTerminationRequest={[Function]}
-      onStartShouldSetResponder={[Function]}
       style={
         {
-          "marginLeft": 20,
-          "opacity": 1,
+          "flexDirection": "row",
         }
       }
     >
-      <Icon
-        color="#666666"
-        name="trash-can-outline"
-        size={24}
-      />
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="pencil-outline"
+          size={24}
+        />
+      </View>
+      <View
+        accessibilityState={
+          {
+            "busy": undefined,
+            "checked": undefined,
+            "disabled": undefined,
+            "expanded": undefined,
+            "selected": undefined,
+          }
+        }
+        accessibilityValue={
+          {
+            "max": undefined,
+            "min": undefined,
+            "now": undefined,
+            "text": undefined,
+          }
+        }
+        accessible={true}
+        collapsable={false}
+        focusable={true}
+        onClick={[Function]}
+        onResponderGrant={[Function]}
+        onResponderMove={[Function]}
+        onResponderRelease={[Function]}
+        onResponderTerminate={[Function]}
+        onResponderTerminationRequest={[Function]}
+        onStartShouldSetResponder={[Function]}
+        style={
+          {
+            "marginLeft": 20,
+            "opacity": 1,
+          }
+        }
+      >
+        <Icon
+          color="#666666"
+          name="trash-can-outline"
+          size={24}
+        />
+      </View>
     </View>
   </View>
 </View>
