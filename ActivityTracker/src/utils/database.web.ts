@@ -161,11 +161,12 @@ export const getEntries = async (activityId: string): Promise<ActivityEntry[]> =
     request.onsuccess = () => {
         const results = request.result.map(row => ({
             id: row.id,
-            date: new Date(row.date),
+            startDate: new Date(row.startDate || row.date),
+            endDate: new Date(row.endDate || row.date),
             notes: row.notes,
             image: row.image,
         }));
-        results.sort((a, b) => b.date.getTime() - a.date.getTime());
+        results.sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
         resolve(results);
     };
     request.onerror = () => reject(request.error);
@@ -178,7 +179,8 @@ export const getAllEntries = async (): Promise<(ActivityEntry & { activityId: st
   return rows.map(row => ({
     id: row.id,
     activityId: row.activityId,
-    date: new Date(row.date),
+    startDate: new Date(row.startDate || row.date),
+    endDate: new Date(row.endDate || row.date),
     notes: row.notes,
     image: row.image,
   }));

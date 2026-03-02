@@ -14,7 +14,7 @@ export const downloadCsv = async () => {
       return;
     }
 
-    let csvContent = 'ActivityID,Activity,Icon,EntryID,Date,Notes,Image\n';
+    let csvContent = 'ActivityID,Activity,Icon,EntryID,StartDate,EndDate,Notes,Image\n';
 
     const escapeCSV = (field: string) => {
       if (field === undefined || field === null) return '';
@@ -33,7 +33,8 @@ export const downloadCsv = async () => {
           activity.name,
           activity.icon,
           detail.id,
-          new Date(detail.date).toISOString(),
+          new Date(detail.startDate).toISOString(),
+          new Date(detail.endDate).toISOString(),
           detail.notes || '',
           detail.image || ''
         ].map(escapeCSV).join(',');
@@ -113,10 +114,11 @@ export const uploadCsv = async () => {
 
     const header = parseCSVLine(lines[0]);
     const hasIds = header.includes('ActivityID') && header.includes('EntryID');
+    const hasEndDate = header.includes('EndDate');
 
     // Basic schema validation
-    if (!header.includes('Activity') || !header.includes('Date')) {
-        alert('Invalid CSV format: Missing required columns (Activity, Date).');
+    if (!header.includes('Activity') || (!header.includes('Date') && !header.includes('StartDate'))) {
+        alert('Invalid CSV format: Missing required columns (Activity, Date/StartDate).');
         return;
     }
 
@@ -126,19 +128,31 @@ export const uploadCsv = async () => {
       if (!line || line.trim() === '') continue;
       const values = parseCSVLine(line);
 
-      let activityId, activityName, icon, entryId, dateString, notes, image;
+      let activityId, activityName, icon, entryId, startDateString, endDateString, notes, image;
 
       if (hasIds) {
-        if (values.length < 7) continue;
-        [activityId, activityName, icon, entryId, dateString, notes, image] = values;
+        if (hasEndDate) {
+            if (values.length < 8) continue;
+            [activityId, activityName, icon, entryId, startDateString, endDateString, notes, image] = values;
+        } else {
+            if (values.length < 7) continue;
+            [activityId, activityName, icon, entryId, startDateString, notes, image] = values;
+            endDateString = startDateString;
+        }
       } else {
-        if (values.length < 5) continue;
-        [activityName, icon, dateString, notes, image] = values;
+        if (hasEndDate) {
+            if (values.length < 6) continue;
+            [activityName, icon, startDateString, endDateString, notes, image] = values;
+        } else {
+            if (values.length < 5) continue;
+            [activityName, icon, startDateString, notes, image] = values;
+            endDateString = startDateString;
+        }
         activityId = await generateActivityId(activityName);
         entryId = await generateActivityId(Math.random().toString());
       }
 
-      if (!activityName || !dateString) continue;
+      if (!activityName || !startDateString) continue;
 
       let activity = activities.find((a: any) => a.id === activityId);
       if (!activity) {
@@ -158,21 +172,24 @@ export const uploadCsv = async () => {
         }
       }
 
-      const date = new Date(dateString);
+      const startDate = new Date(startDateString);
+      const endDate = new Date(endDateString);
       const activityEntries = await database.getEntries(activityId);
-      const existingEntry = activityEntries.find((d: any) => d.id === entryId || new Date(d.date).getTime() === date.getTime());
+      const existingEntry = activityEntries.find((d: any) => d.id === entryId || new Date(d.startDate).getTime() === startDate.getTime());
 
       if (!existingEntry) {
         await database.addEntry(activityId, {
           id: entryId,
-          date,
+          startDate,
+          endDate,
           notes: notes || undefined,
           image: image || undefined,
         });
       } else {
         await database.updateEntry({
           id: existingEntry.id,
-          date,
+          startDate,
+          endDate,
           notes: notes || existingEntry.notes,
           image: image || existingEntry.image,
         });

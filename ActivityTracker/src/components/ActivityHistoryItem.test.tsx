@@ -23,7 +23,8 @@ describe('ActivityHistoryItem', () => {
     await act(async () => {
       tree = renderer.create(
         <ActivityHistoryItem
-          date={date}
+          startDate={date}
+          endDate={date}
           notes={"Test Note\nSecond Line"}
           onEdit={() => {}}
           onDelete={() => {}}
@@ -40,7 +41,8 @@ describe('ActivityHistoryItem', () => {
     await act(async () => {
       tree = renderer.create(
         <ActivityHistoryItem
-          date={date}
+          startDate={date}
+          endDate={date}
           image="data:image/jpeg;base64,mock"
           onEdit={() => {}}
           onDelete={() => {}}
@@ -57,7 +59,8 @@ describe('ActivityHistoryItem', () => {
     await act(async () => {
       tree = renderer.create(
         <ActivityHistoryItem
-          date={date}
+          startDate={date}
+          endDate={date}
           onEdit={() => {}}
           onDelete={() => {}}
         />
@@ -73,8 +76,27 @@ describe('ActivityHistoryItem', () => {
     await act(async () => {
       tree = renderer.create(
         <ActivityHistoryItem
-          date={date}
+          startDate={date}
+          endDate={date}
           notes={"Line 1\nLine 2\nLine 3"}
+          onEdit={() => {}}
+          onDelete={() => {}}
+        />
+      );
+    });
+    expect(tree.toJSON()).not.toBeNull();
+    expect(tree.toJSON()).toMatchSnapshot();
+  });
+
+  it('renders duration when startDate and endDate differ', async () => {
+    const startDate = new Date('2023-01-01T12:00:00Z');
+    const endDate = new Date('2023-01-01T12:05:00Z');
+    let tree;
+    await act(async () => {
+      tree = renderer.create(
+        <ActivityHistoryItem
+          startDate={startDate}
+          endDate={endDate}
           onEdit={() => {}}
           onDelete={() => {}}
         />

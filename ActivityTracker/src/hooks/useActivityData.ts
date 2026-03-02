@@ -57,10 +57,11 @@ export const useActivityData = () => {
     setActivities(prev => prev.map(a => a.id === updatedActivity.id ? updatedActivity : a));
   };
 
-  const addActivityEntry = async (activityId: string, date: Date, notes?: string, image?: string) => {
+  const addActivityEntry = async (activityId: string, startDate: Date, endDate: Date, notes?: string, image?: string) => {
     const newEntry: ActivityEntry = {
       id: await generateActivityId(Math.random().toString()),
-      date: date,
+      startDate: startDate,
+      endDate: endDate,
       notes: notes,
       image: image,
     };
@@ -76,17 +77,18 @@ export const useActivityData = () => {
     // Update lastDone for the activity
     const activity = activities.find(a => a.id === activityId);
     if (activity) {
-        const updatedActivity = { ...activity, lastDone: date.toISOString() };
+        const updatedActivity = { ...activity, lastDone: startDate.toISOString() };
         await updateActivity(updatedActivity);
     }
 
     return newEntry.id;
   };
 
-  const updateActivityEntry = async (activityId: string, entryId: string, newDate: Date, notes?: string, image?: string) => {
+  const updateActivityEntry = async (activityId: string, entryId: string, startDate: Date, endDate: Date, notes?: string, image?: string) => {
     const entry: ActivityEntry = {
         id: entryId,
-        date: newDate,
+        startDate: startDate,
+        endDate: endDate,
         notes: notes,
         image: image,
     };
@@ -94,7 +96,7 @@ export const useActivityData = () => {
 
     setActivityDetails(prev => {
       const updated = { ...prev };
-      const entryIndex = updated[activityId].findIndex(e => e.id === entryId);
+      const entryIndex = (updated[activityId] || []).findIndex(e => e.id === entryId);
       if (entryIndex > -1) {
         updated[activityId][entryIndex] = entry;
       }

@@ -4,7 +4,8 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
 
 interface ActivityHistoryItemProps {
-  date: Date;
+  startDate: Date;
+  endDate: Date;
   notes?: string;
   image?: string;
   onEdit: () => void;
@@ -14,17 +15,33 @@ interface ActivityHistoryItemProps {
 const formatDate = (date: Date) => {
   return date.toLocaleString('en-US', {
     year: 'numeric',
-    month: 'long',
+    month: 'numeric',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: true,
-  });
+    hour12: false,
+  }).replace(/\//g, '-').replace(',', ':');
 };
 
-const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({ date, notes, image, onEdit, onDelete }) => {
+const formatDuration = (start: Date, end: Date) => {
+  const diffMs = end.getTime() - start.getTime();
+  if (diffMs <= 0) return null;
+
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const remainingMins = diffMins % 60;
+
+  if (diffHours > 0) {
+    return `${diffHours} hour${diffHours > 1 ? 's' : ''}${remainingMins > 0 ? ` ${remainingMins} minute${remainingMins > 1 ? 's' : ''}` : ''}`;
+  }
+  return `${diffMins} minute${diffMins !== 1 ? 's' : ''}`;
+};
+
+const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({ startDate, endDate, notes, image, onEdit, onDelete }) => {
   const firstLine = notes ? notes.split('\n')[0] : '';
+  const duration = formatDuration(startDate, endDate);
+  const isDifferentDate = startDate.getTime() !== endDate.getTime();
 
   return (
     <View style={styles.container}>
@@ -35,7 +52,11 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({ date, notes, 
         />
       ) : null}
       <View style={styles.textContainer}>
-        <Text style={styles.dateText}>{formatDate(date)}</Text>
+        <Text style={styles.dateText}>
+          {formatDate(startDate)}
+          {isDifferentDate ? ` - ${formatDate(endDate)}` : ''}
+        </Text>
+        {duration ? <Text style={styles.durationText}>{duration}</Text> : null}
         {firstLine ? (
           <Text style={styles.notesPreview} numberOfLines={1} ellipsizeMode="tail">
             {firstLine}
@@ -72,7 +93,13 @@ const styles = StyleSheet.create({
   },
   dateText: {
     color: theme.colors.text,
-    fontSize: 16,
+    fontSize: 14,
+  },
+  durationText: {
+    color: theme.colors.primary,
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: '600',
   },
   textContainer: {
     flex: 1,

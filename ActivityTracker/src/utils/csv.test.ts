@@ -67,7 +67,7 @@ describe('CSV Utils', () => {
 
   it('should include IDs in exported CSV', async () => {
     const activities = [{ id: '1', name: 'Test', icon: 'run', lastDone: 'Never' }];
-    const entries = [{ id: 'e1', date: new Date('2023-01-01T12:00:00Z'), notes: 'Test Note', image: 'data:image/jpeg;base64,mock' }];
+    const entries = [{ id: 'e1', startDate: new Date('2023-01-01T12:00:00Z'), endDate: new Date('2023-01-01T12:00:00Z'), notes: 'Test Note', image: 'data:image/jpeg;base64,mock' }];
 
     (database.getActivities as jest.Mock).mockResolvedValue(activities);
     (database.getEntries as jest.Mock).mockResolvedValue(entries);
@@ -79,7 +79,7 @@ describe('CSV Utils', () => {
   });
 
   it('should import from CSV with IDs', async () => {
-    const csvContent = 'ActivityID,Activity,Icon,EntryID,Date,Notes,Image\n1,Test,run,e1,2023-01-01T12:00:00Z,"Test Note","data:image/jpeg;base64,mock"';
+    const csvContent = 'ActivityID,Activity,Icon,EntryID,StartDate,EndDate,Notes,Image\n1,Test,run,e1,2023-01-01T12:00:00Z,2023-01-01T12:00:00Z,"Test Note","data:image/jpeg;base64,mock"';
 
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
       canceled: false,

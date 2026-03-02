@@ -32,13 +32,15 @@ export const getDb = async () => {
         CREATE TABLE IF NOT EXISTS entries (
             id TEXT PRIMARY KEY NOT NULL,
             activityId TEXT NOT NULL,
-            date TEXT NOT NULL,
+            startDate TEXT NOT NULL,
+            endDate TEXT NOT NULL,
             notes TEXT,
             image TEXT,
             FOREIGN KEY (activityId) REFERENCES activities (id) ON DELETE CASCADE
         );
         `);
 
+        await migrateDatabase(db);
         await migrateFromAsyncStorage(db);
         await seedInitialData(db);
         return db;
@@ -55,6 +57,25 @@ export const initDatabase = async () => {
   await getDb();
 };
 
+const migrateDatabase = async (db: SQLite.SQLiteDatabase) => {
+  try {
+    const tableInfo = await db.getAllAsync<any>("PRAGMA table_info(entries)");
+    const hasDate = tableInfo.some(col => col.name === 'date');
+    const hasStartDate = tableInfo.some(col => col.name === 'startDate');
+
+    if (hasDate && !hasStartDate) {
+      console.log('Migrating entries table: adding startDate and endDate...');
+      await db.execAsync('ALTER TABLE entries ADD COLUMN startDate TEXT');
+      await db.execAsync('ALTER TABLE entries ADD COLUMN endDate TEXT');
+      await db.execAsync('UPDATE entries SET startDate = date, endDate = date');
+      // Note: Dropping columns is not supported in older SQLite versions,
+      // but we can leave 'date' as it's now redundant.
+    }
+  } catch (error) {
+    console.error('Error during database migration:', error);
+  }
+};
+
 const seedInitialData = async (db: SQLite.SQLiteDatabase) => {
     const activitiesCount = await db.getFirstAsync<{count: number}>('SELECT COUNT(*) as count FROM activities');
     if (activitiesCount?.count === 0) {
@@ -67,8 +88,8 @@ const seedInitialData = async (db: SQLite.SQLiteDatabase) => {
             const entries = initialActivityDetails[activity.id] || [];
             for (const entry of entries) {
                 await db.runAsync(
-                    'INSERT INTO entries (id, activityId, date, notes, image) VALUES (?, ?, ?, ?, ?)',
-                    [entry.id, activity.id, entry.date.toISOString(), entry.notes || null, entry.image || null]
+                    'INSERT INTO entries (id, activityId, startDate, endDate, notes, image) VALUES (?, ?, ?, ?, ?, ?)',
+                    [entry.id, activity.id, entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image || null]
                 );
             }
         }
@@ -94,9 +115,10 @@ const migrateFromAsyncStorage = async (db: SQLite.SQLiteDatabase) => {
 
         const entries = activityDetails[activity.id] || [];
         for (const entry of entries) {
+          const entryDate = new Date(entry.startDate || (entry as any).date).toISOString();
           await db.runAsync(
-            'INSERT OR REPLACE INTO entries (id, activityId, date, notes, image) VALUES (?, ?, ?, ?, ?)',
-            [entry.id, activity.id, new Date(entry.date).toISOString(), entry.notes || null, entry.image || null]
+            'INSERT OR REPLACE INTO entries (id, activityId, startDate, endDate, notes, image) VALUES (?, ?, ?, ?, ?, ?)',
+            [entry.id, activity.id, entryDate, entryDate, entry.notes || null, entry.image || null]
           );
         }
       }
@@ -144,10 +166,11 @@ export const deleteActivity = async (id: string) => {
 export const getEntries = async (activityId: string): Promise<ActivityEntry[]> => {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.getAllAsync<any>('SELECT * FROM entries WHERE activityId = ? ORDER BY date DESC', [activityId]);
+  const rows = await db.getAllAsync<any>('SELECT * FROM entries WHERE activityId = ? ORDER BY startDate DESC', [activityId]);
   return rows.map(row => ({
     id: row.id,
-    date: new Date(row.date),
+    startDate: new Date(row.startDate),
+    endDate: new Date(row.endDate),
     notes: row.notes,
     image: row.image,
   }));
@@ -160,7 +183,8 @@ export const getAllEntries = async (): Promise<(ActivityEntry & { activityId: st
   return rows.map(row => ({
     id: row.id,
     activityId: row.activityId,
-    date: new Date(row.date),
+    startDate: new Date(row.startDate),
+    endDate: new Date(row.endDate),
     notes: row.notes,
     image: row.image,
   }));
@@ -170,8 +194,8 @@ export const addEntry = async (activityId: string, entry: ActivityEntry) => {
   const db = await getDb();
   if (!db) return;
   await db.runAsync(
-    'INSERT INTO entries (id, activityId, date, notes, image) VALUES (?, ?, ?, ?, ?)',
-    [entry.id, activityId, entry.date.toISOString(), entry.notes || null, entry.image || null]
+    'INSERT INTO entries (id, activityId, startDate, endDate, notes, image) VALUES (?, ?, ?, ?, ?, ?)',
+    [entry.id, activityId, entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image || null]
   );
 };
 
@@ -179,8 +203,8 @@ export const updateEntry = async (entry: ActivityEntry) => {
   const db = await getDb();
   if (!db) return;
   await db.runAsync(
-    'UPDATE entries SET date = ?, notes = ?, image = ? WHERE id = ?',
-    [entry.date.toISOString(), entry.notes || null, entry.image || null, entry.id]
+    'UPDATE entries SET startDate = ?, endDate = ?, notes = ?, image = ? WHERE id = ?',
+    [entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image || null, entry.id]
   );
 };
 

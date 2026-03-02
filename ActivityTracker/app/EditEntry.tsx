@@ -24,46 +24,89 @@ const EditEntryScreen: React.FC = () => {
   const [minute, setMinute] = useState('');
   const [second, setSecond] = useState('');
   const [ampm, setAmpm] = useState('');
+
+  const [endYear, setEndYear] = useState('');
+  const [endMonth, setEndMonth] = useState('');
+  const [endDay, setEndDay] = useState('');
+  const [endHour, setEndHour] = useState('');
+  const [endMinute, setEndMinute] = useState('');
+  const [endSecond, setEndSecond] = useState('');
+  const [endAmpm, setEndAmpm] = useState('');
+
   const [notes, setNotes] = useState('');
   const [image, setImage] = useState<string | undefined>(undefined);
   const [isFormValidState, setIsFormValidState] = useState(false);
 
   const isFormValid = () => {
-    const numMonth = parseInt(month, 10);
-    const numDay = parseInt(day, 10);
-    const numYear = parseInt(year, 10);
-    const numHour = parseInt(hour, 10);
-    const numMinute = parseInt(minute, 10);
-    const numSecond = parseInt(second, 10);
+    const validate = (y, m, d, h, min, s, ampmVal) => {
+        const numMonth = parseInt(m, 10);
+        const numDay = parseInt(d, 10);
+        const numYear = parseInt(y, 10);
+        const numHour = parseInt(h, 10);
+        const numMinute = parseInt(min, 10);
+        const numSecond = parseInt(s, 10);
 
-    const isMonthValid = !isNaN(numMonth) && numMonth >= 1 && numMonth <= 12;
-    const isDayValid = !isNaN(numMonth) && !isNaN(numDay) && !isNaN(numYear) &&
-                       numMonth >= 1 && numMonth <= 12 &&
-                       numDay >= 1 && numDay <= new Date(numYear, numMonth, 0).getDate();
-    const isYearValid = !isNaN(numYear) && numYear > 0;
-    const isHourValid = !isNaN(numHour) && numHour >= 1 && numHour <= 12;
-    const isMinuteValid = !isNaN(numMinute) && numMinute >= 0 && numMinute <= 59;
-    const isSecondValid = !isNaN(numSecond) && numSecond >= 0 && numSecond <= 59;
-    const isAmpmValid = ampm.toUpperCase() === 'AM' || ampm.toUpperCase() === 'PM';
+        const isMonthValid = !isNaN(numMonth) && numMonth >= 1 && numMonth <= 12;
+        const isDayValid = !isNaN(numMonth) && !isNaN(numDay) && !isNaN(numYear) &&
+                        numMonth >= 1 && numMonth <= 12 &&
+                        numDay >= 1 && numDay <= new Date(numYear, numMonth, 0).getDate();
+        const isYearValid = !isNaN(numYear) && numYear > 0;
+        const isHourValid = !isNaN(numHour) && numHour >= 1 && numHour <= 12;
+        const isMinuteValid = !isNaN(numMinute) && numMinute >= 0 && numMinute <= 59;
+        const isSecondValid = !isNaN(numSecond) && numSecond >= 0 && numSecond <= 59;
+        const isAmpmValid = ampmVal.toUpperCase() === 'AM' || ampmVal.toUpperCase() === 'PM';
 
-    return isMonthValid && isDayValid && isYearValid && isHourValid && isMinuteValid && isSecondValid && isAmpmValid;
+        return isMonthValid && isDayValid && isYearValid && isHourValid && isMinuteValid && isSecondValid && isAmpmValid;
+    };
+
+    const startValid = validate(year, month, day, hour, minute, second, ampm);
+    const endValid = validate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
+
+    if (!startValid || !endValid) return false;
+
+    // Check that end date is not before start date
+    const getFullDate = (y, m, d, h, min, s, ampmVal) => {
+        let hours = parseInt(h, 10);
+        if (ampmVal.toUpperCase() === 'PM' && hours < 12) hours += 12;
+        if (ampmVal.toUpperCase() === 'AM' && hours === 12) hours = 0;
+        return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), hours, parseInt(min, 10), parseInt(s, 10));
+    };
+
+    const start = getFullDate(year, month, day, hour, minute, second, ampm);
+    const end = getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
+
+    return end >= start;
   };
 
 
   useEffect(() => {
     if (entry) {
-      const entryDate = new Date(entry.date);
+      const entryDate = new Date(entry.startDate);
       setYear(entryDate.getFullYear().toString());
       setMonth((entryDate.getMonth() + 1).toString());
       setDay(entryDate.getDate().toString());
       let hours = entryDate.getHours();
-      const ampm = hours >= 12 ? 'PM' : 'AM';
+      const ampmVal = hours >= 12 ? 'PM' : 'AM';
       hours = hours % 12;
-      hours = hours ? hours : 12; // the hour '0' should be '12'
+      hours = hours ? hours : 12;
       setHour(hours.toString());
       setMinute(entryDate.getMinutes().toString().padStart(2, '0'));
       setSecond(entryDate.getSeconds().toString().padStart(2, '0'));
-      setAmpm(ampm);
+      setAmpm(ampmVal);
+
+      const endDate = new Date(entry.endDate);
+      setEndYear(endDate.getFullYear().toString());
+      setEndMonth((endDate.getMonth() + 1).toString());
+      setEndDay(endDate.getDate().toString());
+      let endHours = endDate.getHours();
+      const endAmpmVal = endHours >= 12 ? 'PM' : 'AM';
+      endHours = endHours % 12;
+      endHours = endHours ? endHours : 12;
+      setEndHour(endHours.toString());
+      setEndMinute(endDate.getMinutes().toString().padStart(2, '0'));
+      setEndSecond(endDate.getSeconds().toString().padStart(2, '0'));
+      setEndAmpm(endAmpmVal);
+
       setNotes(entry.notes || '');
       setImage(entry.image);
     }
@@ -71,7 +114,7 @@ const EditEntryScreen: React.FC = () => {
 
   useEffect(() => {
     setIsFormValidState(isFormValid());
-  }, [year, month, day, hour, minute, second, ampm]);
+  }, [year, month, day, hour, minute, second, ampm, endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm]);
 
   const convertToJpeg = async (uri: string) => {
     const manipResult = await ImageManipulator.manipulateAsync(
@@ -109,17 +152,42 @@ const EditEntryScreen: React.FC = () => {
     }
   };
 
+  const getFullDate = (y, m, d, h, min, s, ampmVal) => {
+    let hours = parseInt(h, 10);
+    if (ampmVal.toUpperCase() === 'PM' && hours < 12) hours += 12;
+    if (ampmVal.toUpperCase() === 'AM' && hours === 12) hours = 0;
+    return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), hours, parseInt(min, 10), parseInt(s, 10));
+  };
+
+  const updateEndStates = (date: Date) => {
+    setEndYear(date.getFullYear().toString());
+    setEndMonth((date.getMonth() + 1).toString());
+    setEndDay(date.getDate().toString());
+    let hours = date.getHours();
+    const ampmVal = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    setEndHour(hours.toString());
+    setEndMinute(date.getMinutes().toString().padStart(2, '0'));
+    setEndSecond(date.getSeconds().toString().padStart(2, '0'));
+    setEndAmpm(ampmVal);
+  };
+
+  const adjustEndTime = (minutes: number) => {
+    const start = getFullDate(year, month, day, hour, minute, second, ampm);
+    const end = getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
+    let newEnd = new Date(end.getTime() + minutes * 60000);
+    if (newEnd < start) {
+        newEnd = start;
+    }
+    updateEndStates(newEnd);
+  };
+
   const handleSave = () => {
     if (activityId && entryId && isFormValid()) {
-      let hours = parseInt(hour, 10);
-      if (ampm.toUpperCase() === 'PM' && hours < 12) {
-        hours += 12;
-      }
-      if (ampm.toUpperCase() === 'AM' && hours === 12) {
-        hours = 0;
-      }
-      const newDate = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10), hours, parseInt(minute, 10), parseInt(second, 10));
-      updateActivityEntry(activityId, entryId, newDate, notes, image);
+      const startDate = getFullDate(year, month, day, hour, minute, second, ampm);
+      const endDate = getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
+      updateActivityEntry(activityId, entryId, startDate, endDate, notes, image);
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -152,6 +220,7 @@ const EditEntryScreen: React.FC = () => {
         <View style={{ width: 30 }} />
       </View>
       <ScrollView style={styles.content}>
+        <Text style={styles.sectionLabel}>Start Date & Time</Text>
         <Text style={styles.label}>Date</Text>
         <View style={styles.inputRow}>
           <TextInput
@@ -214,6 +283,83 @@ const EditEntryScreen: React.FC = () => {
             placeholder="AM/PM"
             value={ampm}
             onChangeText={setAmpm}
+            maxLength={2}
+          />
+        </View>
+
+        <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionLabel}>End Date & Time</Text>
+            <View style={styles.quickActions}>
+                <TouchableOpacity onPress={() => adjustEndTime(5)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>+5m</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => adjustEndTime(-5)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>-5m</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
+        <Text style={styles.label}>Date</Text>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            placeholder="MM"
+            value={endMonth}
+            onChangeText={setEndMonth}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+          <Text style={styles.separator}>/</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="DD"
+            value={endDay}
+            onChangeText={setEndDay}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+          <Text style={styles.separator}>/</Text>
+          <TextInput
+            style={[styles.input, {width: 80}] }
+            placeholder="YYYY"
+            value={endYear}
+            onChangeText={setEndYear}
+            keyboardType="number-pad"
+            maxLength={4}
+          />
+        </View>
+        <Text style={styles.label}>Time</Text>
+        <View style={styles.inputRow}>
+          <TextInput
+            style={styles.input}
+            placeholder="HH"
+            value={endHour}
+            onChangeText={setEndHour}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+          <Text style={styles.separator}>:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="MM"
+            value={endMinute}
+            onChangeText={setEndMinute}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+          <Text style={styles.separator}>:</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="SS"
+            value={endSecond}
+            onChangeText={setEndSecond}
+            keyboardType="number-pad"
+            maxLength={2}
+          />
+          <TextInput
+            style={[styles.input, { width: 60 , marginLeft: 15}]}
+            placeholder="AM/PM"
+            value={endAmpm}
+            onChangeText={setEndAmpm}
             maxLength={2}
           />
         </View>
@@ -282,11 +428,42 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
   },
+  sectionLabel: {
+    color: theme.colors.primary,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginTop: 10,
+    marginBottom: 15,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 20,
+  },
+  quickActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 10,
+  },
+  quickButton: {
+    backgroundColor: theme.colors.card,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  quickButtonText: {
+    color: theme.colors.primary,
+    fontSize: 14,
+    fontWeight: '600',
+  },
   label: {
     color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
+    fontSize: 16,
+    fontWeight: '600',
+    marginBottom: 10,
   },
   inputRow: {
     flexDirection: 'row',

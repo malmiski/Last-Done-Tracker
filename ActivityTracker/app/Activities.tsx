@@ -81,7 +81,8 @@ const ActivitiesScreen: React.FC = () => {
   };
 
   const handleAddTime = (activityId: string, icon: string, x: number, y: number) => {
-    addActivityEntry(activityId, new Date());
+    const now = new Date();
+    addActivityEntry(activityId, now, now);
 
     const newIcon: FloatingIcon = {
       id: Date.now(),
@@ -130,7 +131,7 @@ const ActivitiesScreen: React.FC = () => {
         data={filteredActivities}
         renderItem={({ item, index }) => {
           const lastEntry = activityDetails[item.id]?.[0];
-          const lastEntryDate = lastEntry ? lastEntry.date : null;
+        const lastEntryDate = lastEntry ? lastEntry.startDate : null;
           return (
             <ActivityListItem
               item={item}

@@ -1,6 +1,7 @@
 export interface ActivityEntry {
   id: string;
-  date: Date;
+  startDate: Date;
+  endDate: Date;
   notes?: string;
   image?: string; // base64 encoded image
 }
