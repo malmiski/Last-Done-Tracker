@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, ScrollView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, ScrollView, Alert, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
@@ -8,11 +8,12 @@ import { useActivityData } from '../src/hooks/useActivityData';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import * as ImageManipulator from 'expo-image-manipulator';
+import { Tag } from '../src/data/activity-details';
 
 const EditEntryScreen: React.FC = () => {
   const router = useRouter();
   const { activityId, entryId } = useLocalSearchParams<{ activityId: string, entryId: string }>();
-  const { activityDetails, updateActivityEntry, getActivityById } = useActivityData();
+  const { activityDetails, updateActivityEntry, getActivityById, tags, addTag } = useActivityData();
 
   const activity = getActivityById(activityId);
   const entry = activityDetails[activityId]?.find(e => e.id === entryId);
@@ -35,7 +36,18 @@ const EditEntryScreen: React.FC = () => {
 
   const [notes, setNotes] = useState('');
   const [image, setImage] = useState<string | undefined>(undefined);
+  const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [isFormValidState, setIsFormValidState] = useState(false);
+
+  // For new tag creation
+  const [newTagModalVisible, setNewTagModalVisible] = useState(false);
+  const [newTagName, setNewTagName] = useState('');
+  const [newTagColor, setNewTagColor] = useState('#34C759');
+
+  const tagColors = [
+    '#34C759', '#FF3B30', '#007AFF', '#FF9500', '#AF52DE',
+    '#5856D6', '#FFCC00', '#FF2D55', '#5AC8FA', '#8E8E93'
+  ];
 
   const isFormValid = () => {
     const validate = (y, m, d, h, min, s, ampmVal) => {
@@ -109,6 +121,7 @@ const EditEntryScreen: React.FC = () => {
 
       setNotes(entry.notes || '');
       setImage(entry.image);
+      setSelectedTags(entry.tags || []);
     }
   }, [entry]);
 
@@ -184,7 +197,7 @@ const EditEntryScreen: React.FC = () => {
     setEndHour(hours.toString());
     setEndMinute(date.getMinutes().toString().padStart(2, '0'));
     setEndSecond(date.getSeconds().toString().padStart(2, '0'));
-    setEndAmpm(ampmVal);
+    setEndAmpm(endAmpmVal);
   };
 
   const adjustStartTime = (minutes: number) => {
@@ -211,13 +224,29 @@ const EditEntryScreen: React.FC = () => {
     if (activityId && entryId && isFormValid()) {
       const startDate = getFullDate(year, month, day, hour, minute, second, ampm);
       const endDate = getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
-      updateActivityEntry(activityId, entryId, startDate, endDate, notes, image);
+      updateActivityEntry(activityId, entryId, startDate, endDate, notes, image, selectedTags);
       if (router.canGoBack()) {
         router.back();
       } else {
         router.replace(`/ActivityDetail?activityId=${activityId}`);
       }
     }
+  };
+
+  const toggleTag = (tag: Tag) => {
+    if (selectedTags.find(t => t.id === tag.id)) {
+      setSelectedTags(prev => prev.filter(t => t.id !== tag.id));
+    } else {
+      setSelectedTags(prev => [...prev, tag]);
+    }
+  };
+
+  const handleCreateTag = async () => {
+    if (!newTagName.trim()) return;
+    const tag = await addTag(newTagName, newTagColor);
+    setSelectedTags(prev => [...prev, tag]);
+    setNewTagName('');
+    setNewTagModalVisible(false);
   };
 
   if (!activity || !entry) {
@@ -397,6 +426,32 @@ const EditEntryScreen: React.FC = () => {
             maxLength={2}
           />
         </View>
+
+        <Text style={[styles.label, { marginTop: 20 }]}>Tags</Text>
+        <View style={styles.tagsContainer}>
+          {tags.map(tag => {
+            const isSelected = selectedTags.find(t => t.id === tag.id);
+            return (
+              <TouchableOpacity
+                key={tag.id}
+                style={[
+                  styles.tagItem,
+                  { backgroundColor: tag.color },
+                  isSelected && styles.selectedTagItem
+                ]}
+                onPress={() => toggleTag(tag)}
+              >
+                <Text style={styles.tagText}>{tag.name}</Text>
+                {isSelected && <Icon name="check" size={14} color="#FFFFFF" style={{ marginLeft: 5 }} />}
+              </TouchableOpacity>
+            );
+          })}
+          <TouchableOpacity style={styles.addTagButton} onPress={() => setNewTagModalVisible(true)}>
+            <Icon name="plus" size={20} color={theme.colors.primary} />
+            <Text style={styles.addTagText}>New Tag</Text>
+          </TouchableOpacity>
+        </View>
+
         <Text style={[styles.label, { marginTop: 20 }]}>Notes</Text>
         <TextInput
           style={styles.notesInput}
@@ -435,6 +490,47 @@ const EditEntryScreen: React.FC = () => {
           <Text style={styles.buttonText}>Save Changes</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={newTagModalVisible}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setNewTagModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Create New Tag</Text>
+            <TextInput
+              style={styles.modalInput}
+              placeholder="Tag Name"
+              placeholderTextColor={theme.colors.subtext}
+              value={newTagName}
+              onChangeText={setNewTagName}
+            />
+            <View style={styles.colorGrid}>
+              {tagColors.map(color => (
+                <TouchableOpacity
+                  key={color}
+                  style={[
+                    styles.colorOption,
+                    { backgroundColor: color },
+                    newTagColor === color && styles.selectedColorOption
+                  ]}
+                  onPress={() => setNewTagColor(color)}
+                />
+              ))}
+            </View>
+            <View style={styles.modalButtons}>
+              <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={() => setNewTagModalVisible(false)}>
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.modalButton, styles.saveButton]} onPress={handleCreateTag}>
+                <Text style={styles.modalButtonText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -518,6 +614,44 @@ const styles = StyleSheet.create({
     fontSize: 18,
     marginHorizontal: 10,
   },
+  tagsContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  tagItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    opacity: 0.6,
+  },
+  selectedTagItem: {
+    opacity: 1,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  tagText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+  addTagButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.card,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+  },
+  addTagText: {
+    color: theme.colors.primary,
+    fontWeight: 'bold',
+    marginLeft: 5,
+  },
   notesInput: {
     backgroundColor: theme.colors.card,
     borderRadius: 10,
@@ -573,6 +707,67 @@ const styles = StyleSheet.create({
   buttonText: {
     color: theme.colors.background,
     fontSize: 18,
+    fontWeight: 'bold',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: theme.colors.card,
+    borderRadius: 20,
+    padding: 20,
+  },
+  modalTitle: {
+    color: theme.colors.text,
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+    textAlign: 'center',
+  },
+  modalInput: {
+    backgroundColor: theme.colors.background,
+    color: theme.colors.text,
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 20,
+    justifyContent: 'center',
+  },
+  colorOption: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+  },
+  selectedColorOption: {
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: theme.colors.disabled,
+  },
+  saveButton: {
+    backgroundColor: theme.colors.primary,
+  },
+  modalButtonText: {
+    color: '#FFFFFF',
     fontWeight: 'bold',
   },
 });

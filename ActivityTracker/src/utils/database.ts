@@ -5,7 +5,7 @@ import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { Platform } from 'react-native';
 import { Activity, activities as initialActivities } from '../data/activities';
-import { ActivityEntry, activityDetails as initialActivityDetails } from '../data/activity-details';
+import { ActivityEntry, Tag, activityDetails as initialActivityDetails } from '../data/activity-details';
 
 const DB_NAME = 'activities.db';
 const ACTIVITIES_KEY = '@activities';
@@ -37,6 +37,18 @@ export const getDb = async () => {
             notes TEXT,
             image TEXT,
             FOREIGN KEY (activityId) REFERENCES activities (id) ON DELETE CASCADE
+        );
+        CREATE TABLE IF NOT EXISTS tags (
+            id TEXT PRIMARY KEY NOT NULL,
+            name TEXT NOT NULL UNIQUE,
+            color TEXT NOT NULL
+        );
+        CREATE TABLE IF NOT EXISTS entry_tags (
+            entryId TEXT NOT NULL,
+            tagId TEXT NOT NULL,
+            PRIMARY KEY (entryId, tagId),
+            FOREIGN KEY (entryId) REFERENCES entries (id) ON DELETE CASCADE,
+            FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
         );
         `);
 
@@ -71,6 +83,26 @@ const migrateDatabase = async (db: SQLite.SQLiteDatabase) => {
       // Note: Dropping columns is not supported in older SQLite versions,
       // but we can leave 'date' as it's now redundant.
     }
+
+    const tables = await db.getAllAsync<any>("SELECT name FROM sqlite_master WHERE type='table'");
+    const hasTags = tables.some(t => t.name === 'tags');
+    if (!hasTags) {
+        await db.execAsync(`
+            CREATE TABLE IF NOT EXISTS tags (
+                id TEXT PRIMARY KEY NOT NULL,
+                name TEXT NOT NULL UNIQUE,
+                color TEXT NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS entry_tags (
+                entryId TEXT NOT NULL,
+                tagId TEXT NOT NULL,
+                PRIMARY KEY (entryId, tagId),
+                FOREIGN KEY (entryId) REFERENCES entries (id) ON DELETE CASCADE,
+                FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
+            );
+        `);
+    }
+
   } catch (error) {
     console.error('Error during database migration:', error);
   }
@@ -163,31 +195,76 @@ export const deleteActivity = async (id: string) => {
   await db.runAsync('DELETE FROM activities WHERE id = ?', [id]);
 };
 
+const mapEntriesWithTags = (rows: any[]): ActivityEntry[] => {
+    const entryMap = new Map<string, ActivityEntry>();
+    rows.forEach(row => {
+        if (!entryMap.has(row.id)) {
+            entryMap.set(row.id, {
+                id: row.id,
+                startDate: new Date(row.startDate),
+                endDate: new Date(row.endDate),
+                notes: row.notes,
+                image: row.image,
+                tags: []
+            });
+        }
+        if (row.tagId) {
+            entryMap.get(row.id)!.tags!.push({
+                id: row.tagId,
+                name: row.tagName,
+                color: row.tagColor
+            });
+        }
+    });
+    return Array.from(entryMap.values());
+};
+
 export const getEntries = async (activityId: string): Promise<ActivityEntry[]> => {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.getAllAsync<any>('SELECT * FROM entries WHERE activityId = ? ORDER BY startDate DESC', [activityId]);
-  return rows.map(row => ({
-    id: row.id,
-    startDate: new Date(row.startDate),
-    endDate: new Date(row.endDate),
-    notes: row.notes,
-    image: row.image,
-  }));
+  const rows = await db.getAllAsync<any>(`
+    SELECT entries.*, tags.id as tagId, tags.name as tagName, tags.color as tagColor
+    FROM entries
+    LEFT JOIN entry_tags ON entries.id = entry_tags.entryId
+    LEFT JOIN tags ON entry_tags.tagId = tags.id
+    WHERE entries.activityId = ?
+    ORDER BY entries.startDate DESC
+  `, [activityId]);
+  return mapEntriesWithTags(rows).sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
 };
 
 export const getAllEntries = async (): Promise<(ActivityEntry & { activityId: string })[]> => {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.getAllAsync<any>('SELECT * FROM entries');
-  return rows.map(row => ({
-    id: row.id,
-    activityId: row.activityId,
-    startDate: new Date(row.startDate),
-    endDate: new Date(row.endDate),
-    notes: row.notes,
-    image: row.image,
-  }));
+  const rows = await db.getAllAsync<any>(`
+    SELECT entries.*, tags.id as tagId, tags.name as tagName, tags.color as tagColor
+    FROM entries
+    LEFT JOIN entry_tags ON entries.id = entry_tags.entryId
+    LEFT JOIN tags ON entry_tags.tagId = tags.id
+  `);
+
+  const entryMap = new Map<string, ActivityEntry & { activityId: string }>();
+  rows.forEach(row => {
+      if (!entryMap.has(row.id)) {
+          entryMap.set(row.id, {
+              id: row.id,
+              activityId: row.activityId,
+              startDate: new Date(row.startDate),
+              endDate: new Date(row.endDate),
+              notes: row.notes,
+              image: row.image,
+              tags: []
+          });
+      }
+      if (row.tagId) {
+          entryMap.get(row.id)!.tags!.push({
+              id: row.tagId,
+              name: row.tagName,
+              color: row.tagColor
+          });
+      }
+  });
+  return Array.from(entryMap.values());
 };
 
 export const addEntry = async (activityId: string, entry: ActivityEntry) => {
@@ -197,6 +274,11 @@ export const addEntry = async (activityId: string, entry: ActivityEntry) => {
     'INSERT INTO entries (id, activityId, startDate, endDate, notes, image) VALUES (?, ?, ?, ?, ?, ?)',
     [entry.id, activityId, entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image || null]
   );
+  if (entry.tags) {
+    for (const tag of entry.tags) {
+        await addEntryTag(entry.id, tag.id);
+    }
+  }
 };
 
 export const updateEntry = async (entry: ActivityEntry) => {
@@ -206,12 +288,110 @@ export const updateEntry = async (entry: ActivityEntry) => {
     'UPDATE entries SET startDate = ?, endDate = ?, notes = ?, image = ? WHERE id = ?',
     [entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image || null, entry.id]
   );
+  if (entry.tags) {
+    await db.runAsync('DELETE FROM entry_tags WHERE entryId = ?', [entry.id]);
+    for (const tag of entry.tags) {
+        await addEntryTag(entry.id, tag.id);
+    }
+  }
 };
 
 export const deleteEntry = async (id: string) => {
   const db = await getDb();
   if (!db) return;
   await db.runAsync('DELETE FROM entries WHERE id = ?', [id]);
+};
+
+// Tag CRUD
+export const getTags = async (): Promise<Tag[]> => {
+    const db = await getDb();
+    if (!db) return [];
+    return await db.getAllAsync<Tag>('SELECT * FROM tags ORDER BY name ASC');
+};
+
+export const addTag = async (tag: Tag) => {
+    const db = await getDb();
+    if (!db) return;
+    await db.runAsync('INSERT INTO tags (id, name, color) VALUES (?, ?, ?)', [tag.id, tag.name, tag.color]);
+};
+
+export const updateTag = async (tag: Tag) => {
+    const db = await getDb();
+    if (!db) return;
+    await db.runAsync('UPDATE tags SET name = ?, color = ? WHERE id = ?', [tag.name, tag.color, tag.id]);
+};
+
+export const deleteTag = async (id: string) => {
+    const db = await getDb();
+    if (!db) return;
+    await db.runAsync('DELETE FROM tags WHERE id = ?', [id]);
+};
+
+// Tag associations
+export const getEntryTags = async (entryId: string): Promise<Tag[]> => {
+    const db = await getDb();
+    if (!db) return [];
+    return await db.getAllAsync<Tag>(
+        'SELECT tags.* FROM tags JOIN entry_tags ON tags.id = entry_tags.tagId WHERE entry_tags.entryId = ?',
+        [entryId]
+    );
+};
+
+export const addEntryTag = async (entryId: string, tagId: string) => {
+    const db = await getDb();
+    if (!db) return;
+    await db.runAsync('INSERT OR IGNORE INTO entry_tags (entryId, tagId) VALUES (?, ?)', [entryId, tagId]);
+};
+
+export const getTagUsageCount = async (tagId: string): Promise<number> => {
+    const db = await getDb();
+    if (!db) return 0;
+    const result = await db.getFirstAsync<{count: number}>('SELECT COUNT(*) as count FROM entry_tags WHERE tagId = ?', [tagId]);
+    return result?.count || 0;
+};
+
+export const getEntriesByTag = async (tagId: string): Promise<(ActivityEntry & { activityId: string })[]> => {
+    const db = await getDb();
+    if (!db) return [];
+
+    // Find entry IDs first
+    const entryIdRows = await db.getAllAsync<{entryId: string}>('SELECT entryId FROM entry_tags WHERE tagId = ?', [tagId]);
+    if (entryIdRows.length === 0) return [];
+    const entryIds = entryIdRows.map(r => r.entryId);
+
+    // Fetch entries and their tags
+    const placeholders = entryIds.map(() => '?').join(',');
+    const rows = await db.getAllAsync<any>(`
+        SELECT entries.*, tags.id as tagId, tags.name as tagName, tags.color as tagColor
+        FROM entries
+        LEFT JOIN entry_tags ON entries.id = entry_tags.entryId
+        LEFT JOIN tags ON entry_tags.tagId = tags.id
+        WHERE entries.id IN (${placeholders})
+        ORDER BY entries.startDate DESC
+    `, entryIds);
+
+    const entryMap = new Map<string, ActivityEntry & { activityId: string }>();
+    rows.forEach(row => {
+        if (!entryMap.has(row.id)) {
+            entryMap.set(row.id, {
+                id: row.id,
+                activityId: row.activityId,
+                startDate: new Date(row.startDate),
+                endDate: new Date(row.endDate),
+                notes: row.notes,
+                image: row.image,
+                tags: []
+            });
+        }
+        if (row.tagId) {
+            entryMap.get(row.id)!.tags!.push({
+                id: row.tagId,
+                name: row.tagName,
+                color: row.tagColor
+            });
+        }
+    });
+    return Array.from(entryMap.values()).sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
 };
 
 export const exportDatabase = async () => {

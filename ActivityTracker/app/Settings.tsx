@@ -79,6 +79,15 @@ const SettingsScreen: React.FC = () => {
           />
         </View>
 
+        <Text style={styles.sectionTitle}>Tags</Text>
+        <TouchableOpacity style={styles.setting} onPress={() => router.push('/ManageTags')}>
+          <View>
+            <Text style={styles.settingText}>Manage Tags</Text>
+            <Text style={styles.settingSubtext}>Create, edit, and delete tags</Text>
+          </View>
+          <Icon name="tag-multiple-outline" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
+
         <Text style={styles.sectionTitle}>Data Management</Text>
         <TouchableOpacity style={styles.setting} onPress={downloadCsv}>
           <View>

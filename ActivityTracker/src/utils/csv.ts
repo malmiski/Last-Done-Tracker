@@ -4,17 +4,19 @@ import * as DocumentPicker from 'expo-document-picker';
 import { Platform } from 'react-native';
 import { generateActivityId } from './crypto';
 import * as database from './database';
+import { Tag } from '../data/activity-details';
 
 export const downloadCsv = async () => {
   try {
     const activities = await database.getActivities();
+    const allTags = await database.getTags();
 
     if (!activities || activities.length === 0) {
       alert('No data to download.');
       return;
     }
 
-    let csvContent = 'ActivityID,Activity,Icon,EntryID,StartDate,EndDate,Notes,Image\n';
+    let csvContent = 'ActivityID,Activity,Icon,EntryID,StartDate,EndDate,Notes,Image,Tags\n';
 
     const escapeCSV = (field: string) => {
       if (field === undefined || field === null) return '';
@@ -28,6 +30,7 @@ export const downloadCsv = async () => {
     for (const activity of activities) {
       const details = await database.getEntries(activity.id);
       details.forEach((detail: any) => {
+        const tagsString = (detail.tags || []).map((t: Tag) => t.name).join('|');
         const row = [
           activity.id,
           activity.name,
@@ -36,7 +39,8 @@ export const downloadCsv = async () => {
           new Date(detail.startDate).toISOString(),
           new Date(detail.endDate).toISOString(),
           detail.notes || '',
-          detail.image || ''
+          detail.image || '',
+          tagsString
         ].map(escapeCSV).join(',');
         csvContent += row + '\n';
       });
@@ -115,6 +119,7 @@ export const uploadCsv = async () => {
     const header = parseCSVLine(lines[0]);
     const hasIds = header.includes('ActivityID') && header.includes('EntryID');
     const hasEndDate = header.includes('EndDate');
+    const hasTags = header.includes('Tags');
 
     // Basic schema validation
     if (!header.includes('Activity') || (!header.includes('Date') && !header.includes('StartDate'))) {
@@ -123,17 +128,23 @@ export const uploadCsv = async () => {
     }
 
     const activities = await database.getActivities();
+    const existingTags = await database.getTags();
 
     for (const line of lines.slice(1)) {
       if (!line || line.trim() === '') continue;
       const values = parseCSVLine(line);
 
-      let activityId, activityName, icon, entryId, startDateString, endDateString, notes, image;
+      let activityId, activityName, icon, entryId, startDateString, endDateString, notes, image, tagsString;
 
       if (hasIds) {
         if (hasEndDate) {
-            if (values.length < 8) continue;
-            [activityId, activityName, icon, entryId, startDateString, endDateString, notes, image] = values;
+            if (hasTags) {
+                if (values.length < 9) continue;
+                [activityId, activityName, icon, entryId, startDateString, endDateString, notes, image, tagsString] = values;
+            } else {
+                if (values.length < 8) continue;
+                [activityId, activityName, icon, entryId, startDateString, endDateString, notes, image] = values;
+            }
         } else {
             if (values.length < 7) continue;
             [activityId, activityName, icon, entryId, startDateString, notes, image] = values;
@@ -172,6 +183,25 @@ export const uploadCsv = async () => {
         }
       }
 
+      const entryTags: Tag[] = [];
+      if (tagsString) {
+          const tagNames = tagsString.split('|');
+          for (const tagName of tagNames) {
+              if (!tagName) continue;
+              let tag = existingTags.find(t => t.name === tagName);
+              if (!tag) {
+                  tag = {
+                      id: await generateActivityId(tagName + Math.random()),
+                      name: tagName,
+                      color: '#34C759', // Default green
+                  };
+                  await database.addTag(tag);
+                  existingTags.push(tag);
+              }
+              entryTags.push(tag);
+          }
+      }
+
       const startDate = new Date(startDateString);
       const endDate = new Date(endDateString);
       const activityEntries = await database.getEntries(activityId);
@@ -184,6 +214,7 @@ export const uploadCsv = async () => {
           endDate,
           notes: notes || undefined,
           image: image || undefined,
+          tags: entryTags,
         });
       } else {
         await database.updateEntry({
@@ -192,6 +223,7 @@ export const uploadCsv = async () => {
           endDate,
           notes: notes || existingEntry.notes,
           image: image || existingEntry.image,
+          tags: entryTags,
         });
       }
     }

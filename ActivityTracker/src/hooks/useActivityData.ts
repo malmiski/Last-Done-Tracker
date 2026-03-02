@@ -1,12 +1,13 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Activity } from '../data/activities';
-import { ActivityEntry } from '../data/activity-details';
+import { ActivityEntry, Tag } from '../data/activity-details';
 import { generateActivityId } from '../utils/crypto';
 import * as database from '../utils/database';
 
 export const useActivityData = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [activityDetails, setActivityDetails] = useState<{ [key: string]: ActivityEntry[] }>({});
+  const [tags, setTags] = useState<Tag[]>([]);
   const [loading, setLoading] = useState(true);
 
   const loadData = useCallback(async () => {
@@ -22,6 +23,9 @@ export const useActivityData = () => {
         allDetails[activity.id] = entries;
       }
       setActivityDetails(allDetails);
+
+      const storedTags = await database.getTags();
+      setTags(storedTags);
     } catch (e) {
       console.error('Failed to load data.', e);
     } finally {
@@ -57,13 +61,14 @@ export const useActivityData = () => {
     setActivities(prev => prev.map(a => a.id === updatedActivity.id ? updatedActivity : a));
   };
 
-  const addActivityEntry = async (activityId: string, startDate: Date, endDate: Date, notes?: string, image?: string) => {
+  const addActivityEntry = async (activityId: string, startDate: Date, endDate: Date, notes?: string, image?: string, entryTags?: Tag[]) => {
     const newEntry: ActivityEntry = {
       id: await generateActivityId(Math.random().toString()),
       startDate: startDate,
       endDate: endDate,
       notes: notes,
       image: image,
+      tags: entryTags,
     };
 
     await database.addEntry(activityId, newEntry);
@@ -84,13 +89,14 @@ export const useActivityData = () => {
     return newEntry.id;
   };
 
-  const updateActivityEntry = async (activityId: string, entryId: string, startDate: Date, endDate: Date, notes?: string, image?: string) => {
+  const updateActivityEntry = async (activityId: string, entryId: string, startDate: Date, endDate: Date, notes?: string, image?: string, entryTags?: Tag[]) => {
     const entry: ActivityEntry = {
         id: entryId,
         startDate: startDate,
         endDate: endDate,
         notes: notes,
         image: image,
+        tags: entryTags,
     };
     await database.updateEntry(entry);
 
@@ -127,9 +133,35 @@ export const useActivityData = () => {
     return activities.find(a => a.id === activityId);
   }, [activities]);
 
+  const addTag = async (name: string, color: string) => {
+    const newTag: Tag = {
+        id: await generateActivityId(name + Math.random()),
+        name,
+        color,
+    };
+    await database.addTag(newTag);
+    setTags(prev => [...prev, newTag].sort((a, b) => a.name.localeCompare(b.name)));
+    return newTag;
+  };
+
+  const updateTag = async (tag: Tag) => {
+    await database.updateTag(tag);
+    setTags(prev => prev.map(t => t.id === tag.id ? tag : t).sort((a, b) => a.name.localeCompare(b.name)));
+    // Refresh entries as they might have updated tag names/colors
+    loadData();
+  };
+
+  const deleteTag = async (tagId: string) => {
+    await database.deleteTag(tagId);
+    setTags(prev => prev.filter(t => t.id !== tagId));
+    // Refresh entries as tag associations are removed
+    loadData();
+  };
+
   return {
     activities,
     activityDetails,
+    tags,
     loading,
     addActivity,
     updateActivity,
@@ -138,6 +170,9 @@ export const useActivityData = () => {
     deleteActivityEntry,
     deleteActivity,
     getActivityById,
+    addTag,
+    updateTag,
+    deleteTag,
     refreshData: loadData,
   };
 };

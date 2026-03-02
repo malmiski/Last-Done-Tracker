@@ -1,7 +1,8 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
+import { Tag } from '../data/activity-details';
 
 export type ImageMode = 'small' | 'medium' | 'large' | 'hidden';
 
@@ -13,6 +14,7 @@ interface ActivityHistoryItemProps {
   onEdit: () => void;
   onDelete: () => void;
   imageMode?: ImageMode;
+  tags?: Tag[];
 }
 
 const formatDate = (date: Date) => {
@@ -48,7 +50,8 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
   image,
   onEdit,
   onDelete,
-  imageMode = 'small'
+  imageMode = 'small',
+  tags = []
 }) => {
   const firstLine = notes ? notes.split('\n')[0] : '';
   const duration = formatDuration(startDate, endDate);
@@ -93,6 +96,15 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
               {firstLine}
             </Text>
           ) : null}
+          {tags && tags.length > 0 && (
+            <View style={styles.tagContainer}>
+              {tags.map(tag => (
+                <View key={tag.id} style={[styles.tag, { backgroundColor: tag.color }]}>
+                  <Text style={styles.tagText}>{tag.name}</Text>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
         <View style={styles.buttons}>
           <TouchableOpacity onPress={onEdit} style={styles.button}>
@@ -162,6 +174,22 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: 14,
     marginTop: 5,
+  },
+  tagContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 5,
+    gap: 5,
+  },
+  tag: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 5,
+  },
+  tagText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   buttons: {
     flexDirection: 'row',

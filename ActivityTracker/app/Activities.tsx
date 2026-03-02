@@ -105,6 +105,9 @@ const ActivitiesScreen: React.FC = () => {
       <View style={styles.header}>
         <Text style={styles.title}>Activities</Text>
         <View style={styles.headerButtons}>
+          <TouchableOpacity onPress={() => router.push('/SearchByTag')} style={{ marginRight: 15 }}>
+            <Icon name="tag-search-outline" size={30} color={theme.colors.text} />
+          </TouchableOpacity>
           <TouchableOpacity onPress={toggleEditMode} style={{ marginRight: 15 }}>
             <Animated.View style={animatedStyle}>
               <Icon name={isEditMode ? "check" : "pencil-outline"} size={30} color={theme.colors.text} />

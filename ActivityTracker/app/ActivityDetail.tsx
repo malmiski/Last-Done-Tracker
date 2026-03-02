@@ -100,6 +100,7 @@ const ActivityDetailScreen: React.FC = () => {
             notes={item.notes}
             image={item.image}
             imageMode={imageMode}
+            tags={item.tags}
             onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
             onDelete={() => deleteActivityEntry(activityId, item.id)}
           />

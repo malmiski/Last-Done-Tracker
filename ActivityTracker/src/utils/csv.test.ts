@@ -10,6 +10,8 @@ jest.mock('./database', () => ({
   updateActivity: jest.fn(),
   addEntry: jest.fn(),
   updateEntry: jest.fn(),
+  getTags: jest.fn(),
+  addTag: jest.fn(),
 }));
 
 jest.mock('expo-sqlite', () => ({
@@ -65,12 +67,20 @@ describe('CSV Utils', () => {
     jest.clearAllMocks();
   });
 
-  it('should include IDs in exported CSV', async () => {
+  it('should include IDs and tags in exported CSV', async () => {
     const activities = [{ id: '1', name: 'Test', icon: 'run', lastDone: 'Never' }];
-    const entries = [{ id: 'e1', startDate: new Date('2023-01-01T12:00:00Z'), endDate: new Date('2023-01-01T12:00:00Z'), notes: 'Test Note', image: 'data:image/jpeg;base64,mock' }];
+    const entries = [{
+        id: 'e1',
+        startDate: new Date('2023-01-01T12:00:00Z'),
+        endDate: new Date('2023-01-01T12:00:00Z'),
+        notes: 'Test Note',
+        image: 'data:image/jpeg;base64,mock',
+        tags: [{ id: 't1', name: 'Tag1', color: 'red' }]
+    }];
 
     (database.getActivities as jest.Mock).mockResolvedValue(activities);
     (database.getEntries as jest.Mock).mockResolvedValue(entries);
+    (database.getTags as jest.Mock).mockResolvedValue([{ id: 't1', name: 'Tag1', color: 'red' }]);
 
     await downloadCsv();
     expect(database.getActivities).toHaveBeenCalled();
@@ -78,8 +88,8 @@ describe('CSV Utils', () => {
     expect(document.createElement).toHaveBeenCalledWith('a');
   });
 
-  it('should import from CSV with IDs', async () => {
-    const csvContent = 'ActivityID,Activity,Icon,EntryID,StartDate,EndDate,Notes,Image\n1,Test,run,e1,2023-01-01T12:00:00Z,2023-01-01T12:00:00Z,"Test Note","data:image/jpeg;base64,mock"';
+  it('should import from CSV with IDs and tags', async () => {
+    const csvContent = 'ActivityID,Activity,Icon,EntryID,StartDate,EndDate,Notes,Image,Tags\n1,Test,run,e1,2023-01-01T12:00:00Z,2023-01-01T12:00:00Z,"Test Note","data:image/jpeg;base64,mock",Tag1|Tag2';
 
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
       canceled: false,
@@ -88,6 +98,7 @@ describe('CSV Utils', () => {
 
     (database.getActivities as jest.Mock).mockResolvedValue([]);
     (database.getEntries as jest.Mock).mockResolvedValue([]);
+    (database.getTags as jest.Mock).mockResolvedValue([]);
 
     // Mock FileReader for web
     const mockFileReader = {
@@ -102,6 +113,14 @@ describe('CSV Utils', () => {
     await uploadCsv();
 
     expect(database.addActivity).toHaveBeenCalledWith(expect.objectContaining({ id: '1', name: 'Test' }));
-    expect(database.addEntry).toHaveBeenCalledWith('1', expect.objectContaining({ id: 'e1', notes: 'Test Note' }));
+    expect(database.addTag).toHaveBeenCalledTimes(2); // Tag1 and Tag2
+    expect(database.addEntry).toHaveBeenCalledWith('1', expect.objectContaining({
+        id: 'e1',
+        notes: 'Test Note',
+        tags: expect.arrayContaining([
+            expect.objectContaining({ name: 'Tag1' }),
+            expect.objectContaining({ name: 'Tag2' })
+        ])
+    }));
   });
 });
