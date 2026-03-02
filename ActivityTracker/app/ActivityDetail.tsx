@@ -23,7 +23,7 @@ const ActivityDetailScreen: React.FC = () => {
   );
 
   const activity = getActivityById(activityId);
-  const history = (activityDetails[activityId] || []).sort((a, b) => b.date.getTime() - a.date.getTime());
+  const history = (activityDetails[activityId] || []).sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
 
   const filteredHistory = history.filter(item =>
     (item.notes || '').toLowerCase().includes(searchQuery.toLowerCase())
