@@ -12,6 +12,7 @@ jest.mock('./database', () => ({
   updateEntry: jest.fn(),
   getTags: jest.fn(),
   addTag: jest.fn(),
+  updateTag: jest.fn(),
 }));
 
 jest.mock('expo-sqlite', () => ({
@@ -67,7 +68,7 @@ describe('CSV Utils', () => {
     jest.clearAllMocks();
   });
 
-  it('should include IDs and tags in exported CSV', async () => {
+  it('should include IDs and tag colors in exported CSV', async () => {
     const activities = [{ id: '1', name: 'Test', icon: 'run', lastDone: 'Never' }];
     const entries = [{
         id: 'e1',
@@ -88,8 +89,8 @@ describe('CSV Utils', () => {
     expect(document.createElement).toHaveBeenCalledWith('a');
   });
 
-  it('should import from CSV with IDs and tags', async () => {
-    const csvContent = 'ActivityID,Activity,Icon,EntryID,StartDate,EndDate,Notes,Image,Tags\n1,Test,run,e1,2023-01-01T12:00:00Z,2023-01-01T12:00:00Z,"Test Note","data:image/jpeg;base64,mock",Tag1|Tag2';
+  it('should import from CSV with IDs and tag colors', async () => {
+    const csvContent = 'ActivityID,Activity,Icon,EntryID,StartDate,EndDate,Notes,Image,Tags\n1,Test,run,e1,2023-01-01T12:00:00Z,2023-01-01T12:00:00Z,"Test Note","data:image/jpeg;base64,mock",Tag1:blue|Tag2:red';
 
     (DocumentPicker.getDocumentAsync as jest.Mock).mockResolvedValue({
       canceled: false,
@@ -114,12 +115,14 @@ describe('CSV Utils', () => {
 
     expect(database.addActivity).toHaveBeenCalledWith(expect.objectContaining({ id: '1', name: 'Test' }));
     expect(database.addTag).toHaveBeenCalledTimes(2); // Tag1 and Tag2
+    expect(database.addTag).toHaveBeenCalledWith(expect.objectContaining({ name: 'Tag1', color: 'blue' }));
+    expect(database.addTag).toHaveBeenCalledWith(expect.objectContaining({ name: 'Tag2', color: 'red' }));
     expect(database.addEntry).toHaveBeenCalledWith('1', expect.objectContaining({
         id: 'e1',
         notes: 'Test Note',
         tags: expect.arrayContaining([
-            expect.objectContaining({ name: 'Tag1' }),
-            expect.objectContaining({ name: 'Tag2' })
+            expect.objectContaining({ name: 'Tag1', color: 'blue' }),
+            expect.objectContaining({ name: 'Tag2', color: 'red' })
         ])
     }));
   });

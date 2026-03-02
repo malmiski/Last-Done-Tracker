@@ -1,5 +1,5 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView, SectionList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
@@ -12,30 +12,44 @@ import * as database from '../src/utils/database';
 const SearchByTagScreen: React.FC = () => {
   const router = useRouter();
   const { tags, activities, deleteActivityEntry, refreshData } = useActivityData();
-  const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [entries, setEntries] = useState<(ActivityEntry & { activityId: string })[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchEntries = useCallback(async (tagId: string) => {
-    const fetchedEntries = await database.getEntriesByTag(tagId);
-    setEntries(fetchedEntries);
+  const fetchEntries = useCallback(async (tagIds: string[]) => {
+    if (tagIds.length === 0) {
+      setEntries([]);
+      return;
+    }
+
+    // Fetch entries for all selected tags
+    const allFetchedEntries: (ActivityEntry & { activityId: string })[] = [];
+    const entryIds = new Set<string>();
+
+    for (const tagId of tagIds) {
+      const tagEntries = await database.getEntriesByTag(tagId);
+      tagEntries.forEach(entry => {
+        if (!entryIds.has(entry.id)) {
+          entryIds.add(entry.id);
+          allFetchedEntries.push(entry);
+        }
+      });
+    }
+
+    // Sort combined entries by date desc
+    allFetchedEntries.sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+    setEntries(allFetchedEntries);
   }, []);
 
   useEffect(() => {
-    if (selectedTag) {
-      fetchEntries(selectedTag.id);
-    } else {
-      setEntries([]);
-    }
-  }, [selectedTag, fetchEntries]);
+    fetchEntries(selectedTagIds);
+  }, [selectedTagIds, fetchEntries]);
 
   useFocusEffect(
     useCallback(() => {
-      if (selectedTag) {
-        fetchEntries(selectedTag.id);
-      }
+      fetchEntries(selectedTagIds);
       refreshData();
-    }, [selectedTag, fetchEntries, refreshData])
+    }, [selectedTagIds, fetchEntries, refreshData])
   );
 
   const filteredEntries = entries.filter(entry => {
@@ -44,11 +58,34 @@ const SearchByTagScreen: React.FC = () => {
     return searchContent.includes(searchQuery.toLowerCase());
   });
 
+  const groupedEntries = useMemo(() => {
+    const groups: { [key: string]: { title: string, data: (ActivityEntry & { activityId: string })[] } } = {};
+
+    filteredEntries.forEach(entry => {
+      const activity = activities.find(a => a.id === entry.activityId);
+      const activityName = activity?.name || 'Unknown Activity';
+
+      if (!groups[entry.activityId]) {
+        groups[entry.activityId] = {
+          title: activityName,
+          data: []
+        };
+      }
+      groups[entry.activityId].data.push(entry);
+    });
+
+    return Object.values(groups).sort((a, b) => a.title.localeCompare(b.title));
+  }, [filteredEntries, activities]);
+
+  const toggleTag = (tagId: string) => {
+    setSelectedTagIds(prev =>
+      prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]
+    );
+  };
+
   const handleDeleteEntry = async (activityId: string, entryId: string) => {
     await deleteActivityEntry(activityId, entryId);
-    if (selectedTag) {
-        fetchEntries(selectedTag.id);
-    }
+    fetchEntries(selectedTagIds);
   };
 
   return (
@@ -63,24 +100,28 @@ const SearchByTagScreen: React.FC = () => {
 
       <View style={styles.tagSelector}>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tagScroll}>
-          {tags.map(tag => (
-            <TouchableOpacity
-              key={tag.id}
-              style={[
-                styles.tagButton,
-                { backgroundColor: tag.color },
-                selectedTag?.id === tag.id && styles.selectedTagButton
-              ]}
-              onPress={() => setSelectedTag(tag)}
-            >
-              <Text style={styles.tagButtonText}>{tag.name}</Text>
-            </TouchableOpacity>
-          ))}
+          {tags.map(tag => {
+            const isSelected = selectedTagIds.includes(tag.id);
+            return (
+              <TouchableOpacity
+                key={tag.id}
+                style={[
+                  styles.tagButton,
+                  { backgroundColor: tag.color },
+                  isSelected && styles.selectedTagButton
+                ]}
+                onPress={() => toggleTag(tag.id)}
+              >
+                <Text style={styles.tagButtonText}>{tag.name}</Text>
+                {isSelected && <Icon name="check" size={14} color="#FFFFFF" style={{ marginLeft: 5 }} />}
+              </TouchableOpacity>
+            );
+          })}
           {tags.length === 0 && <Text style={styles.noTagsText}>No tags available. Create some in Settings.</Text>}
         </ScrollView>
       </View>
 
-      {selectedTag && (
+      {selectedTagIds.length > 0 && (
         <View style={styles.searchBar}>
           <Icon name="magnify" size={20} color={theme.colors.subtext} style={styles.searchIcon} />
           <TextInput
@@ -93,32 +134,29 @@ const SearchByTagScreen: React.FC = () => {
         </View>
       )}
 
-      <FlatList
-        data={filteredEntries}
+      <SectionList
+        sections={groupedEntries}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
-        renderItem={({ item }) => {
-          const activity = activities.find(a => a.id === item.activityId);
-          return (
-            <View>
-              <Text style={styles.activityLabel}>{activity?.name || 'Unknown Activity'}</Text>
-              <ActivityHistoryItem
-                startDate={item.startDate}
-                endDate={item.endDate}
-                notes={item.notes}
-                image={item.image}
-                tags={item.tags}
-                onEdit={() => router.push(`/EditEntry?activityId=${item.activityId}&entryId=${item.id}`)}
-                onDelete={() => handleDeleteEntry(item.activityId, item.id)}
-              />
-            </View>
-          );
-        }}
+        renderSectionHeader={({ section: { title } }) => (
+          <Text style={styles.activityLabel}>{title}</Text>
+        )}
+        renderItem={({ item }) => (
+          <ActivityHistoryItem
+            startDate={item.startDate}
+            endDate={item.endDate}
+            notes={item.notes}
+            image={item.image}
+            tags={item.tags}
+            onEdit={() => router.push(`/EditEntry?activityId=${item.activityId}&entryId=${item.id}`)}
+            onDelete={() => handleDeleteEntry(item.activityId, item.id)}
+          />
+        )}
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
-            <Icon name={selectedTag ? "timer-sand-empty" : "tag-multiple-outline"} size={60} color={theme.colors.disabled} />
+            <Icon name={selectedTagIds.length > 0 ? "timer-sand-empty" : "tag-multiple-outline"} size={60} color={theme.colors.disabled} />
             <Text style={styles.emptyText}>
-              {selectedTag ? "No entries found for this tag." : "Select a tag above to see entries."}
+              {selectedTagIds.length > 0 ? "No entries found for these tags." : "Select one or more tags above to see entries."}
             </Text>
           </View>
         )}
@@ -156,7 +194,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 8,
     borderRadius: 20,
-    opacity: 0.7,
+    opacity: 0.6,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   selectedTagButton: {
     opacity: 1,
@@ -196,10 +236,12 @@ const styles = StyleSheet.create({
   },
   activityLabel: {
     color: theme.colors.primary,
-    fontSize: 14,
+    fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 5,
-    marginLeft: 5,
+    marginTop: 15,
+    marginBottom: 10,
+    backgroundColor: theme.colors.background,
+    paddingVertical: 5,
   },
   emptyContainer: {
     alignItems: 'center',

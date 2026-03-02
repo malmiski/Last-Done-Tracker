@@ -9,7 +9,6 @@ import { Tag } from '../data/activity-details';
 export const downloadCsv = async () => {
   try {
     const activities = await database.getActivities();
-    const allTags = await database.getTags();
 
     if (!activities || activities.length === 0) {
       alert('No data to download.');
@@ -30,7 +29,8 @@ export const downloadCsv = async () => {
     for (const activity of activities) {
       const details = await database.getEntries(activity.id);
       details.forEach((detail: any) => {
-        const tagsString = (detail.tags || []).map((t: Tag) => t.name).join('|');
+        // Tag format: Name:Color
+        const tagsString = (detail.tags || []).map((t: Tag) => `${t.name}:${t.color}`).join('|');
         const row = [
           activity.id,
           activity.name,
@@ -185,18 +185,22 @@ export const uploadCsv = async () => {
 
       const entryTags: Tag[] = [];
       if (tagsString) {
-          const tagNames = tagsString.split('|');
-          for (const tagName of tagNames) {
-              if (!tagName) continue;
+          const tagDefinitions = tagsString.split('|');
+          for (const tagDef of tagDefinitions) {
+              if (!tagDef) continue;
+              const [tagName, tagColor] = tagDef.split(':');
               let tag = existingTags.find(t => t.name === tagName);
               if (!tag) {
                   tag = {
                       id: await generateActivityId(tagName + Math.random()),
                       name: tagName,
-                      color: '#34C759', // Default green
+                      color: tagColor || '#34C759', // Fallback to default green
                   };
                   await database.addTag(tag);
                   existingTags.push(tag);
+              } else if (tagColor && tag.color !== tagColor) {
+                  tag.color = tagColor;
+                  await database.updateTag(tag);
               }
               entryTags.push(tag);
           }
