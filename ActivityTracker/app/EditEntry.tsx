@@ -159,6 +159,20 @@ const EditEntryScreen: React.FC = () => {
     return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), hours, parseInt(min, 10), parseInt(s, 10));
   };
 
+  const updateStartStates = (date: Date) => {
+    setYear(date.getFullYear().toString());
+    setMonth((date.getMonth() + 1).toString());
+    setDay(date.getDate().toString());
+    let hours = date.getHours();
+    const ampmVal = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    setHour(hours.toString());
+    setMinute(date.getMinutes().toString().padStart(2, '0'));
+    setSecond(date.getSeconds().toString().padStart(2, '0'));
+    setAmpm(ampmVal);
+  };
+
   const updateEndStates = (date: Date) => {
     setEndYear(date.getFullYear().toString());
     setEndMonth((date.getMonth() + 1).toString());
@@ -171,6 +185,16 @@ const EditEntryScreen: React.FC = () => {
     setEndMinute(date.getMinutes().toString().padStart(2, '0'));
     setEndSecond(date.getSeconds().toString().padStart(2, '0'));
     setEndAmpm(ampmVal);
+  };
+
+  const adjustStartTime = (minutes: number) => {
+    const start = getFullDate(year, month, day, hour, minute, second, ampm);
+    const end = getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
+    let newStart = new Date(start.getTime() + minutes * 60000);
+    if (newStart > end) {
+        newStart = end;
+    }
+    updateStartStates(newStart);
   };
 
   const adjustEndTime = (minutes: number) => {
@@ -220,7 +244,17 @@ const EditEntryScreen: React.FC = () => {
         <View style={{ width: 30 }} />
       </View>
       <ScrollView style={styles.content}>
-        <Text style={styles.sectionLabel}>Start Date & Time</Text>
+        <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionLabel}>Start Date & Time</Text>
+            <View style={styles.quickActions}>
+                <TouchableOpacity onPress={() => adjustStartTime(5)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>+5m</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => adjustStartTime(-5)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>-5m</Text>
+                </TouchableOpacity>
+            </View>
+        </View>
         <Text style={styles.label}>Date</Text>
         <View style={styles.inputRow}>
           <TextInput
