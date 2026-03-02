@@ -34,7 +34,7 @@ describe('ActivityHistoryItem', () => {
     expect(tree.toJSON()).toMatchSnapshot();
   });
 
-  it('renders correctly with an image', async () => {
+  it('renders correctly with an image and small imageMode', async () => {
     const date = new Date('2023-01-01T12:00:00Z');
     let tree;
     await act(async () => {
@@ -42,6 +42,61 @@ describe('ActivityHistoryItem', () => {
         <ActivityHistoryItem
           date={date}
           image="data:image/jpeg;base64,mock"
+          imageMode="small"
+          onEdit={() => {}}
+          onDelete={() => {}}
+        />
+      );
+    });
+    expect(tree.toJSON()).not.toBeNull();
+    expect(tree.toJSON()).toMatchSnapshot();
+  });
+
+  it('renders correctly with an image and medium imageMode', async () => {
+    const date = new Date('2023-01-01T12:00:00Z');
+    let tree;
+    await act(async () => {
+      tree = renderer.create(
+        <ActivityHistoryItem
+          date={date}
+          image="data:image/jpeg;base64,mock"
+          imageMode="medium"
+          onEdit={() => {}}
+          onDelete={() => {}}
+        />
+      );
+    });
+    expect(tree.toJSON()).not.toBeNull();
+    expect(tree.toJSON()).toMatchSnapshot();
+  });
+
+  it('renders correctly with an image and large imageMode', async () => {
+    const date = new Date('2023-01-01T12:00:00Z');
+    let tree;
+    await act(async () => {
+      tree = renderer.create(
+        <ActivityHistoryItem
+          date={date}
+          image="data:image/jpeg;base64,mock"
+          imageMode="large"
+          onEdit={() => {}}
+          onDelete={() => {}}
+        />
+      );
+    });
+    expect(tree.toJSON()).not.toBeNull();
+    expect(tree.toJSON()).toMatchSnapshot();
+  });
+
+  it('renders correctly with an image and hidden imageMode', async () => {
+    const date = new Date('2023-01-01T12:00:00Z');
+    let tree;
+    await act(async () => {
+      tree = renderer.create(
+        <ActivityHistoryItem
+          date={date}
+          image="data:image/jpeg;base64,mock"
+          imageMode="hidden"
           onEdit={() => {}}
           onDelete={() => {}}
         />
