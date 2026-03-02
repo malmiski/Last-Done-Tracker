@@ -49,8 +49,8 @@ const ActivityDetailScreen: React.FC = () => {
   const getImageModeIcon = () => {
     switch (imageMode) {
       case 'small': return 'image-size-select-small';
-      case 'medium': return 'image-size-select-actual';
-      case 'large': return 'image-size-select-large';
+      case 'medium': return 'image-size-select-large';
+      case 'large': return 'image-size-select-actual';
       case 'hidden': return 'image-off-outline';
       default: return 'image-size-select-small';
     }
