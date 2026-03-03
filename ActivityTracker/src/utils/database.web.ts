@@ -46,9 +46,30 @@ const openDB = (): Promise<IDBDatabase> => {
 export const getDb = async () => {
   if (db) return db;
   db = await openDB();
+  await migrateDatabase(db);
   await migrateFromAsyncStorage(db);
   await seedInitialData(db);
   return db;
+};
+
+const migrateDatabase = async (db: IDBDatabase) => {
+    const activities = await getAllFromStore<Activity>(db, ACTIVITIES_STORE);
+    const needsMigration = activities.some(a => a.orderIndex === undefined);
+
+    if (needsMigration) {
+        console.log('Migrating IndexedDB activities: adding orderIndex...');
+        const tx = db.transaction(ACTIVITIES_STORE, 'readwrite');
+        const store = tx.objectStore(ACTIVITIES_STORE);
+        for (let i = 0; i < activities.length; i++) {
+            if (activities[i].orderIndex === undefined) {
+                store.put({ ...activities[i], orderIndex: i });
+            }
+        }
+        return new Promise<void>((resolve, reject) => {
+            tx.oncomplete = () => resolve();
+            tx.onerror = () => reject(tx.error);
+        });
+    }
 };
 
 export const initDatabase = async () => {
