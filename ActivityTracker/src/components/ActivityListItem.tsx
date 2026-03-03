@@ -12,9 +12,24 @@ interface ActivityListItemProps {
   onDelete: () => void;
   onAddTime: (x: number, y: number) => void;
   lastEntryDate: Date | null;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
+  isFirst?: boolean;
+  isLast?: boolean;
 }
 
-const ActivityListItem: React.FC<ActivityListItemProps> = ({ item, onPress, isEditMode, onDelete, onAddTime, lastEntryDate }) => {
+const ActivityListItem: React.FC<ActivityListItemProps> = ({
+    item,
+    onPress,
+    isEditMode,
+    onDelete,
+    onAddTime,
+    lastEntryDate,
+    onMoveUp,
+    onMoveDown,
+    isFirst,
+    isLast
+}) => {
   const [timeAgo, setTimeAgo] = useState(lastEntryDate ? formatTimeAgo(lastEntryDate) : 'Never');
   const addButtonRef = React.useRef<TouchableOpacity>(null);
 
@@ -43,9 +58,25 @@ const ActivityListItem: React.FC<ActivityListItemProps> = ({ item, onPress, isEd
         <Text style={styles.lastDone}>{timeAgo}</Text>
       </View>
       {isEditMode ? (
-        <TouchableOpacity onPress={onDelete} style={styles.deleteButton}>
-          <Icon name="trash-can-outline" size={24} color={theme.colors.text} />
-        </TouchableOpacity>
+        <View style={styles.editControls}>
+          <TouchableOpacity
+            onPress={onMoveUp}
+            disabled={isFirst}
+            style={[styles.moveButton, isFirst && styles.disabledButton]}
+          >
+            <Icon name="arrow-up" size={28} color={isFirst ? theme.colors.disabled : theme.colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={onMoveDown}
+            disabled={isLast}
+            style={[styles.moveButton, isLast && styles.disabledButton, { marginRight: 10 }]}
+          >
+            <Icon name="arrow-down" size={28} color={isLast ? theme.colors.disabled : theme.colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={onDelete} style={styles.deleteButton}>
+            <Icon name="trash-can-outline" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
       ) : (
         <TouchableOpacity ref={addButtonRef} onPress={handleAddTime} style={styles.addButton}>
           <Icon name="plus" size={32} color={theme.colors.primary} />
@@ -85,6 +116,16 @@ const styles = StyleSheet.create({
     color: theme.colors.subtext,
     fontSize: 14,
     marginTop: 5,
+  },
+  editControls: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  moveButton: {
+    padding: 5,
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
   deleteButton: {
     backgroundColor: theme.colors.notification,

@@ -53,7 +53,7 @@ const FloatingIconComponent = ({ icon, onAnimationComplete, startX, startY }) =>
 
 const ActivitiesScreen: React.FC = () => {
   const router = useRouter();
-  const { activities, activityDetails, loading, deleteActivity, addActivityEntry, refreshData } = useActivityData();
+  const { activities, activityDetails, loading, deleteActivity, addActivityEntry, refreshData, reorderActivities } = useActivityData();
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
   const rotation = useSharedValue(0);
@@ -96,8 +96,44 @@ const ActivitiesScreen: React.FC = () => {
 
 
   const toggleEditMode = () => {
+    if (activities.length === 0) return;
     setIsEditMode(!isEditMode);
     rotation.value = withTiming(isEditMode ? 0 : 360, { duration: 300 });
+  };
+
+  React.useEffect(() => {
+    if (activities.length === 0 && isEditMode) {
+      setIsEditMode(false);
+      rotation.value = withTiming(0, { duration: 300 });
+    }
+  }, [activities.length, isEditMode]);
+
+  const handleMoveUp = (filteredIndex: number) => {
+    if (filteredIndex === 0) return;
+    const activityToMove = filteredActivities[filteredIndex];
+    const targetActivity = filteredActivities[filteredIndex - 1];
+
+    const newActivities = activities.map(a => {
+        if (a.id === activityToMove.id) return { ...a, orderIndex: targetActivity.orderIndex };
+        if (a.id === targetActivity.id) return { ...a, orderIndex: activityToMove.orderIndex };
+        return a;
+    }).sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+
+    reorderActivities(newActivities);
+  };
+
+  const handleMoveDown = (filteredIndex: number) => {
+    if (filteredIndex === filteredActivities.length - 1) return;
+    const activityToMove = filteredActivities[filteredIndex];
+    const targetActivity = filteredActivities[filteredIndex + 1];
+
+    const newActivities = activities.map(a => {
+        if (a.id === activityToMove.id) return { ...a, orderIndex: targetActivity.orderIndex };
+        if (a.id === targetActivity.id) return { ...a, orderIndex: activityToMove.orderIndex };
+        return a;
+    }).sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+
+    reorderActivities(newActivities);
   };
 
   return (
@@ -108,9 +144,17 @@ const ActivitiesScreen: React.FC = () => {
           <TouchableOpacity onPress={() => router.push('/SearchByTag')} style={{ marginRight: 15 }}>
             <Icon name="tag-search-outline" size={30} color={theme.colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={toggleEditMode} style={{ marginRight: 15 }}>
-            <Animated.View style={animatedStyle}>
-              <Icon name={isEditMode ? "check" : "pencil-outline"} size={30} color={theme.colors.text} />
+          <TouchableOpacity
+            onPress={toggleEditMode}
+            style={{ marginRight: 15 }}
+            disabled={activities.length === 0}
+          >
+            <Animated.View style={[animatedStyle, activities.length === 0 && { opacity: 0.5 }]}>
+              <Icon
+                name={isEditMode ? "check" : "pencil-outline"}
+                size={30}
+                color={activities.length === 0 ? theme.colors.disabled : theme.colors.text}
+              />
             </Animated.View>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => router.push('/Settings')}>
@@ -143,6 +187,10 @@ const ActivitiesScreen: React.FC = () => {
               onDelete={() => handleDelete(item.id)}
               onAddTime={(x, y) => handleAddTime(item.id, item.icon, x, y)}
               lastEntryDate={lastEntryDate}
+              onMoveUp={() => handleMoveUp(index)}
+              onMoveDown={() => handleMoveDown(index)}
+              isFirst={index === 0}
+              isLast={index === filteredActivities.length - 1}
             />
           );
         }}

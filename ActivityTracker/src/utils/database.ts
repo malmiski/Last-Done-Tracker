@@ -27,7 +27,8 @@ export const getDb = async () => {
             id TEXT PRIMARY KEY NOT NULL,
             name TEXT NOT NULL,
             lastDone TEXT,
-            icon TEXT
+            icon TEXT,
+            orderIndex INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS entries (
             id TEXT PRIMARY KEY NOT NULL,
@@ -84,6 +85,17 @@ const migrateDatabase = async (db: SQLite.SQLiteDatabase) => {
       // but we can leave 'date' as it's now redundant.
     }
 
+    const activitiesTableInfo = await db.getAllAsync<any>("PRAGMA table_info(activities)");
+    const hasOrderIndex = activitiesTableInfo.some(col => col.name === 'orderIndex');
+    if (!hasOrderIndex) {
+      console.log('Migrating activities table: adding orderIndex...');
+      await db.execAsync('ALTER TABLE activities ADD COLUMN orderIndex INTEGER DEFAULT 0');
+      const rows = await db.getAllAsync<any>("SELECT id FROM activities");
+      for (let i = 0; i < rows.length; i++) {
+        await db.runAsync('UPDATE activities SET orderIndex = ? WHERE id = ?', [i, rows[i].id]);
+      }
+    }
+
     const tables = await db.getAllAsync<any>("SELECT name FROM sqlite_master WHERE type='table'");
     const hasTags = tables.some(t => t.name === 'tags');
     if (!hasTags) {
@@ -112,10 +124,11 @@ const seedInitialData = async (db: SQLite.SQLiteDatabase) => {
     const activitiesCount = await db.getFirstAsync<{count: number}>('SELECT COUNT(*) as count FROM activities');
     if (activitiesCount?.count === 0) {
         console.log('Seeding initial data...');
-        for (const activity of initialActivities) {
+        for (let i = 0; i < initialActivities.length; i++) {
+            const activity = initialActivities[i];
             await db.runAsync(
-                'INSERT INTO activities (id, name, lastDone, icon) VALUES (?, ?, ?, ?)',
-                [activity.id, activity.name, activity.lastDone, activity.icon]
+                'INSERT INTO activities (id, name, lastDone, icon, orderIndex) VALUES (?, ?, ?, ?, ?)',
+                [activity.id, activity.name, activity.lastDone, activity.icon, i]
             );
             const entries = initialActivityDetails[activity.id] || [];
             for (const entry of entries) {
@@ -139,10 +152,11 @@ const migrateFromAsyncStorage = async (db: SQLite.SQLiteDatabase) => {
         ? JSON.parse(storedActivityDetails)
         : {};
 
-      for (const activity of activities) {
+      for (let i = 0; i < activities.length; i++) {
+        const activity = activities[i];
         await db.runAsync(
-          'INSERT OR REPLACE INTO activities (id, name, lastDone, icon) VALUES (?, ?, ?, ?)',
-          [activity.id, activity.name, activity.lastDone, activity.icon]
+          'INSERT OR REPLACE INTO activities (id, name, lastDone, icon, orderIndex) VALUES (?, ?, ?, ?, ?)',
+          [activity.id, activity.name, activity.lastDone, activity.icon, i]
         );
 
         const entries = activityDetails[activity.id] || [];
@@ -168,15 +182,15 @@ const migrateFromAsyncStorage = async (db: SQLite.SQLiteDatabase) => {
 export const getActivities = async (): Promise<Activity[]> => {
   const db = await getDb();
   if (!db) return []; // Should not happen with Metro resolving to .web.ts
-  return await db.getAllAsync<Activity>('SELECT * FROM activities');
+  return await db.getAllAsync<Activity>('SELECT * FROM activities ORDER BY orderIndex ASC');
 };
 
 export const addActivity = async (activity: Activity) => {
   const db = await getDb();
   if (!db) return;
   await db.runAsync(
-    'INSERT INTO activities (id, name, lastDone, icon) VALUES (?, ?, ?, ?)',
-    [activity.id, activity.name, activity.lastDone, activity.icon]
+    'INSERT INTO activities (id, name, lastDone, icon, orderIndex) VALUES (?, ?, ?, ?, ?)',
+    [activity.id, activity.name, activity.lastDone, activity.icon, activity.orderIndex]
   );
 };
 
@@ -184,9 +198,22 @@ export const updateActivity = async (activity: Activity) => {
   const db = await getDb();
   if (!db) return;
   await db.runAsync(
-    'UPDATE activities SET name = ?, lastDone = ?, icon = ? WHERE id = ?',
-    [activity.name, activity.lastDone, activity.icon, activity.id]
+    'UPDATE activities SET name = ?, lastDone = ?, icon = ?, orderIndex = ? WHERE id = ?',
+    [activity.name, activity.lastDone, activity.icon, activity.orderIndex, activity.id]
   );
+};
+
+export const updateActivitiesOrder = async (activities: Activity[]) => {
+  const db = await getDb();
+  if (!db) return;
+  await db.withTransactionAsync(async () => {
+    for (const activity of activities) {
+      await db.runAsync(
+        'UPDATE activities SET orderIndex = ? WHERE id = ?',
+        [activity.orderIndex, activity.id]
+      );
+    }
+  });
 };
 
 export const deleteActivity = async (id: string) => {

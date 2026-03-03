@@ -60,8 +60,9 @@ const seedInitialData = async (db: IDBDatabase) => {
     if (activities.length === 0) {
         console.log('Seeding initial data to IndexedDB...');
         const tx = db.transaction([ACTIVITIES_STORE, ENTRIES_STORE], 'readwrite');
-        for (const activity of initialActivities) {
-            tx.objectStore(ACTIVITIES_STORE).add(activity);
+        for (let i = 0; i < initialActivities.length; i++) {
+            const activity = initialActivities[i];
+            tx.objectStore(ACTIVITIES_STORE).add({ ...activity, orderIndex: i });
             const entries = initialActivityDetails[activity.id] || [];
             for (const entry of entries) {
                 tx.objectStore(ENTRIES_STORE).add({ ...entry, activityId: activity.id });
@@ -86,8 +87,9 @@ const migrateFromAsyncStorage = async (db: IDBDatabase) => {
                 : {};
 
             const tx = db.transaction([ACTIVITIES_STORE, ENTRIES_STORE], 'readwrite');
-            for (const activity of activities) {
-                tx.objectStore(ACTIVITIES_STORE).put(activity);
+            for (let i = 0; i < activities.length; i++) {
+                const activity = activities[i];
+                tx.objectStore(ACTIVITIES_STORE).put({ ...activity, orderIndex: i });
                 const entries = activityDetails[activity.id] || [];
                 for (const entry of entries) {
                     tx.objectStore(ENTRIES_STORE).put({ ...entry, activityId: activity.id });
@@ -121,7 +123,8 @@ const getAllFromStore = <T>(db: IDBDatabase, storeName: string): Promise<T[]> =>
 
 export const getActivities = async (): Promise<Activity[]> => {
   const db = await getDb();
-  return getAllFromStore<Activity>(db, ACTIVITIES_STORE);
+  const activities = await getAllFromStore<Activity>(db, ACTIVITIES_STORE);
+  return activities.sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
 };
 
 export const addActivity = async (activity: Activity): Promise<void> => {
@@ -139,6 +142,19 @@ export const updateActivity = async (activity: Activity): Promise<void> => {
   return new Promise((resolve, reject) => {
       const tx = db.transaction(ACTIVITIES_STORE, 'readwrite');
       tx.objectStore(ACTIVITIES_STORE).put(activity);
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+  });
+};
+
+export const updateActivitiesOrder = async (activities: Activity[]): Promise<void> => {
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+      const tx = db.transaction(ACTIVITIES_STORE, 'readwrite');
+      const store = tx.objectStore(ACTIVITIES_STORE);
+      for (const activity of activities) {
+          store.put(activity);
+      }
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
   });
