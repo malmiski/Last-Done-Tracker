@@ -43,10 +43,12 @@ export const useActivityData = () => {
       throw new Error('An activity with this name already exists.');
     }
 
+    const maxOrderIndex = activities.reduce((max, a) => Math.max(max, a.orderIndex ?? 0), -1);
     const activityToAdd: Activity = {
       ...newActivity,
       id: newId,
       lastDone: 'Never',
+      orderIndex: maxOrderIndex + 1,
     };
 
     await database.addActivity(activityToAdd);
@@ -58,7 +60,18 @@ export const useActivityData = () => {
 
   const updateActivity = async (updatedActivity: Activity) => {
     await database.updateActivity(updatedActivity);
-    setActivities(prev => prev.map(a => a.id === updatedActivity.id ? updatedActivity : a));
+    setActivities(prev =>
+        prev.map(a => a.id === updatedActivity.id ? updatedActivity : a)
+            .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
+    );
+  };
+
+  const reorderActivities = async (newActivities: Activity[]) => {
+    // Update state immediately for responsiveness
+    setActivities(newActivities);
+
+    // Persist changes to database
+    await database.updateActivitiesOrder(newActivities);
   };
 
   const addActivityEntry = async (activityId: string, startDate: Date, endDate: Date, notes?: string, image?: string, entryTags?: Tag[]) => {
@@ -173,6 +186,7 @@ export const useActivityData = () => {
     addTag,
     updateTag,
     deleteTag,
+    reorderActivities,
     refreshData: loadData,
   };
 };
