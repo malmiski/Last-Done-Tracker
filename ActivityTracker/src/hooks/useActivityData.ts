@@ -30,7 +30,7 @@ export const useActivityData = () => {
       setTags(storedTags);
 
       // Background migration for legacy images to add thumbnails
-      setTimeout(() => migrateThumbnails(), 1000);
+      setTimeout(() => migrateThumbnails(), 15000);
     } catch (e) {
       console.error('Failed to load data.', e);
     } finally {
