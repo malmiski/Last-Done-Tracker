@@ -64,7 +64,7 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
     if ((!image && !validThumbnail) || imageMode === 'hidden') return null;
 
     let targetImage = image;
-    if ((imageMode === 'small' || imageMode === 'medium') && validThumbnail) {
+    if ((imageMode === 'small' || imageMode === 'medium' || imageMode === 'large') && validThumbnail) {
        targetImage = validThumbnail;
     }
 
