@@ -37,7 +37,13 @@ const EditEntryScreen: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [image, setImage] = useState<string | undefined>(undefined);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
+  const [tagSearch, setTagSearch] = useState('');
   const [isFormValidState, setIsFormValidState] = useState(false);
+
+  const filteredAvailableTags = tags.filter(tag =>
+    !selectedTags.find(t => t.id === tag.id) &&
+    tag.name.toLowerCase().includes(tagSearch.toLowerCase())
+  );
 
   // For new tag creation
   const [newTagModalVisible, setNewTagModalVisible] = useState(false);
@@ -429,28 +435,53 @@ const EditEntryScreen: React.FC = () => {
 
         <Text style={[styles.label, { marginTop: 20 }]}>Tags</Text>
         <View style={styles.tagsContainer}>
-          {tags.map(tag => {
-            const isSelected = selectedTags.find(t => t.id === tag.id);
-            return (
-              <TouchableOpacity
-                key={tag.id}
-                style={[
-                  styles.tagItem,
-                  { backgroundColor: tag.color },
-                  isSelected && styles.selectedTagItem
-                ]}
-                onPress={() => toggleTag(tag)}
-              >
-                <Text style={styles.tagText}>{tag.name}</Text>
-                {isSelected && <Icon name="check" size={14} color="#FFFFFF" style={{ marginLeft: 5 }} />}
+          {selectedTags.map(tag => (
+            <View key={tag.id} style={[styles.tagItem, { backgroundColor: tag.color, opacity: 1 }]}>
+              <Text style={styles.tagText}>{tag.name}</Text>
+              <TouchableOpacity onPress={() => toggleTag(tag)} style={{ marginLeft: 5 }}>
+                <Icon name="close-circle" size={16} color="#FFFFFF" />
               </TouchableOpacity>
-            );
-          })}
-          <TouchableOpacity style={styles.addTagButton} onPress={() => setNewTagModalVisible(true)}>
-            <Icon name="plus" size={20} color={theme.colors.primary} />
-            <Text style={styles.addTagText}>New Tag</Text>
-          </TouchableOpacity>
+            </View>
+          ))}
         </View>
+
+        <TextInput
+          style={styles.tagSearchInput}
+          placeholder="Search tags..."
+          placeholderTextColor={theme.colors.subtext}
+          value={tagSearch}
+          onChangeText={setTagSearch}
+        />
+
+        {tagSearch.length > 0 && (
+          <View style={styles.tagDropdown}>
+            <ScrollView style={{ maxHeight: 150 }} nestedScrollEnabled={true}>
+              {filteredAvailableTags.map(tag => (
+                <TouchableOpacity
+                  key={tag.id}
+                  style={styles.tagDropdownItem}
+                  onPress={() => {
+                    toggleTag(tag);
+                    setTagSearch('');
+                  }}
+                >
+                  <View style={[styles.tagDot, { backgroundColor: tag.color }]} />
+                  <Text style={styles.tagDropdownText}>{tag.name}</Text>
+                </TouchableOpacity>
+              ))}
+              <TouchableOpacity
+                style={styles.tagDropdownItem}
+                onPress={() => {
+                  setNewTagName(tagSearch);
+                  setNewTagModalVisible(true);
+                }}
+              >
+                <Icon name="plus" size={20} color={theme.colors.primary} style={{ marginRight: 10 }} />
+                <Text style={[styles.tagDropdownText, { color: theme.colors.primary }]}>Create "{tagSearch}"</Text>
+              </TouchableOpacity>
+            </ScrollView>
+          </View>
+        )}
 
         <Text style={[styles.label, { marginTop: 20 }]}>Notes</Text>
         <TextInput
@@ -651,6 +682,40 @@ const styles = StyleSheet.create({
     color: theme.colors.primary,
     fontWeight: 'bold',
     marginLeft: 5,
+  },
+  tagSearchInput: {
+    backgroundColor: theme.colors.card,
+    color: theme.colors.text,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 16,
+    marginTop: 10,
+  },
+  tagDropdown: {
+    backgroundColor: theme.colors.card,
+    borderRadius: 10,
+    marginTop: 5,
+    borderWidth: 1,
+    borderColor: theme.colors.border || '#333',
+    overflow: 'hidden',
+    zIndex: 1000,
+  },
+  tagDropdownItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border || '#333',
+  },
+  tagDot: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    marginRight: 10,
+  },
+  tagDropdownText: {
+    color: theme.colors.text,
+    fontSize: 16,
   },
   notesInput: {
     backgroundColor: theme.colors.card,
