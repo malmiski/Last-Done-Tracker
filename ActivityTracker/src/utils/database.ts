@@ -37,6 +37,7 @@ export const getDb = async () => {
             endDate TEXT NOT NULL,
             notes TEXT,
             image TEXT,
+            thumbnail TEXT,
             FOREIGN KEY (activityId) REFERENCES activities (id) ON DELETE CASCADE
         );
         CREATE TABLE IF NOT EXISTS tags (
@@ -75,6 +76,7 @@ const migrateDatabase = async (db: SQLite.SQLiteDatabase) => {
     const tableInfo = await db.getAllAsync<any>("PRAGMA table_info(entries)");
     const hasDate = tableInfo.some(col => col.name === 'date');
     const hasStartDate = tableInfo.some(col => col.name === 'startDate');
+    const hasThumbnail = tableInfo.some(col => col.name === 'thumbnail');
 
     if (hasDate && !hasStartDate) {
       console.log('Migrating entries table: adding startDate and endDate...');
@@ -83,6 +85,11 @@ const migrateDatabase = async (db: SQLite.SQLiteDatabase) => {
       await db.execAsync('UPDATE entries SET startDate = date, endDate = date');
       // Note: Dropping columns is not supported in older SQLite versions,
       // but we can leave 'date' as it's now redundant.
+    }
+
+    if (!hasThumbnail) {
+      console.log('Migrating entries table: adding thumbnail...');
+      await db.execAsync('ALTER TABLE entries ADD COLUMN thumbnail TEXT');
     }
 
     const activitiesTableInfo = await db.getAllAsync<any>("PRAGMA table_info(activities)");
@@ -232,6 +239,7 @@ const mapEntriesWithTags = (rows: any[]): ActivityEntry[] => {
                 endDate: new Date(row.endDate),
                 notes: row.notes,
                 image: row.image,
+                thumbnail: row.thumbnail,
                 tags: []
             });
         }
@@ -280,6 +288,7 @@ export const getAllEntries = async (): Promise<(ActivityEntry & { activityId: st
               endDate: new Date(row.endDate),
               notes: row.notes,
               image: row.image,
+              thumbnail: row.thumbnail,
               tags: []
           });
       }
@@ -298,8 +307,8 @@ export const addEntry = async (activityId: string, entry: ActivityEntry) => {
   const db = await getDb();
   if (!db) return;
   await db.runAsync(
-    'INSERT INTO entries (id, activityId, startDate, endDate, notes, image) VALUES (?, ?, ?, ?, ?, ?)',
-    [entry.id, activityId, entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image || null]
+    'INSERT INTO entries (id, activityId, startDate, endDate, notes, image, thumbnail) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [entry.id, activityId, entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image || null, entry.thumbnail || null]
   );
   if (entry.tags) {
     for (const tag of entry.tags) {
@@ -308,12 +317,21 @@ export const addEntry = async (activityId: string, entry: ActivityEntry) => {
   }
 };
 
+export const updateEntryImages = async (id: string, image?: string, thumbnail?: string) => {
+  const db = await getDb();
+  if (!db) return;
+  await db.runAsync(
+    'UPDATE entries SET image = ?, thumbnail = ? WHERE id = ?',
+    [image ?? null, thumbnail ?? null, id]
+  );
+};
+
 export const updateEntry = async (entry: ActivityEntry) => {
   const db = await getDb();
   if (!db) return;
   await db.runAsync(
-    'UPDATE entries SET startDate = ?, endDate = ?, notes = ?, image = ? WHERE id = ?',
-    [entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image || null, entry.id]
+    'UPDATE entries SET startDate = ?, endDate = ?, notes = ?, image = ?, thumbnail = ? WHERE id = ?',
+    [entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image ?? null, entry.thumbnail ?? null, entry.id]
   );
   if (entry.tags) {
     await db.runAsync('DELETE FROM entry_tags WHERE entryId = ?', [entry.id]);
@@ -407,6 +425,7 @@ export const getEntriesByTag = async (tagId: string): Promise<(ActivityEntry & {
                 endDate: new Date(row.endDate),
                 notes: row.notes,
                 image: row.image,
+                thumbnail: row.thumbnail,
                 tags: []
             });
         }

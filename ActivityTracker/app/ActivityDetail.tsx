@@ -58,7 +58,7 @@ const ActivityDetailScreen: React.FC = () => {
 
   const handleAddEntry = async () => {
     const now = new Date();
-    const newEntryId = await addActivityEntry(activityId, now, now);
+    const newEntryId = await addActivityEntry(activityId, now, now, undefined, undefined, undefined, []);
     router.push(`/EditEntry?activityId=${activityId}&entryId=${newEntryId}`);
   };
 
@@ -99,6 +99,7 @@ const ActivityDetailScreen: React.FC = () => {
             endDate={item.endDate}
             notes={item.notes}
             image={item.image}
+            thumbnail={item.thumbnail}
             imageMode={imageMode}
             tags={item.tags}
             onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}

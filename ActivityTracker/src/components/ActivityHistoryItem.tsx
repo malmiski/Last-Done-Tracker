@@ -11,6 +11,7 @@ interface ActivityHistoryItemProps {
   endDate: Date;
   notes?: string;
   image?: string;
+  thumbnail?: string;
   onEdit: () => void;
   onDelete: () => void;
   imageMode?: ImageMode;
@@ -48,6 +49,7 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
   endDate,
   notes,
   image,
+  thumbnail,
   onEdit,
   onDelete,
   imageMode = 'small',
@@ -58,9 +60,17 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
   const isDifferentDate = startDate.getTime() !== endDate.getTime();
 
   const renderImage = () => {
-    if (!image || imageMode === 'hidden') return null;
+    const validThumbnail = thumbnail && thumbnail !== "failed" ? thumbnail : undefined;
+    if ((!image && !validThumbnail) || imageMode === 'hidden') return null;
 
-    const source = { uri: image.startsWith('data:') ? image : `data:image/jpeg;base64,${image}` };
+    let targetImage = image;
+    if ((imageMode === 'small' || imageMode === 'medium') && validThumbnail) {
+       targetImage = validThumbnail;
+    }
+
+    if (!targetImage || targetImage === "failed") return null;
+
+    const source = { uri: targetImage.startsWith('data:') ? targetImage : `data:image/jpeg;base64,${targetImage}` };
 
     let imageStyle;
     switch (imageMode) {

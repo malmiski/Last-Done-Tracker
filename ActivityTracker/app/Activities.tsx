@@ -82,7 +82,7 @@ const ActivitiesScreen: React.FC = () => {
 
   const handleAddTime = (activityId: string, icon: string, x: number, y: number) => {
     const now = new Date();
-    addActivityEntry(activityId, now, now);
+    addActivityEntry(activityId, now, now, undefined, undefined, undefined, []);
 
     const newIcon: FloatingIcon = {
       id: Date.now(),

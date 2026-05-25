@@ -3,6 +3,8 @@ import { Activity } from '../data/activities';
 import { ActivityEntry, Tag } from '../data/activity-details';
 import { generateActivityId } from '../utils/crypto';
 import * as database from '../utils/database';
+import { processImage, generateThumbnail } from '../utils/imageUtils';
+import { Platform } from 'react-native';
 
 export const useActivityData = () => {
   const [activities, setActivities] = useState<Activity[]>([]);
@@ -26,12 +28,47 @@ export const useActivityData = () => {
 
       const storedTags = await database.getTags();
       setTags(storedTags);
+
+      // Background migration for legacy images to add thumbnails
+      setTimeout(() => migrateThumbnails(), 1000);
     } catch (e) {
       console.error('Failed to load data.', e);
     } finally {
       setLoading(false);
     }
   }, []);
+
+  const migrateThumbnails = async () => {
+      try {
+          const allEntries = await database.getAllEntries();
+          const missingThumbnails = allEntries.filter(e => e.image && (e.thumbnail === undefined || e.thumbnail === null));
+          if (missingThumbnails.length > 0) {
+              console.log(`Migrating ${missingThumbnails.length} entries to resize image and include thumbnails...`);
+              for (const entry of missingThumbnails) {
+                  try {
+                      // Need to add prefix if it doesn't exist for the web/react-native consistency
+                      let uri = entry.image!;
+                      if (!uri.startsWith('data:')) {
+                         uri = `data:image/jpeg;base64,${uri}`;
+                      }
+                      const [fullImage, thumbImage] = await Promise.all([
+                          processImage(uri),
+                          generateThumbnail(uri)
+                      ]);
+                      await database.updateEntryImages(entry.id, fullImage, thumbImage);
+                  } catch (e) {
+                      console.error(`Failed to process image and generate thumbnail for entry ${entry.id}`, e);
+                      // Mark as failed by setting thumbnail to "failed" so we don't retry endlessly
+                      await database.updateEntryImages(entry.id, entry.image, "failed");
+                  }
+              }
+              // Refresh details in memory so the UI updates
+              await loadData();
+          }
+      } catch (e) {
+          console.error('Failed thumbnail migration', e);
+      }
+  };
 
   useEffect(() => {
     loadData();
@@ -74,13 +111,14 @@ export const useActivityData = () => {
     await database.updateActivitiesOrder(newActivities);
   };
 
-  const addActivityEntry = async (activityId: string, startDate: Date, endDate: Date, notes?: string, image?: string, entryTags?: Tag[]) => {
+  const addActivityEntry = async (activityId: string, startDate: Date, endDate: Date, notes?: string, image?: string, thumbnail?: string, entryTags?: Tag[]) => {
     const newEntry: ActivityEntry = {
       id: await generateActivityId(Math.random().toString()),
       startDate: startDate,
       endDate: endDate,
       notes: notes,
       image: image,
+      thumbnail: thumbnail,
       tags: entryTags,
     };
 
@@ -102,13 +140,14 @@ export const useActivityData = () => {
     return newEntry.id;
   };
 
-  const updateActivityEntry = async (activityId: string, entryId: string, startDate: Date, endDate: Date, notes?: string, image?: string, entryTags?: Tag[]) => {
+  const updateActivityEntry = async (activityId: string, entryId: string, startDate: Date, endDate: Date, notes?: string, image?: string, thumbnail?: string, entryTags?: Tag[]) => {
     const entry: ActivityEntry = {
         id: entryId,
         startDate: startDate,
         endDate: endDate,
         notes: notes,
         image: image,
+        thumbnail: thumbnail,
         tags: entryTags,
     };
     await database.updateEntry(entry);

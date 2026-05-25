@@ -15,7 +15,7 @@ export const downloadCsv = async () => {
       return;
     }
 
-    let csvContent = 'ActivityID,Activity,Icon,EntryID,StartDate,EndDate,Notes,Image,Tags\n';
+    let csvContent = 'ActivityID,Activity,Icon,EntryID,StartDate,EndDate,Notes,Image,Thumbnail,Tags\n';
 
     const escapeCSV = (field: string) => {
       if (field === undefined || field === null) return '';
@@ -40,6 +40,7 @@ export const downloadCsv = async () => {
           new Date(detail.endDate).toISOString(),
           detail.notes || '',
           detail.image || '',
+          detail.thumbnail || '',
           tagsString
         ].map(escapeCSV).join(',');
         csvContent += row + '\n';
@@ -134,13 +135,18 @@ export const uploadCsv = async () => {
       if (!line || line.trim() === '') continue;
       const values = parseCSVLine(line);
 
-      let activityId, activityName, icon, entryId, startDateString, endDateString, notes, image, tagsString;
+      let activityId, activityName, icon, entryId, startDateString, endDateString, notes, image, thumbnail, tagsString;
 
       if (hasIds) {
         if (hasEndDate) {
             if (hasTags) {
-                if (values.length < 9) continue;
-                [activityId, activityName, icon, entryId, startDateString, endDateString, notes, image, tagsString] = values;
+                if (header.includes('Thumbnail')) {
+                  if (values.length < 10) continue;
+                  [activityId, activityName, icon, entryId, startDateString, endDateString, notes, image, thumbnail, tagsString] = values;
+                } else {
+                  if (values.length < 9) continue;
+                  [activityId, activityName, icon, entryId, startDateString, endDateString, notes, image, tagsString] = values;
+                }
             } else {
                 if (values.length < 8) continue;
                 [activityId, activityName, icon, entryId, startDateString, endDateString, notes, image] = values;
@@ -218,6 +224,7 @@ export const uploadCsv = async () => {
           endDate,
           notes: notes || undefined,
           image: image || undefined,
+          thumbnail: thumbnail || undefined,
           tags: entryTags,
         });
       } else {
@@ -227,6 +234,7 @@ export const uploadCsv = async () => {
           endDate,
           notes: notes || existingEntry.notes,
           image: image || existingEntry.image,
+          thumbnail: thumbnail || existingEntry.thumbnail,
           tags: entryTags,
         });
       }

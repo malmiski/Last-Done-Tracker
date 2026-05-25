@@ -10,6 +10,7 @@ export interface ActivityEntry {
   endDate: Date;
   notes?: string;
   image?: string; // base64 encoded image
+  thumbnail?: string; // base64 encoded smaller image
   tags?: Tag[];
 }
 

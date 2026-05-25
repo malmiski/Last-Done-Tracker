@@ -65,11 +65,56 @@ const migrateDatabase = async (db: IDBDatabase) => {
                 store.put({ ...activities[i], orderIndex: i });
             }
         }
-        return new Promise<void>((resolve, reject) => {
+        await new Promise<void>((resolve, reject) => {
             tx.oncomplete = () => resolve();
             tx.onerror = () => reject(tx.error);
         });
     }
+
+    const txEntries = db.transaction([ENTRIES_STORE], 'readwrite');
+    const storeEntries = txEntries.objectStore(ENTRIES_STORE);
+    const request = storeEntries.getAll();
+
+    await new Promise<void>((resolve, reject) => {
+        request.onsuccess = () => {
+            const entries = request.result;
+            let pendingUpdates = 0;
+            let hasError = false;
+
+            const checkDone = () => {
+                if (pendingUpdates === 0 && !hasError) {
+                    resolve();
+                }
+            };
+
+            entries.forEach((entry: any) => {
+                let needsUpdate = false;
+                if (entry.date && !entry.startDate) {
+                    entry.startDate = entry.date;
+                    entry.endDate = entry.date;
+                    needsUpdate = true;
+                }
+
+                if (needsUpdate) {
+                    pendingUpdates++;
+                    const updateReq = storeEntries.put(entry);
+                    updateReq.onsuccess = () => {
+                        pendingUpdates--;
+                        checkDone();
+                    };
+                    updateReq.onerror = () => {
+                        hasError = true;
+                        reject(updateReq.error);
+                    }
+                }
+            });
+
+            if (pendingUpdates === 0) {
+                resolve();
+            }
+        };
+        request.onerror = () => reject(request.error);
+    });
 };
 
 export const initDatabase = async () => {
@@ -270,6 +315,22 @@ export const addEntry = async (activityId: string, entry: ActivityEntry): Promis
               entryTagsStore.add({ entryId: entry.id, tagId: tag.id });
           });
       }
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+  });
+};
+
+export const updateEntryImages = async (id: string, image?: string, thumbnail?: string): Promise<void> => {
+  const db = await getDb();
+  return new Promise((resolve, reject) => {
+      const tx = db.transaction([ENTRIES_STORE], 'readwrite');
+      const store = tx.objectStore(ENTRIES_STORE);
+      const getReq = store.get(id);
+      getReq.onsuccess = () => {
+          if (getReq.result) {
+              store.put({ ...getReq.result, image, thumbnail });
+          }
+      };
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
   });

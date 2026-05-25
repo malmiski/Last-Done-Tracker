@@ -7,8 +7,8 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
-import * as ImageManipulator from 'expo-image-manipulator';
 import { Tag } from '../src/data/activity-details';
+import { processImage, generateThumbnail } from '../src/utils/imageUtils';
 
 const EditEntryScreen: React.FC = () => {
   const router = useRouter();
@@ -36,6 +36,7 @@ const EditEntryScreen: React.FC = () => {
 
   const [notes, setNotes] = useState('');
   const [image, setImage] = useState<string | undefined>(undefined);
+  const [thumbnail, setThumbnail] = useState<string | undefined>(undefined);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [tagSearch, setTagSearch] = useState('');
   const [isFormValidState, setIsFormValidState] = useState(false);
@@ -127,6 +128,7 @@ const EditEntryScreen: React.FC = () => {
 
       setNotes(entry.notes || '');
       setImage(entry.image);
+      setThumbnail(entry.thumbnail);
       setSelectedTags(entry.tags || []);
     }
   }, [entry]);
@@ -135,25 +137,29 @@ const EditEntryScreen: React.FC = () => {
     setIsFormValidState(isFormValid());
   }, [year, month, day, hour, minute, second, ampm, endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm]);
 
-  const convertToJpeg = async (uri: string) => {
-    const manipResult = await ImageManipulator.manipulateAsync(
-      uri,
-      [{ resize: { width: 800 } }],
-      { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-    );
-    return `data:image/jpeg;base64,${manipResult.base64}`;
+  const handleImageInput = async (uri: string) => {
+    try {
+      const [fullImage, thumbImage] = await Promise.all([
+        processImage(uri),
+        generateThumbnail(uri)
+      ]);
+      setImage(fullImage);
+      setThumbnail(thumbImage);
+    } catch (e) {
+      Alert.alert("Error processing image");
+      console.error(e);
+    }
   };
 
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
-      quality: 0.7,
+      quality: 1,
     });
 
     if (!result.canceled && result.assets && result.assets[0].uri) {
-      const jpegBase64 = await convertToJpeg(result.assets[0].uri);
-      setImage(jpegBase64);
+      await handleImageInput(result.assets[0].uri);
     }
   };
 
@@ -162,9 +168,12 @@ const EditEntryScreen: React.FC = () => {
     if (hasImage) {
       const imageBase64 = await Clipboard.getImageAsync({ format: 'png' }); // Clipboard currently only supports png/jpg
       if (imageBase64 && imageBase64.data) {
-        // Convert the pasted image to JPEG base64 to be consistent
-        const jpegBase64 = await convertToJpeg(imageBase64.data);
-        setImage(jpegBase64);
+        // We need to add the data prefix for the image utility
+        let uri = imageBase64.data;
+        if (!uri.startsWith('data:')) {
+            uri = `data:image/png;base64,${uri}`;
+        }
+        await handleImageInput(uri);
       }
     } else {
       Alert.alert("No image found in clipboard");
@@ -230,7 +239,7 @@ const EditEntryScreen: React.FC = () => {
     if (activityId && entryId && isFormValid()) {
       const startDate = getFullDate(year, month, day, hour, minute, second, ampm);
       const endDate = getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
-      updateActivityEntry(activityId, entryId, startDate, endDate, notes, image, selectedTags);
+      updateActivityEntry(activityId, entryId, startDate, endDate, notes, image, thumbnail, selectedTags);
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -503,7 +512,7 @@ const EditEntryScreen: React.FC = () => {
             <Text style={styles.imageButtonText}>Paste</Text>
           </TouchableOpacity>
           {image && (
-            <TouchableOpacity style={styles.imageButton} onPress={() => setImage(undefined)}>
+            <TouchableOpacity style={styles.imageButton} onPress={() => { setImage(undefined); setThumbnail(undefined); }}>
               <Icon name="delete-outline" size={24} color={theme.colors.error || '#FF3B30'} />
               <Text style={[styles.imageButtonText, { color: theme.colors.error || '#FF3B30' }]}>Remove</Text>
             </TouchableOpacity>
