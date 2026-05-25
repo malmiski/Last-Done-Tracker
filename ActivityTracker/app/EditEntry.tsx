@@ -138,7 +138,7 @@ const EditEntryScreen: React.FC = () => {
   const convertToJpeg = async (uri: string) => {
     const manipResult = await ImageManipulator.manipulateAsync(
       uri,
-      [],
+      [{ resize: { width: 800 } }],
       { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
     );
     return `data:image/jpeg;base64,${manipResult.base64}`;
