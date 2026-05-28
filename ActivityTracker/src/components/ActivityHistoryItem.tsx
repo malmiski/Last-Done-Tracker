@@ -100,15 +100,25 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
       const source = { uri: targetImage.startsWith('data:') ? targetImage : `data:image/jpeg;base64,${targetImage}` };
 
       return (
-        <View style={{ position: 'relative', width: '100%' }}>
+                <View style={{ position: 'relative', width: '100%' }}>
             <Image source={source} style={styles.thumbnailLarge} />
             {itemsToRender.length > 1 && (
-                <TouchableOpacity
-                    style={{ position: 'absolute', right: 10, top: '50%', marginTop: -20, backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: 20, padding: 5 }}
-                    onPress={() => setCurrentImageIndex((prev) => (prev + 1) % itemsToRender.length)}
-                >
-                    <Icon name="chevron-right" size={30} color="#000" />
-                </TouchableOpacity>
+                <>
+                    <TouchableOpacity
+                        style={{ position: 'absolute', left: 10, top: '50%', marginTop: -20, backgroundColor: currentImageIndex === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', borderRadius: 20, padding: 5 }}
+                        onPress={() => setCurrentImageIndex((prev) => prev - 1)}
+                        disabled={currentImageIndex === 0}
+                    >
+                        <Icon name="chevron-left" size={30} color={currentImageIndex === 0 ? 'rgba(0,0,0,0.3)' : '#000'} />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={{ position: 'absolute', right: 10, top: '50%', marginTop: -20, backgroundColor: currentImageIndex === itemsToRender.length - 1 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', borderRadius: 20, padding: 5 }}
+                        onPress={() => setCurrentImageIndex((prev) => prev + 1)}
+                        disabled={currentImageIndex === itemsToRender.length - 1}
+                    >
+                        <Icon name="chevron-right" size={30} color={currentImageIndex === itemsToRender.length - 1 ? 'rgba(0,0,0,0.3)' : '#000'} />
+                    </TouchableOpacity>
+                </>
             )}
         </View>
       );
