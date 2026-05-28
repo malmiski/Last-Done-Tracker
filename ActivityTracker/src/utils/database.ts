@@ -229,6 +229,17 @@ export const deleteActivity = async (id: string) => {
   await db.runAsync('DELETE FROM activities WHERE id = ?', [id]);
 };
 
+const parseJsonArray = (str) => {
+    if (!str) return undefined;
+    try {
+        const parsed = JSON.parse(str);
+        if (Array.isArray(parsed)) return parsed;
+        return [str];
+    } catch (e) {
+        return [str];
+    }
+};
+
 const mapEntriesWithTags = (rows: any[]): ActivityEntry[] => {
     const entryMap = new Map<string, ActivityEntry>();
     rows.forEach(row => {
@@ -238,8 +249,8 @@ const mapEntriesWithTags = (rows: any[]): ActivityEntry[] => {
                 startDate: new Date(row.startDate),
                 endDate: new Date(row.endDate),
                 notes: row.notes,
-                image: row.image,
-                thumbnail: row.thumbnail,
+                images: parseJsonArray(row.image),
+                thumbnails: parseJsonArray(row.thumbnail),
                 tags: []
             });
         }
@@ -287,8 +298,8 @@ export const getAllEntries = async (): Promise<(ActivityEntry & { activityId: st
               startDate: new Date(row.startDate),
               endDate: new Date(row.endDate),
               notes: row.notes,
-              image: row.image,
-              thumbnail: row.thumbnail,
+              images: parseJsonArray(row.image),
+              thumbnails: parseJsonArray(row.thumbnail),
               tags: []
           });
       }
@@ -308,7 +319,7 @@ export const addEntry = async (activityId: string, entry: ActivityEntry) => {
   if (!db) return;
   await db.runAsync(
     'INSERT INTO entries (id, activityId, startDate, endDate, notes, image, thumbnail) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [entry.id, activityId, entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image || null, entry.thumbnail || null]
+    [entry.id, activityId, entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.images ? JSON.stringify(entry.images) : null, entry.thumbnails ? JSON.stringify(entry.thumbnails) : null]
   );
   if (entry.tags) {
     for (const tag of entry.tags) {
@@ -317,12 +328,12 @@ export const addEntry = async (activityId: string, entry: ActivityEntry) => {
   }
 };
 
-export const updateEntryImages = async (id: string, image?: string, thumbnail?: string) => {
+export const updateEntryImages = async (id: string, images?: string[], thumbnails?: string[]) => {
   const db = await getDb();
   if (!db) return;
   await db.runAsync(
     'UPDATE entries SET image = ?, thumbnail = ? WHERE id = ?',
-    [image ?? null, thumbnail ?? null, id]
+    [images ? JSON.stringify(images) : null, thumbnails ? JSON.stringify(thumbnails) : null, id]
   );
 };
 
@@ -331,7 +342,7 @@ export const updateEntry = async (entry: ActivityEntry) => {
   if (!db) return;
   await db.runAsync(
     'UPDATE entries SET startDate = ?, endDate = ?, notes = ?, image = ?, thumbnail = ? WHERE id = ?',
-    [entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image ?? null, entry.thumbnail ?? null, entry.id]
+    [entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.images ? JSON.stringify(entry.images) : null, entry.thumbnails ? JSON.stringify(entry.thumbnails) : null, entry.id]
   );
   if (entry.tags) {
     await db.runAsync('DELETE FROM entry_tags WHERE entryId = ?', [entry.id]);
@@ -424,8 +435,8 @@ export const getEntriesByTag = async (tagId: string): Promise<(ActivityEntry & {
                 startDate: new Date(row.startDate),
                 endDate: new Date(row.endDate),
                 notes: row.notes,
-                image: row.image,
-                thumbnail: row.thumbnail,
+                images: parseJsonArray(row.image),
+              thumbnails: parseJsonArray(row.thumbnail),
                 tags: []
             });
         }

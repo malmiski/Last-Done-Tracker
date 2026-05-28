@@ -98,8 +98,8 @@ const ActivityDetailScreen: React.FC = () => {
             startDate={item.startDate}
             endDate={item.endDate}
             notes={item.notes}
-            image={item.image}
-            thumbnail={item.thumbnail}
+            images={item.images}
+            thumbnails={item.thumbnails}
             imageMode={imageMode}
             tags={item.tags}
             onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
