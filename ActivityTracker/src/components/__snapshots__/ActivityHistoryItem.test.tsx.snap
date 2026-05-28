@@ -13,18 +13,21 @@ exports[`ActivityHistoryItem only renders the first line of multi-line notes 1`]
         "marginBottom": 15,
         "padding": 15,
       },
-      false,
+      undefined,
     ]
   }
 >
   <View
     style={
-      {
-        "alignItems": "center",
-        "flex": 1,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-      }
+      [
+        {
+          "alignItems": "center",
+          "flex": 1,
+          "flexDirection": "row",
+          "justifyContent": "space-between",
+        },
+        undefined,
+      ]
     }
   >
     <View
@@ -171,12 +174,15 @@ exports[`ActivityHistoryItem renders correctly with an image and hidden imageMod
 >
   <View
     style={
-      {
-        "alignItems": "center",
-        "flex": 1,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-      }
+      [
+        {
+          "alignItems": "center",
+          "flex": 1,
+          "flexDirection": "row",
+          "justifyContent": "space-between",
+        },
+        false,
+      ]
     }
   >
     <View
@@ -304,36 +310,21 @@ exports[`ActivityHistoryItem renders correctly with an image and large imageMode
         "marginBottom": 15,
         "padding": 15,
       },
-      {
-        "alignItems": "stretch",
-        "flexDirection": "column",
-      },
+      false,
     ]
   }
 >
-  <Image
-    source={
-      {
-        "uri": "data:image/jpeg;base64,mock",
-      }
-    }
-    style={
-      {
-        "borderRadius": 10,
-        "height": 200,
-        "marginBottom": 15,
-        "width": "100%",
-      }
-    }
-  />
   <View
     style={
-      {
-        "alignItems": "center",
-        "flex": 1,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-      }
+      [
+        {
+          "alignItems": "center",
+          "flex": 1,
+          "flexDirection": "row",
+          "justifyContent": "space-between",
+        },
+        false,
+      ]
     }
   >
     <View
@@ -461,33 +452,21 @@ exports[`ActivityHistoryItem renders correctly with an image and medium imageMod
         "marginBottom": 15,
         "padding": 15,
       },
-      false,
+      undefined,
     ]
   }
 >
-  <Image
-    source={
-      {
-        "uri": "data:image/jpeg;base64,mock",
-      }
-    }
-    style={
-      {
-        "borderRadius": 10,
-        "height": 100,
-        "marginRight": 15,
-        "width": 100,
-      }
-    }
-  />
   <View
     style={
-      {
-        "alignItems": "center",
-        "flex": 1,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-      }
+      [
+        {
+          "alignItems": "center",
+          "flex": 1,
+          "flexDirection": "row",
+          "justifyContent": "space-between",
+        },
+        undefined,
+      ]
     }
   >
     <View
@@ -615,33 +594,21 @@ exports[`ActivityHistoryItem renders correctly with an image and small imageMode
         "marginBottom": 15,
         "padding": 15,
       },
-      false,
+      undefined,
     ]
   }
 >
-  <Image
-    source={
-      {
-        "uri": "data:image/jpeg;base64,mock",
-      }
-    }
-    style={
-      {
-        "borderRadius": 5,
-        "height": 50,
-        "marginRight": 15,
-        "width": 50,
-      }
-    }
-  />
   <View
     style={
-      {
-        "alignItems": "center",
-        "flex": 1,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-      }
+      [
+        {
+          "alignItems": "center",
+          "flex": 1,
+          "flexDirection": "row",
+          "justifyContent": "space-between",
+        },
+        undefined,
+      ]
     }
   >
     <View
@@ -769,18 +736,21 @@ exports[`ActivityHistoryItem renders correctly with notes preview 1`] = `
         "marginBottom": 15,
         "padding": 15,
       },
-      false,
+      undefined,
     ]
   }
 >
   <View
     style={
-      {
-        "alignItems": "center",
-        "flex": 1,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-      }
+      [
+        {
+          "alignItems": "center",
+          "flex": 1,
+          "flexDirection": "row",
+          "justifyContent": "space-between",
+        },
+        undefined,
+      ]
     }
   >
     <View
@@ -921,18 +891,21 @@ exports[`ActivityHistoryItem renders correctly without notes 1`] = `
         "marginBottom": 15,
         "padding": 15,
       },
-      false,
+      undefined,
     ]
   }
 >
   <View
     style={
-      {
-        "alignItems": "center",
-        "flex": 1,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-      }
+      [
+        {
+          "alignItems": "center",
+          "flex": 1,
+          "flexDirection": "row",
+          "justifyContent": "space-between",
+        },
+        undefined,
+      ]
     }
   >
     <View
@@ -1060,18 +1033,21 @@ exports[`ActivityHistoryItem renders duration when startDate and endDate differ 
         "marginBottom": 15,
         "padding": 15,
       },
-      false,
+      undefined,
     ]
   }
 >
   <View
     style={
-      {
-        "alignItems": "center",
-        "flex": 1,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-      }
+      [
+        {
+          "alignItems": "center",
+          "flex": 1,
+          "flexDirection": "row",
+          "justifyContent": "space-between",
+        },
+        undefined,
+      ]
     }
   >
     <View

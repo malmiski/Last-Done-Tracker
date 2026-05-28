@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
@@ -10,8 +10,8 @@ interface ActivityHistoryItemProps {
   startDate: Date;
   endDate: Date;
   notes?: string;
-  image?: string;
-  thumbnail?: string;
+  images?: string[];
+  thumbnails?: string[];
   onEdit: () => void;
   onDelete: () => void;
   imageMode?: ImageMode;
@@ -48,53 +48,83 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
   startDate,
   endDate,
   notes,
-  image,
-  thumbnail,
+  images,
+  thumbnails,
   onEdit,
   onDelete,
   imageMode = 'small',
   tags = []
 }) => {
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
   const firstLine = notes ? notes.split('\n')[0] : '';
   const duration = formatDuration(startDate, endDate);
   const isDifferentDate = startDate.getTime() !== endDate.getTime();
 
-  const renderImage = () => {
-    const validThumbnail = thumbnail && thumbnail !== "failed" ? thumbnail : undefined;
-    if ((!image && !validThumbnail) || imageMode === 'hidden') return null;
+  const renderImages = () => {
+    if (imageMode === 'hidden' || (!images && !thumbnails)) return null;
 
-    let targetImage = image;
-    if ((imageMode === 'small' || imageMode === 'medium') && validThumbnail) {
-       targetImage = validThumbnail;
+    const availableImages = images && images.length > 0 ? images : null;
+    const availableThumbnails = thumbnails && thumbnails.length > 0 ? thumbnails : null;
+
+    if (!availableImages && !availableThumbnails) return null;
+
+    if (imageMode === 'small' || imageMode === 'medium') {
+      const isMultiple = (availableImages && availableImages.length > 1) || (availableThumbnails && availableThumbnails.length > 1);
+      const itemsToRender = availableThumbnails || availableImages || [];
+
+      const elements = itemsToRender.map((imgStr, idx) => {
+         if (imgStr === "failed") return null;
+         const source = { uri: imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}` };
+         return <Image key={idx} source={source} style={imageMode === 'medium' ? styles.thumbnailMedium : styles.thumbnailSmall} />;
+      });
+
+      if (isMultiple) {
+         return (
+             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15, width: '100%' }}>
+                 {elements}
+             </ScrollView>
+         );
+      } else {
+         return elements[0];
+      }
     }
 
-    if (!targetImage || targetImage === "failed") return null;
+    // Large Mode
+    if (imageMode === 'large') {
+      const itemsToRender = availableImages || availableThumbnails || [];
+      if (!itemsToRender || itemsToRender.length === 0) return null;
 
-    const source = { uri: targetImage.startsWith('data:') ? targetImage : `data:image/jpeg;base64,${targetImage}` };
+      const targetImage = itemsToRender[currentImageIndex];
+      if (!targetImage || targetImage === "failed") return null;
+      const source = { uri: targetImage.startsWith('data:') ? targetImage : `data:image/jpeg;base64,${targetImage}` };
 
-    let imageStyle;
-    switch (imageMode) {
-      case 'medium':
-        imageStyle = styles.thumbnailMedium;
-        break;
-      case 'large':
-        imageStyle = styles.thumbnailLarge;
-        break;
-      case 'small':
-      default:
-        imageStyle = styles.thumbnailSmall;
-        break;
+      return (
+        <View style={{ position: 'relative', width: '100%' }}>
+            <Image source={source} style={styles.thumbnailLarge} />
+            {itemsToRender.length > 1 && (
+                <TouchableOpacity
+                    style={{ position: 'absolute', right: 10, top: '50%', marginTop: -20, backgroundColor: 'rgba(255,255,255,0.7)', borderRadius: 20, padding: 5 }}
+                    onPress={() => setCurrentImageIndex((prev) => (prev + 1) % itemsToRender.length)}
+                >
+                    <Icon name="chevron-right" size={30} color="#000" />
+                </TouchableOpacity>
+            )}
+        </View>
+      );
     }
 
-    return <Image source={source} style={imageStyle} />;
+    return null;
   };
 
-  const isLarge = imageMode === 'large' && image;
+  const isLarge = imageMode === 'large' && ((images && images.length > 0) || (thumbnails && thumbnails.length > 0));
+  const hasMultipleInRow = (imageMode === 'small' || imageMode === 'medium') && ((images && images.length > 1) || (thumbnails && thumbnails.length > 1));
 
   return (
-    <View style={[styles.container, isLarge && styles.containerLarge]}>
-      {renderImage()}
-      <View style={styles.contentWrapper}>
+    <View style={[styles.container, (isLarge || hasMultipleInRow) && styles.containerLarge]}>
+      {(isLarge || hasMultipleInRow) ? renderImages() : null}
+      <View style={[styles.contentWrapper, hasMultipleInRow && { marginTop: 0 }]}>
+        {!(isLarge || hasMultipleInRow) ? renderImages() : null}
         <View style={styles.textContainer}>
           <Text style={styles.dateText}>
             {formatDate(startDate)}

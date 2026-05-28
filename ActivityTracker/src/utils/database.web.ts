@@ -87,6 +87,7 @@ const migrateDatabase = async (db: IDBDatabase) => {
                 }
             };
 
+
             entries.forEach((entry: any) => {
                 let needsUpdate = false;
                 if (entry.date && !entry.startDate) {
@@ -94,6 +95,15 @@ const migrateDatabase = async (db: IDBDatabase) => {
                     entry.endDate = entry.date;
                     needsUpdate = true;
                 }
+                if (entry.image !== undefined && entry.images === undefined) {
+                    entry.images = entry.image ? [entry.image] : undefined;
+                    needsUpdate = true;
+                }
+                if (entry.thumbnail !== undefined && entry.thumbnails === undefined) {
+                    entry.thumbnails = entry.thumbnail ? [entry.thumbnail] : undefined;
+                    needsUpdate = true;
+                }
+
 
                 if (needsUpdate) {
                     pendingUpdates++;
@@ -272,11 +282,23 @@ const fetchTagsForEntries = async (db: IDBDatabase, entries: any[]): Promise<any
             });
             if (tag) tags.push(tag);
         }
+
+        let images = row.images;
+        if (row.image !== undefined && images === undefined) {
+            images = row.image ? [row.image] : undefined;
+        }
+        let thumbnails = row.thumbnails;
+        if (row.thumbnail !== undefined && thumbnails === undefined) {
+            thumbnails = row.thumbnail ? [row.thumbnail] : undefined;
+        }
+
         results.push({
             ...row,
             startDate: new Date(row.startDate || row.date),
             endDate: new Date(row.endDate || row.date),
             tags: tags,
+            images,
+            thumbnails,
         });
     }
     return results;
@@ -320,20 +342,24 @@ export const addEntry = async (activityId: string, entry: ActivityEntry): Promis
   });
 };
 
-export const updateEntryImages = async (id: string, image?: string, thumbnail?: string): Promise<void> => {
-  const db = await getDb();
-  return new Promise((resolve, reject) => {
-      const tx = db.transaction([ENTRIES_STORE], 'readwrite');
-      const store = tx.objectStore(ENTRIES_STORE);
-      const getReq = store.get(id);
-      getReq.onsuccess = () => {
-          if (getReq.result) {
-              store.put({ ...getReq.result, image, thumbnail });
-          }
-      };
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error);
-  });
+export const updateEntryImages = async (id: string, images?: string[], thumbnails?: string[]): Promise<void> => {
+    const db = await getDb();
+    if (!db) return;
+    return new Promise((resolve, reject) => {
+        const tx = db.transaction(ENTRIES_STORE, 'readwrite');
+        const store = tx.objectStore(ENTRIES_STORE);
+        const req = store.get(id);
+        req.onsuccess = () => {
+            const entry = req.result;
+            if (entry) {
+                entry.images = images;
+                entry.thumbnails = thumbnails;
+                store.put(entry);
+            }
+        };
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error);
+    });
 };
 
 export const updateEntry = async (entry: ActivityEntry): Promise<void> => {

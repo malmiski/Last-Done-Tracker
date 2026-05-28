@@ -39,8 +39,8 @@ export const downloadCsv = async () => {
           new Date(detail.startDate).toISOString(),
           new Date(detail.endDate).toISOString(),
           detail.notes || '',
-          detail.image || '',
-          detail.thumbnail || '',
+          (detail.images || []).join('|'),
+          (detail.thumbnails || []).join('|'),
           tagsString
         ].map(escapeCSV).join(',');
         csvContent += row + '\n';
@@ -135,34 +135,34 @@ export const uploadCsv = async () => {
       if (!line || line.trim() === '') continue;
       const values = parseCSVLine(line);
 
-      let activityId, activityName, icon, entryId, startDateString, endDateString, notes, image, thumbnail, tagsString;
+      let activityId, activityName, icon, entryId, startDateString, endDateString, notes, imagesStr, thumbnailsStr, tagsString;
 
       if (hasIds) {
         if (hasEndDate) {
             if (hasTags) {
                 if (header.includes('Thumbnail')) {
                   if (values.length < 10) continue;
-                  [activityId, activityName, icon, entryId, startDateString, endDateString, notes, image, thumbnail, tagsString] = values;
+                  [activityId, activityName, icon, entryId, startDateString, endDateString, notes, imagesStr, thumbnailsStr, tagsString] = values;
                 } else {
                   if (values.length < 9) continue;
-                  [activityId, activityName, icon, entryId, startDateString, endDateString, notes, image, tagsString] = values;
+                  [activityId, activityName, icon, entryId, startDateString, endDateString, notes, imagesStr, tagsString] = values;
                 }
             } else {
                 if (values.length < 8) continue;
-                [activityId, activityName, icon, entryId, startDateString, endDateString, notes, image] = values;
+                [activityId, activityName, icon, entryId, startDateString, endDateString, notes, imagesStr] = values;
             }
         } else {
             if (values.length < 7) continue;
-            [activityId, activityName, icon, entryId, startDateString, notes, image] = values;
+            [activityId, activityName, icon, entryId, startDateString, notes, imagesStr] = values;
             endDateString = startDateString;
         }
       } else {
         if (hasEndDate) {
             if (values.length < 6) continue;
-            [activityName, icon, startDateString, endDateString, notes, image] = values;
+            [activityName, icon, startDateString, endDateString, notes, imagesStr] = values;
         } else {
             if (values.length < 5) continue;
-            [activityName, icon, startDateString, notes, image] = values;
+            [activityName, icon, startDateString, notes, imagesStr] = values;
             endDateString = startDateString;
         }
         activityId = await generateActivityId(activityName);
@@ -212,6 +212,9 @@ export const uploadCsv = async () => {
           }
       }
 
+      const images = imagesStr ? imagesStr.split('|').filter(Boolean) : undefined;
+      const thumbnails = thumbnailsStr ? thumbnailsStr.split('|').filter(Boolean) : undefined;
+
       const startDate = new Date(startDateString);
       const endDate = new Date(endDateString);
       const activityEntries = await database.getEntries(activityId);
@@ -223,8 +226,8 @@ export const uploadCsv = async () => {
           startDate,
           endDate,
           notes: notes || undefined,
-          image: image || undefined,
-          thumbnail: thumbnail || undefined,
+          images,
+          thumbnails,
           tags: entryTags,
         });
       } else {
@@ -233,8 +236,8 @@ export const uploadCsv = async () => {
           startDate,
           endDate,
           notes: notes || existingEntry.notes,
-          image: image || existingEntry.image,
-          thumbnail: thumbnail || existingEntry.thumbnail,
+          images: images || existingEntry.images,
+          thumbnails: thumbnails || existingEntry.thumbnails,
           tags: entryTags,
         });
       }
