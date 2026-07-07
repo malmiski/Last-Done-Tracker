@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'rea
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
 import { Tag } from '../data/activity-details';
+import LargeImageGallery from './LargeImageGallery';
 
 export type ImageMode = 'small' | 'medium' | 'large' | 'hidden';
 
@@ -55,8 +56,6 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
   imageMode = 'small',
   tags = []
 }) => {
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-
   const firstLine = notes ? notes.split('\n')[0] : '';
   const duration = formatDuration(startDate, endDate);
   const isDifferentDate = startDate.getTime() !== endDate.getTime();
@@ -95,33 +94,7 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
       const itemsToRender = availableImages || availableThumbnails || [];
       if (!itemsToRender || itemsToRender.length === 0) return null;
 
-      const targetImage = itemsToRender[currentImageIndex];
-      if (!targetImage || targetImage === "failed") return null;
-      const source = { uri: targetImage.startsWith('data:') ? targetImage : `data:image/jpeg;base64,${targetImage}` };
-
-      return (
-                <View style={{ position: 'relative', width: '100%' }}>
-            <Image source={source} style={styles.thumbnailLarge} />
-            {itemsToRender.length > 1 && (
-                <>
-                    <TouchableOpacity
-                        style={{ position: 'absolute', left: 10, top: '50%', marginTop: -20, backgroundColor: currentImageIndex === 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', borderRadius: 20, padding: 5 }}
-                        onPress={() => setCurrentImageIndex((prev) => prev - 1)}
-                        disabled={currentImageIndex === 0}
-                    >
-                        <Icon name="chevron-left" size={30} color={currentImageIndex === 0 ? 'rgba(0,0,0,0.3)' : '#000'} />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={{ position: 'absolute', right: 10, top: '50%', marginTop: -20, backgroundColor: currentImageIndex === itemsToRender.length - 1 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.7)', borderRadius: 20, padding: 5 }}
-                        onPress={() => setCurrentImageIndex((prev) => prev + 1)}
-                        disabled={currentImageIndex === itemsToRender.length - 1}
-                    >
-                        <Icon name="chevron-right" size={30} color={currentImageIndex === itemsToRender.length - 1 ? 'rgba(0,0,0,0.3)' : '#000'} />
-                    </TouchableOpacity>
-                </>
-            )}
-        </View>
-      );
+      return <LargeImageGallery items={itemsToRender} />;
     }
 
     return null;
@@ -200,12 +173,6 @@ const styles = StyleSheet.create({
     height: 100,
     borderRadius: 10,
     marginRight: 15,
-  },
-  thumbnailLarge: {
-    width: '100%',
-    height: 200,
-    borderRadius: 10,
-    marginBottom: 15,
   },
   dateText: {
     color: theme.colors.text,

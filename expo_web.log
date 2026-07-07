@@ -1,0 +1,3 @@
+npm warn exec The following package was not found and will be installed: expo@57.0.2
+npm warn deprecated uuid@7.0.3: uuid@10 and below is no longer supported.  For ESM codebases, update to uuid@latest.  For CommonJS codebases, use uuid@11 (but be aware this version will likely be deprecated in 2028).
+ConfigError: The expected package.json path: /app/package.json does not exist
