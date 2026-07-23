@@ -51,6 +51,7 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
   notes,
   images,
   thumbnails,
+
   onEdit,
   onDelete,
   imageMode = 'small',
@@ -137,6 +138,7 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
       {(isLarge || hasMultipleInRow) ? renderImages() : null}
       <View style={[styles.contentWrapper, hasMultipleInRow && { marginTop: 0 }]}>
         {!(isLarge || hasMultipleInRow) ? renderImages() : null}
+
         <View style={styles.textContainer}>
           <Text style={styles.dateText}>
             {formatDate(startDate)}

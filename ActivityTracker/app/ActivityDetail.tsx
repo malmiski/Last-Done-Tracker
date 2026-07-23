@@ -136,6 +136,7 @@ const ActivityDetailScreen: React.FC = () => {
             />
           );
         }}
+
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
       />
