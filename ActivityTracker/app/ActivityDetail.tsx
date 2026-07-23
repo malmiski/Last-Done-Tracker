@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
@@ -6,6 +6,7 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import ActivityHistoryItem, { ImageMode } from '../src/components/ActivityHistoryItem';
 import { useActivityData } from '../src/hooks/useActivityData';
+import { formatTimeAgo } from '../src/utils/time';
 
 const ActivityDetailScreen: React.FC = () => {
   const router = useRouter();
@@ -29,7 +30,18 @@ const ActivityDetailScreen: React.FC = () => {
     (item.notes || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+
+  const flatListRef = useRef<FlatList>(null);
+
+  const scrollToRandom = () => {
+    if (filteredHistory.length > 0) {
+      const randomIndex = Math.floor(Math.random() * filteredHistory.length);
+      flatListRef.current?.scrollToIndex({ index: randomIndex, animated: true });
+    }
+  };
+
   if (!activity) {
+
     return (
       <SafeAreaView style={styles.container}>
         <Text style={styles.title}>Activity not found</Text>
@@ -65,9 +77,14 @@ const ActivityDetailScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace("/Activities"); } }}>
-          <Icon name="arrow-left" size={30} color={theme.colors.text} />
-        </TouchableOpacity>
+        <View style={{flexDirection: 'row', alignItems: 'center'}}>
+          <TouchableOpacity onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace("/Activities"); } }}>
+            <Icon name="arrow-left" size={30} color={theme.colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={scrollToRandom} style={{marginLeft: 15}}>
+            <Icon name="dice-multiple" size={30} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.title}>{activity.name}</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity onPress={cycleImageMode} style={{ paddingRight: 10 }}>
@@ -92,20 +109,33 @@ const ActivityDetailScreen: React.FC = () => {
         />
       </View>
       <FlatList
+        ref={flatListRef}
         data={filteredHistory}
-        renderItem={({ item }) => (
-          <ActivityHistoryItem
-            startDate={item.startDate}
-            endDate={item.endDate}
-            notes={item.notes}
-            images={item.images}
-            thumbnails={item.thumbnails}
-            imageMode={imageMode}
-            tags={item.tags}
-            onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
-            onDelete={() => deleteActivityEntry(activityId, item.id)}
-          />
-        )}
+        onScrollToIndexFailed={(info) => {
+          const wait = new Promise(resolve => setTimeout(resolve, 500));
+          wait.then(() => {
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+          });
+        }}
+        renderItem={({ item, index }) => {
+          const previousEntry = index < filteredHistory.length - 1 ? filteredHistory[index + 1] : undefined;
+          const timeSincePrevious = previousEntry ? formatTimeAgo(previousEntry.startDate, item.startDate) : undefined;
+
+          return (
+            <ActivityHistoryItem
+              startDate={item.startDate}
+              endDate={item.endDate}
+              notes={item.notes}
+              images={item.images}
+              thumbnails={item.thumbnails}
+              imageMode={imageMode}
+              tags={item.tags}
+              timeSincePrevious={timeSincePrevious}
+              onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
+              onDelete={() => deleteActivityEntry(activityId, item.id)}
+            />
+          );
+        }}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
       />
