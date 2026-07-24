@@ -36,7 +36,7 @@ const ActivityDetailScreen: React.FC = () => {
   const scrollToRandom = () => {
     if (filteredHistory.length > 0) {
       const randomIndex = Math.floor(Math.random() * filteredHistory.length);
-      flatListRef.current?.scrollToIndex({ index: randomIndex, animated: true });
+      flatListRef.current?.scrollToIndex({ index: randomIndex, animated: false });
     }
   };
 
@@ -112,10 +112,10 @@ const ActivityDetailScreen: React.FC = () => {
         ref={flatListRef}
         data={filteredHistory}
         onScrollToIndexFailed={(info) => {
-          const wait = new Promise(resolve => setTimeout(resolve, 500));
-          wait.then(() => {
-            flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
-          });
+          flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
+          setTimeout(() => {
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: false });
+          }, 100);
         }}
         renderItem={({ item, index }) => {
           const previousEntry = index < filteredHistory.length - 1 ? filteredHistory[index + 1] : undefined;
