@@ -17,6 +17,7 @@ interface ActivityHistoryItemProps {
   onDelete: () => void;
   imageMode?: ImageMode;
   tags?: Tag[];
+  timeSincePrevious?: string;
 }
 
 const formatDate = (date: Date) => {
@@ -54,7 +55,8 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
   onEdit,
   onDelete,
   imageMode = 'small',
-  tags = []
+  tags = [],
+  timeSincePrevious
 }) => {
   const firstLine = notes ? notes.split('\n')[0] : '';
   const duration = formatDuration(startDate, endDate);
@@ -114,6 +116,7 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
             {isDifferentDate ? ` - ${formatDate(endDate)}` : ''}
           </Text>
           {duration ? <Text style={styles.durationText}>{duration}</Text> : null}
+          {timeSincePrevious ? <Text style={styles.timeSincePreviousText}>{timeSincePrevious}</Text> : null}
           {firstLine ? (
             <Text style={styles.notesPreview} numberOfLines={1} ellipsizeMode="tail">
               {firstLine}
@@ -189,6 +192,11 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 2,
     fontWeight: '600',
+  },
+  timeSincePreviousText: {
+    color: '#007AFF',
+    fontSize: 12,
+    marginTop: 2,
   },
   textContainer: {
     flex: 1,

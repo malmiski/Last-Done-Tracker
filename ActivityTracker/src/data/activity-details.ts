@@ -9,8 +9,8 @@ export interface ActivityEntry {
   startDate: Date;
   endDate: Date;
   notes?: string;
-  images?: string[]; // base64 encoded image
-  thumbnails?: string[]; // base64 encoded smaller image
+  image?: string; // base64 encoded image
+  thumbnail?: string; // base64 encoded smaller image
   tags?: Tag[];
 }
 
