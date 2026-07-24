@@ -42,7 +42,7 @@ const ActivityListItem: React.FC<ActivityListItemProps> = ({
   useEffect(() => {
     if (lastEntryDate) {
       const interval = setInterval(() => {
-        setTimeAgo(formatTimeSince(lastEntryDate));
+        setTimeAgo(formatTimeSince(lastEntryDate, new Date(), ' ago'));
       }, 1000);
       return () => clearInterval(interval);
     }
