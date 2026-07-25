@@ -3,7 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
 import { Activity } from '../data/activities';
-import { formatTimeSince } from '../utils/time';
+import { formatTimeAgo } from '../utils/time';
 
 interface ActivityListItemProps {
   item: Activity;
@@ -30,7 +30,7 @@ const ActivityListItem: React.FC<ActivityListItemProps> = ({
     isFirst,
     isLast
 }) => {
-  const [timeAgo, setTimeAgo] = useState(lastEntryDate ? formatTimeSince(lastEntryDate) : 'Never');
+  const [timeAgo, setTimeAgo] = useState(lastEntryDate ? formatTimeAgo(lastEntryDate) : 'Never');
   const addButtonRef = React.useRef<TouchableOpacity>(null);
 
   const handleAddTime = () => {
@@ -42,7 +42,7 @@ const ActivityListItem: React.FC<ActivityListItemProps> = ({
   useEffect(() => {
     if (lastEntryDate) {
       const interval = setInterval(() => {
-        setTimeAgo(formatTimeSince(lastEntryDate, new Date(), ' ago'));
+        setTimeAgo(formatTimeAgo(lastEntryDate, new Date(), ' ago'));
       }, 1000);
       return () => clearInterval(interval);
     }
