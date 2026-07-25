@@ -6,7 +6,7 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import ActivityHistoryItem, { ImageMode } from '../src/components/ActivityHistoryItem';
 import { useActivityData } from '../src/hooks/useActivityData';
-import { formatTimeSince } from '../src/utils/time';
+import { formatTimeAgo } from '../src/utils/time';
 
 const ActivityDetailScreen: React.FC = () => {
   const router = useRouter();
@@ -36,7 +36,7 @@ const ActivityDetailScreen: React.FC = () => {
   const scrollToRandom = () => {
     if (filteredHistory.length > 0) {
       const randomIndex = Math.floor(Math.random() * filteredHistory.length);
-      flatListRef.current?.scrollToIndex({ index: randomIndex, animated: false });
+      flatListRef.current?.scrollToIndex({ index: randomIndex, animated: true });
     }
   };
 
@@ -112,14 +112,14 @@ const ActivityDetailScreen: React.FC = () => {
         ref={flatListRef}
         data={filteredHistory}
         onScrollToIndexFailed={(info) => {
-          flatListRef.current?.scrollToOffset({ offset: info.averageItemLength * info.index, animated: false });
-          setTimeout(() => {
-            flatListRef.current?.scrollToIndex({ index: info.index, animated: false });
-          }, 100);
+          const wait = new Promise(resolve => setTimeout(resolve, 500));
+          wait.then(() => {
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+          });
         }}
         renderItem={({ item, index }) => {
           const previousEntry = index < filteredHistory.length - 1 ? filteredHistory[index + 1] : undefined;
-          const timeSincePrevious = previousEntry ? formatTimeSince(previousEntry.startDate, item.startDate) : undefined;
+          const timeSincePrevious = previousEntry ? formatTimeAgo(previousEntry.startDate, item.startDate) : undefined;
 
           return (
             <ActivityHistoryItem

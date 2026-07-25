@@ -111,14 +111,14 @@ export const useActivityData = () => {
     await database.updateActivitiesOrder(newActivities);
   };
 
-  const addActivityEntry = async (activityId: string, startDate: Date, endDate: Date, notes?: string, image?: string, thumbnail?: string, entryTags?: Tag[]) => {
+  const addActivityEntry = async (activityId: string, startDate: Date, endDate: Date, notes?: string, images?: string[], thumbnails?: string[], entryTags?: Tag[]) => {
     const newEntry: ActivityEntry = {
-      id: await generateActivityId(Math.random().toString()),
-      startDate: startDate,
-      endDate: endDate,
+      id: await generateActivityId(activityId + startDate.getTime().toString()),
+      startDate,
+      endDate,
       notes: notes,
-      image: image,
-      thumbnail: thumbnail,
+      images: images,
+      thumbnails: thumbnails,
       tags: entryTags,
     };
 
@@ -140,17 +140,17 @@ export const useActivityData = () => {
     return newEntry.id;
   };
 
-  const updateActivityEntry = async (activityId: string, entryId: string, startDate: Date, endDate: Date, notes?: string, image?: string, thumbnail?: string, entryTags?: Tag[]) => {
-    const entry: ActivityEntry = {
+  const updateActivityEntry = async (activityId: string, entryId: string, startDate: Date, endDate: Date, notes?: string, images?: string[], thumbnails?: string[], entryTags?: Tag[]) => {
+    const updatedEntry: ActivityEntry = {
         id: entryId,
-        startDate: startDate,
-        endDate: endDate,
+        startDate,
+        endDate,
         notes: notes,
-        image: image,
-        thumbnail: thumbnail,
+        images: images,
+        thumbnails: thumbnails,
         tags: entryTags,
     };
-    await database.updateEntry(entry);
+    await database.updateEntry(updatedEntry);
 
     setActivityDetails(prev => {
       const updated = { ...prev };

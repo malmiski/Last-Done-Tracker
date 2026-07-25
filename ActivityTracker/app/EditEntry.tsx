@@ -35,8 +35,7 @@ const EditEntryScreen: React.FC = () => {
   const [endAmpm, setEndAmpm] = useState('');
 
   const [notes, setNotes] = useState('');
-  const [image, setImage] = useState<string | undefined>(undefined);
-  const [thumbnail, setThumbnail] = useState<string | undefined>(undefined);
+  const [photos, setPhotos] = useState<{ image: string, thumbnail: string, orderStr: string }[]>([]);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [tagSearch, setTagSearch] = useState('');
   const [isFormValidState, setIsFormValidState] = useState(false);
@@ -127,8 +126,24 @@ const EditEntryScreen: React.FC = () => {
       setEndAmpm(endAmpmVal);
 
       setNotes(entry.notes || '');
-      setImage(entry.image);
-      setThumbnail(entry.thumbnail);
+
+      const newPhotos: { image: string, thumbnail: string, orderStr: string }[] = [];
+      if (entry.images && entry.images.length > 0) {
+          for (let i = 0; i < entry.images.length; i++) {
+              newPhotos.push({
+                  image: entry.images[i],
+                  thumbnail: entry.thumbnails && entry.thumbnails[i] ? entry.thumbnails[i] : entry.images[i],
+                  orderStr: (i + 1).toString()
+              });
+          }
+      } else if (entry.image) {
+          newPhotos.push({
+              image: entry.image,
+              thumbnail: entry.thumbnail || entry.image,
+              orderStr: '1'
+          });
+      }
+      setPhotos(newPhotos);
       setSelectedTags(entry.tags || []);
     }
   }, [entry]);
@@ -137,21 +152,27 @@ const EditEntryScreen: React.FC = () => {
     setIsFormValidState(isFormValid());
   }, [year, month, day, hour, minute, second, ampm, endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm]);
 
-  const handleImageInput = async (uri: string) => {
+  const handleImageInput = async (uri: string, replaceIndex: number = -1) => {
     try {
-      const [fullImage, thumbImage] = await Promise.all([
-        processImage(uri),
-        generateThumbnail(uri)
-      ]);
-      setImage(fullImage);
-      setThumbnail(thumbImage);
+      const processedUri = await processImage(uri);
+      const thumbImage = await generateThumbnail(processedUri);
+
+      setPhotos(prev => {
+          const newPhotos = [...prev];
+          if (replaceIndex >= 0 && replaceIndex < newPhotos.length) {
+              newPhotos[replaceIndex] = { ...newPhotos[replaceIndex], image: processedUri, thumbnail: thumbImage };
+          } else {
+              newPhotos.push({ image: processedUri, thumbnail: thumbImage, orderStr: (newPhotos.length + 1).toString() });
+          }
+          return newPhotos;
+      });
     } catch (e) {
       Alert.alert("Error processing image");
       console.error(e);
     }
   };
 
-  const pickImage = async () => {
+  const pickImage = async (replaceIndex: number = -1) => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsEditing: true,
@@ -159,11 +180,11 @@ const EditEntryScreen: React.FC = () => {
     });
 
     if (!result.canceled && result.assets && result.assets[0].uri) {
-      await handleImageInput(result.assets[0].uri);
+      await handleImageInput(result.assets[0].uri, replaceIndex);
     }
   };
 
-  const pasteImage = async () => {
+  const pasteImage = async (replaceIndex: number = -1) => {
     const hasImage = await Clipboard.hasImageAsync();
     if (hasImage) {
       const imageBase64 = await Clipboard.getImageAsync({ format: 'png' }); // Clipboard currently only supports png/jpg
@@ -173,7 +194,7 @@ const EditEntryScreen: React.FC = () => {
         if (!uri.startsWith('data:')) {
             uri = `data:image/png;base64,${uri}`;
         }
-        await handleImageInput(uri);
+        await handleImageInput(uri, replaceIndex);
       }
     } else {
       Alert.alert("No image found in clipboard");
@@ -239,7 +260,9 @@ const EditEntryScreen: React.FC = () => {
     if (activityId && entryId && isFormValid()) {
       const startDate = getFullDate(year, month, day, hour, minute, second, ampm);
       const endDate = getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
-      updateActivityEntry(activityId, entryId, startDate, endDate, notes, image, thumbnail, selectedTags);
+      const images = photos.length > 0 ? photos.map(p => p.image) : undefined;
+      const thumbnails = photos.length > 0 ? photos.map(p => p.thumbnail) : undefined;
+      updateActivityEntry(activityId, entryId, startDate, endDate, notes, images, thumbnails, selectedTags);
       if (router.canGoBack()) {
         router.back();
       } else {
@@ -501,28 +524,68 @@ const EditEntryScreen: React.FC = () => {
           onChangeText={setNotes}
           multiline
         />
-        <Text style={[styles.label, { marginTop: 20 }]}>Photo</Text>
-        <View style={styles.imageActions}>
-          <TouchableOpacity style={styles.imageButton} onPress={pickImage}>
-            <Icon name="image-plus" size={24} color={theme.colors.text} />
-            <Text style={styles.imageButtonText}>Upload</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.imageButton} onPress={pasteImage}>
-            <Icon name="clipboard-arrow-down-outline" size={24} color={theme.colors.text} />
-            <Text style={styles.imageButtonText}>Paste</Text>
-          </TouchableOpacity>
-          {image && (
-            <TouchableOpacity style={styles.imageButton} onPress={() => { setImage(undefined); setThumbnail(undefined); }}>
-              <Icon name="delete-outline" size={24} color={theme.colors.error || '#FF3B30'} />
-              <Text style={[styles.imageButtonText, { color: theme.colors.error || '#FF3B30' }]}>Remove</Text>
+        <Text style={[styles.label, { marginTop: 20 }]}>Photos</Text>
+
+        {photos.length > 0 && (
+            <TouchableOpacity style={[styles.imageButton, { marginBottom: 15, justifyContent: 'center', backgroundColor: theme.colors.primary }]} onPress={() => {
+                const sorted = [...photos].sort((a, b) => {
+                    const numA = parseInt(a.orderStr) || 0;
+                    const numB = parseInt(b.orderStr) || 0;
+                    return numA - numB;
+                }).map((p, idx) => ({...p, orderStr: (idx + 1).toString()}));
+                setPhotos(sorted);
+            }}>
+                <Icon name="sort" size={20} color="#fff" />
+                <Text style={[styles.imageButtonText, { color: '#fff' }]}>Rearrange</Text>
             </TouchableOpacity>
-          )}
-        </View>
-        {image && (
-          <View style={styles.imagePreviewContainer}>
-            <Image source={{ uri: image }} style={styles.imagePreview} />
-          </View>
         )}
+
+        {photos.map((photo, index) => (
+            <View key={index} style={styles.photoItemContainer}>
+                <Image source={{ uri: photo.image }} style={styles.imagePreview} />
+                <View style={styles.photoControlsRow}>
+                    <View style={styles.orderContainer}>
+                        <Text style={styles.orderLabel}>Order:</Text>
+                        <TextInput
+                            style={styles.orderInput}
+                            value={photo.orderStr}
+                            onChangeText={(text) => {
+                                setPhotos(prev => {
+                                    const newPhotos = [...prev];
+                                    newPhotos[index].orderStr = text;
+                                    return newPhotos;
+                                });
+                            }}
+                            keyboardType="number-pad"
+                        />
+                    </View>
+                    <TouchableOpacity style={styles.photoControlButton} onPress={() => pickImage(index)}>
+                        <Icon name="upload" size={20} color={theme.colors.text} />
+                        <Text style={styles.photoControlText}>Upload</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={styles.photoControlButton} onPress={() => pasteImage(index)}>
+                        <Icon name="clipboard-outline" size={20} color={theme.colors.text} />
+                        <Text style={styles.photoControlText}>Paste</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.photoControlButton, { backgroundColor: '#FF3B30' + '20' }]} onPress={() => {
+                        setPhotos(prev => prev.filter((_, i) => i !== index));
+                    }}>
+                        <Icon name="delete" size={20} color="#FF3B30" />
+                    </TouchableOpacity>
+                </View>
+            </View>
+        ))}
+
+        <View style={styles.imageActions}>
+          <TouchableOpacity style={styles.imageButton} onPress={() => pickImage(-1)}>
+            <Icon name="image-plus" size={24} color={theme.colors.text} />
+            <Text style={styles.imageButtonText}>Add Photo</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.imageButton} onPress={() => pasteImage(-1)}>
+            <Icon name="clipboard-arrow-down-outline" size={24} color={theme.colors.text} />
+            <Text style={styles.imageButtonText}>Paste Photo</Text>
+          </TouchableOpacity>
+        </View>
         <View style={{ height: 40 }} />
       </ScrollView>
       <View style={styles.footer}>
@@ -765,6 +828,49 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 10,
     resizeMode: 'contain',
+  },
+  photoItemContainer: {
+    backgroundColor: theme.colors.card,
+    borderRadius: 15,
+    padding: 10,
+    marginBottom: 15,
+  },
+  photoControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  orderContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  orderLabel: {
+    color: theme.colors.text,
+    marginRight: 5,
+    fontSize: 14,
+  },
+  orderInput: {
+    backgroundColor: theme.colors.background,
+    color: theme.colors.text,
+    borderRadius: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    width: 40,
+    textAlign: 'center',
+  },
+  photoControlButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: theme.colors.background,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    gap: 4,
+  },
+  photoControlText: {
+    color: theme.colors.text,
+    fontSize: 12,
   },
   footer: {
     padding: 20,

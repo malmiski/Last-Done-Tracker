@@ -1,4 +1,4 @@
-export function formatTimeSince(date: Date, now: Date = new Date(), suffix: string = " since last"): string {
+export function formatTimeSince(date: Date, now: Date = new Date(), suffix: string = " ago"): string {
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
   if (seconds < 60) {
