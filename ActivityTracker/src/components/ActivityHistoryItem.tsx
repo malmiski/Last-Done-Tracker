@@ -224,6 +224,7 @@ const styles = StyleSheet.create({
     color: '#007AFF',
     fontSize: 12,
     marginTop: 2,
+    fontWeight: '600',
   },
   textContainer: {
     flex: 1,

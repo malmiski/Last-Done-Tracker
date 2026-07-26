@@ -36,7 +36,7 @@ const ActivityDetailScreen: React.FC = () => {
   const scrollToRandom = () => {
     if (filteredHistory.length > 0) {
       const randomIndex = Math.floor(Math.random() * filteredHistory.length);
-      flatListRef.current?.scrollToIndex({ index: randomIndex, animated: true });
+      flatListRef.current?.scrollToIndex({ index: randomIndex, animated: false });
     }
   };
 
@@ -81,7 +81,7 @@ const ActivityDetailScreen: React.FC = () => {
           <TouchableOpacity onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace("/Activities"); } }}>
             <Icon name="arrow-left" size={30} color={theme.colors.text} />
           </TouchableOpacity>
-          <TouchableOpacity onPress={scrollToRandom} style={{marginLeft: 15}}>
+          <TouchableOpacity testID="dice-button" onPress={scrollToRandom} style={{marginLeft: 15}}>
             <Icon name="dice-multiple" size={30} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
@@ -114,12 +114,12 @@ const ActivityDetailScreen: React.FC = () => {
         onScrollToIndexFailed={(info) => {
           const wait = new Promise(resolve => setTimeout(resolve, 500));
           wait.then(() => {
-            flatListRef.current?.scrollToIndex({ index: info.index, animated: true });
+            flatListRef.current?.scrollToIndex({ index: info.index, animated: false });
           });
         }}
         renderItem={({ item, index }) => {
           const previousEntry = index < filteredHistory.length - 1 ? filteredHistory[index + 1] : undefined;
-          const timeSincePrevious = previousEntry ? formatTimeAgo(previousEntry.startDate, item.startDate) : undefined;
+          const timeSincePrevious = previousEntry ? formatTimeAgo(previousEntry.startDate, item.startDate, " since last time") : undefined;
 
           return (
             <ActivityHistoryItem

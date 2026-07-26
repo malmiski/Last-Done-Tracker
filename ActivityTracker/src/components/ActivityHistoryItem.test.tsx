@@ -163,4 +163,22 @@ describe('ActivityHistoryItem', () => {
     expect(tree.toJSON()).not.toBeNull();
     expect(tree.toJSON()).toMatchSnapshot();
   });
+
+  it('renders correctly with timeSincePrevious', async () => {
+    const date = new Date('2023-01-01T12:00:00Z');
+    let tree;
+    await act(async () => {
+      tree = renderer.create(
+        <ActivityHistoryItem
+          startDate={date}
+          endDate={date}
+          timeSincePrevious="5 minutes since last time"
+          onEdit={() => {}}
+          onDelete={() => {}}
+        />
+      );
+    });
+    expect(tree.toJSON()).not.toBeNull();
+    expect(tree.toJSON()).toMatchSnapshot();
+  });
 });
