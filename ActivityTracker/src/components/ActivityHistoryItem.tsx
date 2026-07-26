@@ -17,6 +17,8 @@ interface ActivityHistoryItemProps {
   onDelete: () => void;
   imageMode?: ImageMode;
   tags?: Tag[];
+  lastEntryEndDate?: Date;
+  image?: string;
 }
 
 const formatDate = (date: Date) => {
@@ -45,6 +47,27 @@ const formatDuration = (start: Date, end: Date) => {
   return `${diffMins} minute${diffMins !== 1 ? 's' : ''}`;
 };
 
+const formatSinceLastTime = (start: Date, end: Date) => {
+  const diffMs = end.getTime() - start.getTime();
+  if (diffMs <= 0) return null;
+
+  const diffMins = Math.floor(diffMs / 60000);
+  const diffHours = Math.floor(diffMins / 60);
+  const remainingMins = diffMins % 60;
+
+  const diffDays = Math.floor(diffHours / 24);
+  const remainingHours = diffHours % 24;
+
+  if (diffDays > 0) {
+    return `${diffDays} day${diffDays > 1 ? 's' : ''}${remainingHours > 0 ? ` ${remainingHours} hour${remainingHours > 1 ? 's' : ''}` : ''} since last time`;
+  }
+
+  if (diffHours > 0) {
+    return `${diffHours} hour${diffHours > 1 ? 's' : ''}${remainingMins > 0 ? ` ${remainingMins} minute${remainingMins > 1 ? 's' : ''}` : ''} since last time`;
+  }
+  return `${diffMins} minute${diffMins !== 1 ? 's' : ''} since last time`;
+};
+
 const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
   startDate,
   endDate,
@@ -54,17 +77,20 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
   onEdit,
   onDelete,
   imageMode = 'small',
-  tags = []
+  tags = [],
+  lastEntryEndDate,
+  image
 }) => {
   const firstLine = notes ? notes.split('\n')[0] : '';
   const duration = formatDuration(startDate, endDate);
   const isDifferentDate = startDate.getTime() !== endDate.getTime();
+  const timeSinceLast = lastEntryEndDate ? formatSinceLastTime(lastEntryEndDate, startDate) : null;
 
   const renderImages = () => {
-    if (imageMode === 'hidden' || (!images && !thumbnails)) return null;
+    if (imageMode === 'hidden' && !image) return null;
 
-    const availableImages = images && images.length > 0 ? images : null;
-    const availableThumbnails = thumbnails && thumbnails.length > 0 ? thumbnails : null;
+    const availableImages = images && images.length > 0 ? images : (image ? [image] : null);
+    const availableThumbnails = thumbnails && thumbnails.length > 0 ? thumbnails : (image ? [image] : null);
 
     if (!availableImages && !availableThumbnails) return null;
 
@@ -100,7 +126,7 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
     return null;
   };
 
-  const isLarge = imageMode === 'large' && ((images && images.length > 0) || (thumbnails && thumbnails.length > 0));
+  const isLarge = imageMode === 'large' && ((images && images.length > 0) || (thumbnails && thumbnails.length > 0) || image);
   const hasMultipleInRow = (imageMode === 'small' || imageMode === 'medium') && ((images && images.length > 1) || (thumbnails && thumbnails.length > 1));
 
   return (
@@ -114,6 +140,7 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
             {isDifferentDate ? ` - ${formatDate(endDate)}` : ''}
           </Text>
           {duration ? <Text style={styles.durationText}>{duration}</Text> : null}
+          {timeSinceLast ? <Text style={styles.sinceLastText}>{timeSinceLast}</Text> : null}
           {firstLine ? (
             <Text style={styles.notesPreview} numberOfLines={1} ellipsizeMode="tail">
               {firstLine}
@@ -186,6 +213,12 @@ const styles = StyleSheet.create({
   },
   durationText: {
     color: theme.colors.primary,
+    fontSize: 12,
+    marginTop: 2,
+    fontWeight: '600',
+  },
+  sinceLastText: {
+    color: '#007AFF',
     fontSize: 12,
     marginTop: 2,
     fontWeight: '600',

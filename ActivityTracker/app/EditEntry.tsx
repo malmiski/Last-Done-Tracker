@@ -173,14 +173,24 @@ const EditEntryScreen: React.FC = () => {
   };
 
   const pickImage = async (replaceIndex: number = -1) => {
+    const isMultiple = replaceIndex === -1;
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
-      allowsEditing: true,
+      allowsEditing: !isMultiple,
+      allowsMultipleSelection: isMultiple,
       quality: 1,
     });
 
-    if (!result.canceled && result.assets && result.assets[0].uri) {
-      await handleImageInput(result.assets[0].uri, replaceIndex);
+    if (!result.canceled && result.assets && result.assets.length > 0) {
+      if (isMultiple) {
+        for (const asset of result.assets) {
+          if (asset.uri) {
+            await handleImageInput(asset.uri, -1);
+          }
+        }
+      } else {
+        await handleImageInput(result.assets[0].uri, replaceIndex);
+      }
     }
   };
 
@@ -227,7 +237,7 @@ const EditEntryScreen: React.FC = () => {
     setEndMonth((date.getMonth() + 1).toString());
     setEndDay(date.getDate().toString());
     let hours = date.getHours();
-    const ampmVal = hours >= 12 ? 'PM' : 'AM';
+    const endAmpmVal = hours >= 12 ? 'PM' : 'AM';
     hours = hours % 12;
     hours = hours ? hours : 12;
     setEndHour(hours.toString());

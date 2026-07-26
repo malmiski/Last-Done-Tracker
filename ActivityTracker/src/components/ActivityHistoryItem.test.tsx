@@ -35,6 +35,25 @@ describe('ActivityHistoryItem', () => {
     expect(tree.toJSON()).toMatchSnapshot();
   });
 
+  it('renders correctly with lastEntryEndDate prop (blue text)', async () => {
+    const date = new Date('2023-01-01T12:05:00Z');
+    const prevDate = new Date('2023-01-01T12:00:00Z');
+    let tree;
+    await act(async () => {
+      tree = renderer.create(
+        <ActivityHistoryItem
+          startDate={date}
+          endDate={date}
+          lastEntryEndDate={prevDate}
+          onEdit={() => {}}
+          onDelete={() => {}}
+        />
+      );
+    });
+    expect(tree.toJSON()).not.toBeNull();
+    expect(tree.toJSON()).toMatchSnapshot();
+  });
+
   it('renders correctly with an image and small imageMode', async () => {
     const date = new Date('2023-01-01T12:00:00Z');
     let tree;

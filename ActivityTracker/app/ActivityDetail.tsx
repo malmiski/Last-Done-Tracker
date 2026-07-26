@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
@@ -13,6 +13,17 @@ const ActivityDetailScreen: React.FC = () => {
   const { activityDetails, getActivityById, addActivityEntry, deleteActivityEntry, refreshData } = useActivityData();
   const [imageMode, setImageMode] = useState<ImageMode>('small');
   const [searchQuery, setSearchQuery] = useState('');
+  const flatListRef = useRef<FlatList>(null);
+
+  const handleDicePress = () => {
+    if (filteredHistory.length > 0) {
+      const randomIndex = Math.floor(Math.random() * filteredHistory.length);
+      flatListRef.current?.scrollToIndex({
+        index: randomIndex,
+        animated: false,
+      });
+    }
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -65,9 +76,14 @@ const ActivityDetailScreen: React.FC = () => {
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace("/Activities"); } }}>
-          <Icon name="arrow-left" size={30} color={theme.colors.text} />
-        </TouchableOpacity>
+        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <TouchableOpacity onPress={() => { if (router.canGoBack()) { router.back(); } else { router.replace("/Activities"); } }}>
+            <Icon name="arrow-left" size={30} color={theme.colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={handleDicePress} style={{ marginLeft: 15 }}>
+            <Icon name="dice-6" size={30} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
         <Text style={styles.title}>{activity.name}</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity onPress={cycleImageMode} style={{ paddingRight: 10 }}>
@@ -92,22 +108,40 @@ const ActivityDetailScreen: React.FC = () => {
         />
       </View>
       <FlatList
+        ref={flatListRef}
         data={filteredHistory}
-        renderItem={({ item }) => (
-          <ActivityHistoryItem
-            startDate={item.startDate}
-            endDate={item.endDate}
-            notes={item.notes}
-            images={item.images}
-            thumbnails={item.thumbnails}
-            imageMode={imageMode}
-            tags={item.tags}
-            onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
-            onDelete={() => deleteActivityEntry(activityId, item.id)}
-          />
-        )}
+        renderItem={({ item, index }) => {
+          const chronologicalNextItem = filteredHistory[index + 1];
+          const lastEntryEndDate = chronologicalNextItem ? chronologicalNextItem.endDate : undefined;
+          return (
+            <ActivityHistoryItem
+              startDate={item.startDate}
+              endDate={item.endDate}
+              notes={item.notes}
+              images={item.images}
+              thumbnails={item.thumbnails}
+              imageMode={imageMode}
+              tags={item.tags}
+              lastEntryEndDate={lastEntryEndDate}
+              onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
+              onDelete={() => deleteActivityEntry(activityId, item.id)}
+            />
+          );
+        }}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
+        onScrollToIndexFailed={(info) => {
+          flatListRef.current?.scrollToOffset({
+            offset: info.highestMeasuredFrameIndex * 120,
+            animated: false,
+          });
+          setTimeout(() => {
+            flatListRef.current?.scrollToIndex({
+              index: info.index,
+              animated: false,
+            });
+          }, 50);
+        }}
       />
       <TouchableOpacity
         style={styles.fab}

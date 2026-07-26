@@ -141,17 +141,22 @@ const SearchByTagScreen: React.FC = () => {
         renderSectionHeader={({ section: { title } }) => (
           <Text style={styles.activityLabel}>{title}</Text>
         )}
-        renderItem={({ item }) => (
-          <ActivityHistoryItem
-            startDate={item.startDate}
-            endDate={item.endDate}
-            notes={item.notes}
-            image={item.image}
-            tags={item.tags}
-            onEdit={() => router.push(`/EditEntry?activityId=${item.activityId}&entryId=${item.id}`)}
-            onDelete={() => handleDeleteEntry(item.activityId, item.id)}
-          />
-        )}
+        renderItem={({ item, index, section }) => {
+          const chronologicalNextItem = section.data[index + 1];
+          const lastEntryEndDate = chronologicalNextItem ? chronologicalNextItem.endDate : undefined;
+          return (
+            <ActivityHistoryItem
+              startDate={item.startDate}
+              endDate={item.endDate}
+              notes={item.notes}
+              image={item.image}
+              tags={item.tags}
+              lastEntryEndDate={lastEntryEndDate}
+              onEdit={() => router.push(`/EditEntry?activityId=${item.activityId}&entryId=${item.id}`)}
+              onDelete={() => handleDeleteEntry(item.activityId, item.id)}
+            />
+          );
+        }}
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
             <Icon name={selectedTagIds.length > 0 ? "timer-sand-empty" : "tag-multiple-outline"} size={60} color={theme.colors.disabled} />
