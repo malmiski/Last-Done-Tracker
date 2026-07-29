@@ -81,7 +81,7 @@ const ActivityDetailScreen: React.FC = () => {
             <Icon name="arrow-left" size={30} color={theme.colors.text} />
           </TouchableOpacity>
           <TouchableOpacity onPress={handleDicePress} style={{ marginLeft: 15 }}>
-            <Icon name="dice-6" size={30} color={theme.colors.text} />
+            <Icon name="dice-multiple" size={30} color={theme.colors.text} />
           </TouchableOpacity>
         </View>
         <Text style={styles.title}>{activity.name}</Text>

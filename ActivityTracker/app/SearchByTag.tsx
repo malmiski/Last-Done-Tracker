@@ -138,6 +138,9 @@ const SearchByTagScreen: React.FC = () => {
         sections={groupedEntries}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
+        initialNumToRender={10}
+        windowSize={5}
+        maxToRenderPerBatch={10}
         renderSectionHeader={({ section: { title } }) => (
           <Text style={styles.activityLabel}>{title}</Text>
         )}

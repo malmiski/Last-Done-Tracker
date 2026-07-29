@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Image, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Image, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 
 interface LargeImageGalleryProps {
@@ -11,9 +11,41 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
   const [imageSizes, setImageSizes] = useState<{ [key: number]: { width: number, height: number } }>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
+  const [isGalleryVisible, setIsGalleryVisible] = useState(Platform.OS !== 'web');
+  const galleryRef = useRef<any>(null);
 
   useEffect(() => {
-    if (containerWidth === 0) return;
+    if (Platform.OS !== 'web') return;
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+      setIsGalleryVisible(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsGalleryVisible(true);
+          observer.disconnect();
+        }
+      },
+      {
+        rootMargin: '300px',
+        threshold: 0.01,
+      }
+    );
+
+    const el = galleryRef.current;
+    if (el) {
+      observer.observe(el);
+    }
+
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isGalleryVisible || containerWidth === 0) return;
 
     images.forEach((imgStr, idx) => {
       if (imgStr === "failed") return;
@@ -53,6 +85,15 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
       scrollViewRef.current.scrollTo({ x: index * containerWidth, animated: true });
     }
   };
+
+  if (Platform.OS === 'web' && !isGalleryVisible) {
+    return (
+      <View
+        ref={galleryRef}
+        style={[styles.container, { height: 200, backgroundColor: 'transparent' }]}
+      />
+    );
+  }
 
   return (
     <View

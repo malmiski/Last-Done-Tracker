@@ -4,6 +4,7 @@ import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
 import { Tag } from '../data/activity-details';
 import LargeImageGallery from './LargeImageGallery';
+import LazyImage from './LazyImage';
 
 export type ImageMode = 'small' | 'medium' | 'large' | 'hidden';
 
@@ -101,7 +102,7 @@ const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
       const elements = itemsToRender.map((imgStr, idx) => {
          if (imgStr === "failed") return null;
          const source = { uri: imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}` };
-         return <Image key={idx} source={source} style={imageMode === 'medium' ? styles.thumbnailMedium : styles.thumbnailSmall} />;
+         return <LazyImage key={idx} source={source} style={imageMode === 'medium' ? styles.thumbnailMedium : styles.thumbnailSmall} />;
       });
 
       if (isMultiple) {
