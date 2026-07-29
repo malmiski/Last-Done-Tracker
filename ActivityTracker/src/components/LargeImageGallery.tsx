@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, ScrollView, TouchableOpacity, StyleSheet, Platform, useWindowDimensions, Image } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
-import LazyImage from './LazyImage';
 
 interface LargeImageGalleryProps {
   images: string[];
@@ -89,7 +88,7 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
                   alignItems: 'center'
                 }}
               >
-                <LazyImage
+                <Image
                   source={{ uri }}
                   style={{ width: size.width, height: size.height, borderRadius: 10 }}
                   resizeMode="contain"

@@ -12,6 +12,17 @@ const ACTIVITY_DETAILS_KEY = '@activityDetails';
 
 let db: IDBDatabase | null = null;
 
+const parseJsonArray = (str: any) => {
+    if (!str) return undefined;
+    try {
+        const parsed = JSON.parse(str);
+        if (Array.isArray(parsed)) return parsed;
+        return [str];
+    } catch (e) {
+        return [str];
+    }
+};
+
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, 3); // Bumped version for new stores
@@ -96,11 +107,11 @@ const migrateDatabase = async (db: IDBDatabase) => {
                     needsUpdate = true;
                 }
                 if (entry.image !== undefined && entry.images === undefined) {
-                    entry.images = entry.image ? [entry.image] : undefined;
+                    entry.images = parseJsonArray(entry.image);
                     needsUpdate = true;
                 }
                 if (entry.thumbnail !== undefined && entry.thumbnails === undefined) {
-                    entry.thumbnails = entry.thumbnail ? [entry.thumbnail] : undefined;
+                    entry.thumbnails = parseJsonArray(entry.thumbnail);
                     needsUpdate = true;
                 }
 
@@ -285,11 +296,11 @@ const fetchTagsForEntries = async (db: IDBDatabase, entries: any[]): Promise<any
 
         let images = row.images;
         if (row.image !== undefined && images === undefined) {
-            images = row.image ? [row.image] : undefined;
+            images = parseJsonArray(row.image);
         }
         let thumbnails = row.thumbnails;
         if (row.thumbnail !== undefined && thumbnails === undefined) {
-            thumbnails = row.thumbnail ? [row.thumbnail] : undefined;
+            thumbnails = parseJsonArray(row.thumbnail);
         }
 
         results.push({
