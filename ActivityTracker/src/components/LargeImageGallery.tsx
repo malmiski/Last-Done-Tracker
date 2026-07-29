@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Image, ScrollView, TouchableOpacity, StyleSheet, Platform, useWindowDimensions } from 'react-native';
+import { View, ScrollView, TouchableOpacity, StyleSheet, Platform, useWindowDimensions, Image } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
+import LazyImage from './LazyImage';
 
 interface LargeImageGalleryProps {
   images: string[];
@@ -13,41 +14,9 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
   const [imageSizes, setImageSizes] = useState<{ [key: number]: { width: number, height: number } }>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
-  const [isGalleryVisible, setIsGalleryVisible] = useState(Platform.OS !== 'web');
-  const galleryRef = useRef<any>(null);
 
   useEffect(() => {
-    if (Platform.OS !== 'web') return;
-    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
-      setIsGalleryVisible(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsGalleryVisible(true);
-          observer.disconnect();
-        }
-      },
-      {
-        rootMargin: '300px',
-        threshold: 0.01,
-      }
-    );
-
-    const el = galleryRef.current;
-    if (el) {
-      observer.observe(el);
-    }
-
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!isGalleryVisible || containerWidth === 0) return;
+    if (containerWidth === 0) return;
 
     images.forEach((imgStr, idx) => {
       if (imgStr === "failed") return;
@@ -68,7 +37,7 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
          setImageSizes((prev) => ({ ...prev, [idx]: { width: containerWidth, height: 200 } }));
       });
     });
-  }, [images, containerWidth, isGalleryVisible]);
+  }, [images, containerWidth]);
 
   const maxHeight = Object.values(imageSizes).length > 0
       ? Math.max(...Object.values(imageSizes).map(s => s.height))
@@ -87,20 +56,6 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
       scrollViewRef.current.scrollTo({ x: index * containerWidth, animated: true });
     }
   };
-
-  if (Platform.OS === 'web' && !isGalleryVisible) {
-    return (
-      <div
-        ref={galleryRef}
-        style={{
-          width: '100%',
-          height: '200px',
-          backgroundColor: 'transparent',
-          marginBottom: '15px',
-        }}
-      />
-    );
-  }
 
   return (
     <View
@@ -134,7 +89,7 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
                   alignItems: 'center'
                 }}
               >
-                <Image
+                <LazyImage
                   source={{ uri }}
                   style={{ width: size.width, height: size.height, borderRadius: 10 }}
                   resizeMode="contain"
