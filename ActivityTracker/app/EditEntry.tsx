@@ -39,6 +39,8 @@ const EditEntryScreen: React.FC = () => {
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [tagSearch, setTagSearch] = useState('');
   const [isFormValidState, setIsFormValidState] = useState(false);
+  const [startAmpmDropdownVisible, setStartAmpmDropdownVisible] = useState(false);
+  const [endAmpmDropdownVisible, setEndAmpmDropdownVisible] = useState(false);
 
   const filteredAvailableTags = tags.filter(tag =>
     !selectedTags.find(t => t.id === tag.id) &&
@@ -266,6 +268,26 @@ const EditEntryScreen: React.FC = () => {
     updateEndStates(newEnd);
   };
 
+  const setStartTimeToNow = () => {
+    const now = new Date();
+    const end = getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
+    let newStart = now;
+    if (newStart > end) {
+      newStart = end;
+    }
+    updateStartStates(newStart);
+  };
+
+  const setEndTimeToNow = () => {
+    const now = new Date();
+    const start = getFullDate(year, month, day, hour, minute, second, ampm);
+    let newEnd = now;
+    if (newEnd < start) {
+      newEnd = start;
+    }
+    updateEndStates(newEnd);
+  };
+
   const handleSave = () => {
     if (activityId && entryId && isFormValid()) {
       const startDate = getFullDate(year, month, day, hour, minute, second, ampm);
@@ -324,6 +346,21 @@ const EditEntryScreen: React.FC = () => {
         <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionLabel}>Start Date & Time</Text>
             <View style={styles.quickActions}>
+                <TouchableOpacity onPress={setStartTimeToNow} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>Now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => adjustStartTime(24 * 60)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>+1d</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => adjustStartTime(-24 * 60)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>-1d</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => adjustStartTime(60)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>+1h</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => adjustStartTime(-60)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>-1h</Text>
+                </TouchableOpacity>
                 <TouchableOpacity onPress={() => adjustStartTime(5)} style={styles.quickButton}>
                     <Text style={styles.quickButtonText}>+5m</Text>
                 </TouchableOpacity>
@@ -362,7 +399,7 @@ const EditEntryScreen: React.FC = () => {
           />
         </View>
         <Text style={styles.label}>Time</Text>
-        <View style={styles.inputRow}>
+        <View style={[styles.inputRow, { zIndex: 100 }]}>
           <TextInput
             style={styles.input}
             placeholder="HH"
@@ -389,18 +426,58 @@ const EditEntryScreen: React.FC = () => {
             keyboardType="number-pad"
             maxLength={2}
           />
-          <TextInput
-            style={[styles.input, { width: 60 , marginLeft: 15}]}
-            placeholder="AM/PM"
-            value={ampm}
-            onChangeText={setAmpm}
-            maxLength={2}
-          />
+          <View style={{ zIndex: 10, position: 'relative' }}>
+            <TouchableOpacity
+              style={[styles.input, { width: 85, marginLeft: 15, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 }]}
+              onPress={() => setStartAmpmDropdownVisible(!startAmpmDropdownVisible)}
+            >
+              <Text style={{ color: theme.colors.text, fontSize: 18 }}>{ampm || 'AM'}</Text>
+              <Icon name={startAmpmDropdownVisible ? "chevron-up" : "chevron-down"} size={16} color={theme.colors.text} />
+            </TouchableOpacity>
+
+            {startAmpmDropdownVisible && (
+              <View style={styles.dropdownContainer}>
+                <TouchableOpacity
+                  style={styles.dropdownOption}
+                  onPress={() => {
+                    setAmpm('AM');
+                    setStartAmpmDropdownVisible(false);
+                  }}
+                >
+                  <Text style={styles.dropdownOptionText}>AM</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.dropdownOption, { borderBottomWidth: 0 }]}
+                  onPress={() => {
+                    setAmpm('PM');
+                    setStartAmpmDropdownVisible(false);
+                  }}
+                >
+                  <Text style={styles.dropdownOptionText}>PM</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
 
         <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionLabel}>End Date & Time</Text>
             <View style={styles.quickActions}>
+                <TouchableOpacity onPress={setEndTimeToNow} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>Now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => adjustEndTime(24 * 60)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>+1d</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => adjustEndTime(-24 * 60)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>-1d</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => adjustEndTime(60)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>+1h</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => adjustEndTime(-60)} style={styles.quickButton}>
+                    <Text style={styles.quickButtonText}>-1h</Text>
+                </TouchableOpacity>
                 <TouchableOpacity onPress={() => adjustEndTime(5)} style={styles.quickButton}>
                     <Text style={styles.quickButtonText}>+5m</Text>
                 </TouchableOpacity>
@@ -439,7 +516,7 @@ const EditEntryScreen: React.FC = () => {
           />
         </View>
         <Text style={styles.label}>Time</Text>
-        <View style={styles.inputRow}>
+        <View style={[styles.inputRow, { zIndex: 50 }]}>
           <TextInput
             style={styles.input}
             placeholder="HH"
@@ -466,13 +543,38 @@ const EditEntryScreen: React.FC = () => {
             keyboardType="number-pad"
             maxLength={2}
           />
-          <TextInput
-            style={[styles.input, { width: 60 , marginLeft: 15}]}
-            placeholder="AM/PM"
-            value={endAmpm}
-            onChangeText={setEndAmpm}
-            maxLength={2}
-          />
+          <View style={{ zIndex: 10, position: 'relative' }}>
+            <TouchableOpacity
+              style={[styles.input, { width: 85, marginLeft: 15, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 }]}
+              onPress={() => setEndAmpmDropdownVisible(!endAmpmDropdownVisible)}
+            >
+              <Text style={{ color: theme.colors.text, fontSize: 18 }}>{endAmpm || 'AM'}</Text>
+              <Icon name={endAmpmDropdownVisible ? "chevron-up" : "chevron-down"} size={16} color={theme.colors.text} />
+            </TouchableOpacity>
+
+            {endAmpmDropdownVisible && (
+              <View style={styles.dropdownContainer}>
+                <TouchableOpacity
+                  style={styles.dropdownOption}
+                  onPress={() => {
+                    setEndAmpm('AM');
+                    setEndAmpmDropdownVisible(false);
+                  }}
+                >
+                  <Text style={styles.dropdownOptionText}>AM</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.dropdownOption, { borderBottomWidth: 0 }]}
+                  onPress={() => {
+                    setEndAmpm('PM');
+                    setEndAmpmDropdownVisible(false);
+                  }}
+                >
+                  <Text style={styles.dropdownOptionText}>PM</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
         </View>
 
         <Text style={[styles.label, { marginTop: 20 }]}>Tags</Text>
@@ -679,13 +781,14 @@ const styles = StyleSheet.create({
     marginBottom: 15,
   },
   sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
     marginTop: 20,
+    gap: 10,
   },
   quickActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     marginBottom: 10,
   },
@@ -726,6 +829,33 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 18,
     marginHorizontal: 10,
+  },
+  dropdownContainer: {
+    position: 'absolute',
+    top: 55,
+    left: 15,
+    width: 85,
+    backgroundColor: theme.colors.card,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: theme.colors.border || '#333',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
+    elevation: 5,
+    zIndex: 9999,
+  },
+  dropdownOption: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.border || '#333',
+  },
+  dropdownOptionText: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: '600',
   },
   tagsContainer: {
     flexDirection: 'row',
