@@ -21,3 +21,6 @@ Web node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓░░
 Web node_modules/expo-router/entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 94.8% (1484/1524)
 Web Bundled 18373ms node_modules/expo-router/entry.js (1562 modules)
  LOG  [web] Logs will appear in the browser console
+Web node_modules/expo-router/entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Web Bundled 1450ms node_modules/expo-router/entry.js (1 module)
+ LOG  [web] Logs will appear in the browser console

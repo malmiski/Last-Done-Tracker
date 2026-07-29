@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Image, ScrollView, TouchableOpacity, StyleSheet, Platform } from 'react-native';
+import { View, Image, ScrollView, TouchableOpacity, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 
 interface LargeImageGalleryProps {
@@ -7,7 +7,9 @@ interface LargeImageGalleryProps {
 }
 
 const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
-  const [containerWidth, setContainerWidth] = useState<number>(0);
+  const { width: screenWidth } = useWindowDimensions();
+  const initialWidth = Platform.OS === 'web' ? screenWidth - 40 : 0;
+  const [containerWidth, setContainerWidth] = useState<number>(initialWidth);
   const [imageSizes, setImageSizes] = useState<{ [key: number]: { width: number, height: number } }>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
@@ -66,7 +68,7 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
          setImageSizes((prev) => ({ ...prev, [idx]: { width: containerWidth, height: 200 } }));
       });
     });
-  }, [images, containerWidth]);
+  }, [images, containerWidth, isGalleryVisible]);
 
   const maxHeight = Object.values(imageSizes).length > 0
       ? Math.max(...Object.values(imageSizes).map(s => s.height))
@@ -88,9 +90,14 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
 
   if (Platform.OS === 'web' && !isGalleryVisible) {
     return (
-      <View
+      <div
         ref={galleryRef}
-        style={[styles.container, { height: 200, backgroundColor: 'transparent' }]}
+        style={{
+          width: '100%',
+          height: '200px',
+          backgroundColor: 'transparent',
+          marginBottom: '15px',
+        }}
       />
     );
   }

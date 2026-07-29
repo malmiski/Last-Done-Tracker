@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
@@ -69,7 +69,40 @@ const formatSinceLastTime = (start: Date, end: Date) => {
   return `${diffMins} minute${diffMins !== 1 ? 's' : ''} since last time`;
 };
 
-const ActivityHistoryItem: React.FC<ActivityHistoryItemProps> = ({
+const areEqual = (prevProps: ActivityHistoryItemProps, nextProps: ActivityHistoryItemProps) => {
+  if (prevProps.imageMode !== nextProps.imageMode) return false;
+  if (prevProps.notes !== nextProps.notes) return false;
+  if (prevProps.image !== nextProps.image) return false;
+
+  if (prevProps.startDate?.getTime() !== nextProps.startDate?.getTime()) return false;
+  if (prevProps.endDate?.getTime() !== nextProps.endDate?.getTime()) return false;
+  if (prevProps.lastEntryEndDate?.getTime() !== nextProps.lastEntryEndDate?.getTime()) return false;
+
+  const prevImages = prevProps.images || [];
+  const nextImages = nextProps.images || [];
+  if (prevImages.length !== nextImages.length) return false;
+  for (let i = 0; i < prevImages.length; i++) {
+    if (prevImages[i] !== nextImages[i]) return false;
+  }
+
+  const prevThumbnails = prevProps.thumbnails || [];
+  const nextThumbnails = nextProps.thumbnails || [];
+  if (prevThumbnails.length !== nextThumbnails.length) return false;
+  for (let i = 0; i < prevThumbnails.length; i++) {
+    if (prevThumbnails[i] !== nextThumbnails[i]) return false;
+  }
+
+  const prevTags = prevProps.tags || [];
+  const nextTags = nextProps.tags || [];
+  if (prevTags.length !== nextTags.length) return false;
+  for (let i = 0; i < prevTags.length; i++) {
+    if (prevTags[i].id !== nextTags[i].id || prevTags[i].name !== nextTags[i].name || prevTags[i].color !== nextTags[i].color) return false;
+  }
+
+  return true;
+};
+
+const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
   startDate,
   endDate,
   notes,
@@ -256,4 +289,5 @@ const styles = StyleSheet.create({
   },
 });
 
+const ActivityHistoryItem = memo(ActivityHistoryItemComponent, areEqual);
 export default ActivityHistoryItem;

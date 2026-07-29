@@ -53,6 +53,6 @@ describe('LazyImage', () => {
       );
     });
     expect(tree.toJSON()).not.toBeNull();
-    expect(tree.toJSON().type).toBe('View');
+    expect(tree.toJSON().type).toBe('div');
   });
 });

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Image, ImageProps, Platform, StyleProp, ViewStyle } from 'react-native';
+import { View, Image, ImageProps, Platform, StyleProp, ViewStyle, StyleSheet } from 'react-native';
 
 interface LazyImageProps extends ImageProps {
   placeholderStyle?: StyleProp<ViewStyle>;
@@ -45,9 +45,13 @@ export const LazyImage: React.FC<LazyImageProps> = ({ source, style, placeholder
   }
 
   return (
-    <View
+    <div
       ref={containerRef}
-      style={[style, placeholderStyle, { backgroundColor: 'transparent' }]}
+      style={{
+        ...StyleSheet.flatten(style),
+        ...StyleSheet.flatten(placeholderStyle),
+        backgroundColor: 'transparent',
+      }}
     />
   );
 };
