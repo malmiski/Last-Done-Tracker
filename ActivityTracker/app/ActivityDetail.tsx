@@ -14,10 +14,30 @@ const ActivityDetailScreen: React.FC = () => {
   const [imageMode, setImageMode] = useState<ImageMode>('small');
   const [searchQuery, setSearchQuery] = useState('');
   const flatListRef = useRef<FlatList>(null);
+  const scrollRetryCount = useRef(0);
+  const targetScrollIndex = useRef<number | null>(null);
+  const scrollTimeoutRef = useRef<any>(null);
+
+  React.useEffect(() => {
+    return () => {
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const handleDicePress = () => {
     if (filteredHistory.length > 0) {
       const randomIndex = Math.floor(Math.random() * filteredHistory.length);
+
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+        scrollTimeoutRef.current = null;
+      }
+
+      scrollRetryCount.current = 0;
+      targetScrollIndex.current = randomIndex;
+
       flatListRef.current?.scrollToIndex({
         index: randomIndex,
         animated: false,
@@ -131,16 +151,46 @@ const ActivityDetailScreen: React.FC = () => {
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
         onScrollToIndexFailed={(info) => {
+          if (scrollRetryCount.current >= 3) {
+            // Stop retrying to prevent an infinite loop/snapping.
+            // Scroll to the estimated offset to get as close as possible.
+            const estimatedOffset = info.index * (info.averageItemLength || 120);
+            flatListRef.current?.scrollToOffset({
+              offset: estimatedOffset,
+              animated: false,
+            });
+            targetScrollIndex.current = null;
+            scrollRetryCount.current = 0;
+            return;
+          }
+
+          scrollRetryCount.current += 1;
+
           flatListRef.current?.scrollToOffset({
             offset: info.highestMeasuredFrameIndex * 120,
             animated: false,
           });
-          setTimeout(() => {
-            flatListRef.current?.scrollToIndex({
-              index: info.index,
-              animated: false,
-            });
+
+          if (scrollTimeoutRef.current) {
+            clearTimeout(scrollTimeoutRef.current);
+          }
+
+          scrollTimeoutRef.current = setTimeout(() => {
+            if (targetScrollIndex.current === info.index) {
+              flatListRef.current?.scrollToIndex({
+                index: info.index,
+                animated: false,
+              });
+            }
           }, 50);
+        }}
+        onScrollBeginDrag={() => {
+          if (scrollTimeoutRef.current) {
+            clearTimeout(scrollTimeoutRef.current);
+            scrollTimeoutRef.current = null;
+          }
+          targetScrollIndex.current = null;
+          scrollRetryCount.current = 0;
         }}
       />
       <TouchableOpacity
