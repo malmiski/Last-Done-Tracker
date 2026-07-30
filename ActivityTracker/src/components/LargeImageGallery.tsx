@@ -12,7 +12,6 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
   const initialWidth = Platform.OS === 'web' ? screenWidth - 40 : 0;
   const [containerWidth, setContainerWidth] = useState<number>(initialWidth);
   const [imageSizes, setImageSizes] = useState<{ [key: number]: { width: number, height: number } }>({});
-  const [objectUrls, setObjectUrls] = useState<{ [key: number]: string }>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -20,29 +19,14 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
     if (containerWidth === 0) return;
 
     let isMounted = true;
-    const generatedUrls: string[] = [];
 
     const loadImages = async () => {
       const promises = images.map(async (imgStr, idx) => {
         if (imgStr === "failed") return;
-        let uri = imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}`;
+        let uri = (imgStr.startsWith('data:') || imgStr.startsWith('blob:')) ? imgStr : `data:image/jpeg;base64,${imgStr}`;
 
-        if (Platform.OS === 'web' && uri.startsWith('data:')) {
-          try {
-            const res = await fetch(uri);
-            const blob = await res.blob();
-            const objectUrl = URL.createObjectURL(blob);
-            if (!isMounted) {
-               URL.revokeObjectURL(objectUrl);
-               return;
-            }
-            generatedUrls.push(objectUrl);
-            setObjectUrls(prev => ({ ...prev, [idx]: objectUrl }));
-            uri = objectUrl;
-          } catch (e) {
-            console.error("Error creating object URL in LargeImageGallery", e);
-          }
-        }
+        // In LargeImageGallery, the Base64 conversion has already been handled
+        // upfront by ActivityHistoryItem, so imgStr is likely already a Blob URL if on web.
 
         Image.getSize(uri, (width, height) => {
           if (!isMounted) return;
@@ -69,7 +53,6 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
 
     return () => {
       isMounted = false;
-      generatedUrls.forEach(url => URL.revokeObjectURL(url));
     };
   }, [images, containerWidth]);
 
@@ -110,10 +93,7 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
         >
           {images.map((imgStr, idx) => {
             if (imgStr === "failed") return null;
-            let uri = imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}`;
-            if (objectUrls[idx]) {
-               uri = objectUrls[idx];
-            }
+            let uri = (imgStr.startsWith('data:') || imgStr.startsWith('blob:')) ? imgStr : `data:image/jpeg;base64,${imgStr}`;
             const size = imageSizes[idx] || { width: containerWidth, height: 200 };
 
             return (

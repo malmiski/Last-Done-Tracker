@@ -1,5 +1,5 @@
-import React, { useState, memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
+import React, { useState, useEffect, memo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
 import { Tag } from '../data/activity-details';
@@ -115,6 +115,52 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
   lastEntryEndDate,
   image
 }) => {
+  const [preloadedLargeImages, setPreloadedLargeImages] = useState<string[] | null>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    let isMounted = true;
+    const generatedUrls: string[] = [];
+
+    const loadBlobs = async () => {
+      const sourceImages = images || (image ? [image] : []);
+      if (!sourceImages || sourceImages.length === 0) return;
+
+      const loadedUrls = await Promise.all(sourceImages.map(async (imgStr) => {
+        if (imgStr === "failed") return imgStr;
+        const uri = imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}`;
+        if (uri.startsWith('data:')) {
+          try {
+            const res = await fetch(uri);
+            const blob = await res.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            if (!isMounted) {
+              URL.revokeObjectURL(objectUrl);
+              return uri;
+            }
+            generatedUrls.push(objectUrl);
+            return objectUrl;
+          } catch (e) {
+            console.error("Error creating object URL in preloader", e);
+            return uri;
+          }
+        }
+        return uri;
+      }));
+
+      if (isMounted) {
+        setPreloadedLargeImages(loadedUrls);
+      }
+    };
+
+    loadBlobs();
+
+    return () => {
+      isMounted = false;
+      generatedUrls.forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [images, image]);
+
   const firstLine = notes ? notes.split('\n')[0] : '';
   const duration = formatDuration(startDate, endDate);
   const isDifferentDate = startDate.getTime() !== endDate.getTime();
@@ -151,7 +197,11 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
 
     // Large Mode
     if (imageMode === 'large') {
-      const itemsToRender = availableImages || availableThumbnails || [];
+      let itemsToRender = availableImages || availableThumbnails || [];
+      if (Platform.OS === 'web' && preloadedLargeImages && availableImages) {
+        itemsToRender = preloadedLargeImages;
+      }
+
       if (!itemsToRender || itemsToRender.length === 0) return null;
 
       return <LargeImageGallery images={itemsToRender} />;
