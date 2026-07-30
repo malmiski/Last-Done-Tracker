@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { View, ScrollView, TouchableOpacity, StyleSheet, Platform, useWindowDimensions, Image } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
+import { LazyImage } from './LazyImage';
 
 interface LargeImageGalleryProps {
   images: string[];
@@ -11,31 +12,65 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
   const initialWidth = Platform.OS === 'web' ? screenWidth - 40 : 0;
   const [containerWidth, setContainerWidth] = useState<number>(initialWidth);
   const [imageSizes, setImageSizes] = useState<{ [key: number]: { width: number, height: number } }>({});
+  const [objectUrls, setObjectUrls] = useState<{ [key: number]: string }>({});
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     if (containerWidth === 0) return;
 
-    images.forEach((imgStr, idx) => {
-      if (imgStr === "failed") return;
-      const uri = imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}`;
-      Image.getSize(uri, (width, height) => {
-        let scaledWidth = width;
-        let scaledHeight = height;
+    let isMounted = true;
+    const generatedUrls: string[] = [];
 
-        if (width > containerWidth && width > 0) {
-          const ratio = containerWidth / width;
-          scaledWidth = containerWidth;
-          scaledHeight = height * ratio;
+    const loadImages = async () => {
+      const promises = images.map(async (imgStr, idx) => {
+        if (imgStr === "failed") return;
+        let uri = imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}`;
+
+        if (Platform.OS === 'web' && uri.startsWith('data:')) {
+          try {
+            const res = await fetch(uri);
+            const blob = await res.blob();
+            const objectUrl = URL.createObjectURL(blob);
+            if (!isMounted) {
+               URL.revokeObjectURL(objectUrl);
+               return;
+            }
+            generatedUrls.push(objectUrl);
+            setObjectUrls(prev => ({ ...prev, [idx]: objectUrl }));
+            uri = objectUrl;
+          } catch (e) {
+            console.error("Error creating object URL in LargeImageGallery", e);
+          }
         }
 
-        setImageSizes((prev) => ({ ...prev, [idx]: { width: scaledWidth, height: scaledHeight } }));
-      }, () => {
-         // Fallback size if fetching fails
-         setImageSizes((prev) => ({ ...prev, [idx]: { width: containerWidth, height: 200 } }));
+        Image.getSize(uri, (width, height) => {
+          if (!isMounted) return;
+          let scaledWidth = width;
+          let scaledHeight = height;
+
+          if (width > containerWidth && width > 0) {
+            const ratio = containerWidth / width;
+            scaledWidth = containerWidth;
+            scaledHeight = height * ratio;
+          }
+
+          setImageSizes((prev) => ({ ...prev, [idx]: { width: scaledWidth, height: scaledHeight } }));
+        }, () => {
+           if (!isMounted) return;
+           setImageSizes((prev) => ({ ...prev, [idx]: { width: containerWidth, height: 200 } }));
+        });
       });
-    });
+
+      await Promise.all(promises);
+    };
+
+    loadImages();
+
+    return () => {
+      isMounted = false;
+      generatedUrls.forEach(url => URL.revokeObjectURL(url));
+    };
   }, [images, containerWidth]);
 
   const maxHeight = Object.values(imageSizes).length > 0
@@ -75,7 +110,10 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
         >
           {images.map((imgStr, idx) => {
             if (imgStr === "failed") return null;
-            const uri = imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}`;
+            let uri = imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}`;
+            if (objectUrls[idx]) {
+               uri = objectUrls[idx];
+            }
             const size = imageSizes[idx] || { width: containerWidth, height: 200 };
 
             return (
@@ -88,7 +126,7 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
                   alignItems: 'center'
                 }}
               >
-                <Image
+                <LazyImage
                   source={{ uri }}
                   style={{ width: size.width, height: size.height, borderRadius: 10 }}
                   resizeMode="contain"
