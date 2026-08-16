@@ -1,25 +1,28 @@
-import React, { useState, memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
+import React, { memo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
 import { Tag } from '../data/activity-details';
 import LargeImageGallery from './LargeImageGallery';
-import LazyImage from './LazyImage';
+import AppImage from './AppImage';
 
 export type ImageMode = 'small' | 'medium' | 'large' | 'hidden';
 
 interface ActivityHistoryItemProps {
+  /** Stable id, used to key bitmap recycling. */
+  entryId?: string;
   startDate: Date;
   endDate: Date;
   notes?: string;
+  /** Full-size image references. */
   images?: string[];
+  /** Thumbnail references, parallel to `images`. */
   thumbnails?: string[];
   onEdit: () => void;
   onDelete: () => void;
   imageMode?: ImageMode;
   tags?: Tag[];
   lastEntryEndDate?: Date;
-  image?: string;
 }
 
 const formatDate = (date: Date) => {
@@ -69,28 +72,32 @@ const formatSinceLastTime = (start: Date, end: Date) => {
   return `${diffMins} minute${diffMins !== 1 ? 's' : ''} since last time`;
 };
 
+const sameRefs = (a?: string[], b?: string[]) => {
+  const left = a || [];
+  const right = b || [];
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+};
+
+/**
+ * Comparing references is now trivially cheap. Previously these arrays held
+ * hundreds of kilobytes of base64 each, so every re-render of the list ran a
+ * string comparison over megabytes of data.
+ */
 const areEqual = (prevProps: ActivityHistoryItemProps, nextProps: ActivityHistoryItemProps) => {
   if (prevProps.imageMode !== nextProps.imageMode) return false;
   if (prevProps.notes !== nextProps.notes) return false;
-  if (prevProps.image !== nextProps.image) return false;
+  if (prevProps.entryId !== nextProps.entryId) return false;
 
   if (prevProps.startDate?.getTime() !== nextProps.startDate?.getTime()) return false;
   if (prevProps.endDate?.getTime() !== nextProps.endDate?.getTime()) return false;
   if (prevProps.lastEntryEndDate?.getTime() !== nextProps.lastEntryEndDate?.getTime()) return false;
 
-  const prevImages = prevProps.images || [];
-  const nextImages = nextProps.images || [];
-  if (prevImages.length !== nextImages.length) return false;
-  for (let i = 0; i < prevImages.length; i++) {
-    if (prevImages[i] !== nextImages[i]) return false;
-  }
-
-  const prevThumbnails = prevProps.thumbnails || [];
-  const nextThumbnails = nextProps.thumbnails || [];
-  if (prevThumbnails.length !== nextThumbnails.length) return false;
-  for (let i = 0; i < prevThumbnails.length; i++) {
-    if (prevThumbnails[i] !== nextThumbnails[i]) return false;
-  }
+  if (!sameRefs(prevProps.images, nextProps.images)) return false;
+  if (!sameRefs(prevProps.thumbnails, nextProps.thumbnails)) return false;
 
   const prevTags = prevProps.tags || [];
   const nextTags = nextProps.tags || [];
@@ -103,6 +110,7 @@ const areEqual = (prevProps: ActivityHistoryItemProps, nextProps: ActivityHistor
 };
 
 const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
+  entryId,
   startDate,
   endDate,
   notes,
@@ -113,55 +121,65 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
   imageMode = 'small',
   tags = [],
   lastEntryEndDate,
-  image
 }) => {
   const firstLine = notes ? notes.split('\n')[0] : '';
   const duration = formatDuration(startDate, endDate);
   const isDifferentDate = startDate.getTime() !== endDate.getTime();
   const timeSinceLast = lastEntryEndDate ? formatSinceLastTime(lastEntryEndDate, startDate) : null;
 
+  // A single reference addresses both variants, so thumbnails and images are
+  // usually the same array; fall back either way for older rows.
+  const thumbRefs = thumbnails && thumbnails.length > 0 ? thumbnails : images;
+  const fullRefs = images && images.length > 0 ? images : thumbnails;
+
   const renderImages = () => {
-    if (imageMode === 'hidden' && !image) return null;
-
-    const availableImages = images && images.length > 0 ? images : (image ? [image] : null);
-    const availableThumbnails = thumbnails && thumbnails.length > 0 ? thumbnails : (image ? [image] : null);
-
-    if (!availableImages && !availableThumbnails) return null;
+    if (imageMode === 'hidden') return null;
 
     if (imageMode === 'small' || imageMode === 'medium') {
-      const isMultiple = (availableImages && availableImages.length > 1) || (availableThumbnails && availableThumbnails.length > 1);
-      const itemsToRender = availableThumbnails || availableImages || [];
+      if (!thumbRefs || thumbRefs.length === 0) return null;
 
-      const elements = itemsToRender.map((imgStr, idx) => {
-         if (imgStr === "failed") return null;
-         const source = { uri: imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}` };
-         return <LazyImage key={idx} source={source} style={imageMode === 'medium' ? styles.thumbnailMedium : styles.thumbnailSmall} />;
-      });
+      const elements = thumbRefs.map((ref, index) => (
+        <AppImage
+          key={`${entryId ?? 'entry'}-${index}`}
+          imageRef={ref}
+          // Always the thumbnail variant here: a 50pt tile has no business
+          // touching the full-size file.
+          variant="thumb"
+          usage="thumbnail"
+          recyclingKey={`${entryId ?? 'entry'}-${index}-${imageMode}`}
+          style={imageMode === 'medium' ? styles.thumbnailMedium : styles.thumbnailSmall}
+          contentFit="cover"
+        />
+      ));
 
-      if (isMultiple) {
-         return (
-             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 15, width: '100%' }}>
-                 {elements}
-             </ScrollView>
-         );
-      } else {
-         return elements[0];
+      if (thumbRefs.length > 1) {
+        return (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ marginBottom: 15, width: '100%' }}
+            // Keeps offscreen tiles from rendering until scrolled to.
+            removeClippedSubviews
+          >
+            {elements}
+          </ScrollView>
+        );
       }
+      return elements[0];
     }
 
-    // Large Mode
     if (imageMode === 'large') {
-      const itemsToRender = availableImages || availableThumbnails || [];
-      if (!itemsToRender || itemsToRender.length === 0) return null;
-
-      return <LargeImageGallery images={itemsToRender} />;
+      if (!fullRefs || fullRefs.length === 0) return null;
+      return <LargeImageGallery imageRefs={fullRefs} entryId={entryId} />;
     }
 
     return null;
   };
 
-  const isLarge = imageMode === 'large' && ((images && images.length > 0) || (thumbnails && thumbnails.length > 0) || image);
-  const hasMultipleInRow = (imageMode === 'small' || imageMode === 'medium') && ((images && images.length > 1) || (thumbnails && thumbnails.length > 1));
+  const hasAnyImage = (thumbRefs?.length ?? 0) > 0;
+  const isLarge = imageMode === 'large' && (fullRefs?.length ?? 0) > 0;
+  const hasMultipleInRow =
+    (imageMode === 'small' || imageMode === 'medium') && (thumbRefs?.length ?? 0) > 1 && hasAnyImage;
 
   return (
     <View style={[styles.container, (isLarge || hasMultipleInRow) && styles.containerLarge]}>

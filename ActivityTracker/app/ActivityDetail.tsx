@@ -1,72 +1,100 @@
-import React, { useState, useCallback, useRef } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import ActivityHistoryItem, { ImageMode } from '../src/components/ActivityHistoryItem';
+import { clearImageMemoryCache } from '../src/components/AppImage';
 import { useActivityData } from '../src/hooks/useActivityData';
+import { useEntries, ListEntry } from '../src/hooks/useEntries';
+
+/**
+ * How many rows are kept mounted around the viewport. Deliberately tight:
+ * every mounted row in "large" mode holds a decoded full-size bitmap, so this
+ * number multiplied by the image size is the memory ceiling for the screen.
+ */
+const WINDOW_SIZE_BY_MODE: Record<ImageMode, number> = {
+  hidden: 21,
+  small: 11,
+  medium: 7,
+  large: 3,
+};
 
 const ActivityDetailScreen: React.FC = () => {
   const router = useRouter();
   const { activityId } = useLocalSearchParams<{ activityId: string }>();
-  const { activityDetails, getActivityById, addActivityEntry, deleteActivityEntry, refreshData } = useActivityData();
+  const { getActivityById, addActivityEntry, deleteActivityEntry } = useActivityData();
   const [imageMode, setImageMode] = useState<ImageMode>('small');
   const [searchQuery, setSearchQuery] = useState('');
-  const flatListRef = useRef<FlatList>(null);
-  const scrollRetryCount = useRef(0);
-  const targetScrollIndex = useRef<number | null>(null);
-  const scrollTimeoutRef = useRef<any>(null);
 
-  React.useEffect(() => {
-    return () => {
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-      }
-    };
-  }, []);
+  const {
+    entries,
+    total,
+    loading,
+    loadingMore,
+    hasMore,
+    loadMore,
+    refresh,
+    removeEntry,
+  } = useEntries(activityId, { search: searchQuery });
 
-  const handleDicePress = () => {
-    if (filteredHistory.length > 0) {
-      const randomIndex = Math.floor(Math.random() * filteredHistory.length);
-
-      if (scrollTimeoutRef.current) {
-        clearTimeout(scrollTimeoutRef.current);
-        scrollTimeoutRef.current = null;
-      }
-
-      scrollRetryCount.current = 0;
-      targetScrollIndex.current = randomIndex;
-
-      flatListRef.current?.scrollToIndex({
-        index: randomIndex,
-        animated: false,
-      });
-    }
-  };
+  const flatListRef = useRef<FlatList<ListEntry>>(null);
+  const pendingRandomIndex = useRef<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
-      if (refreshData) {
-        refreshData();
-      }
-    }, [refreshData])
+      void refresh();
+      return () => {
+        // Leaving the screen is the natural moment to hand decoded bitmaps
+        // back. Without this, browsing several activities in a row ratchets
+        // memory upward until something gets killed.
+        void clearImageMemoryCache();
+      };
+    }, [refresh]),
   );
+
+  // Switching to a heavier image mode re-decodes at a larger size; drop the
+  // old bitmaps rather than keeping both generations alive.
+  useEffect(() => {
+    void clearImageMemoryCache();
+  }, [imageMode]);
 
   const activity = getActivityById(activityId);
-  const history = (activityDetails[activityId] || []).sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
 
-  const filteredHistory = history.filter(item =>
-    (item.notes || '').toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  /**
+   * Jump to a random entry. With pagination the target may not be loaded yet,
+   * so we record the intent and keep requesting pages until it arrives.
+   */
+  const handleDicePress = useCallback(() => {
+    if (total === 0) return;
+    const randomIndex = Math.floor(Math.random() * total);
 
-  if (!activity) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <Text style={styles.title}>Activity not found</Text>
-      </SafeAreaView>
-    );
-  }
+    if (randomIndex < entries.length) {
+      flatListRef.current?.scrollToIndex({ index: randomIndex, animated: false });
+      return;
+    }
+
+    pendingRandomIndex.current = randomIndex;
+    loadMore();
+  }, [entries.length, loadMore, total]);
+
+  useEffect(() => {
+    const target = pendingRandomIndex.current;
+    if (target === null) return;
+
+    if (target < entries.length) {
+      pendingRandomIndex.current = null;
+      // Wait a frame so the newly appended rows have been laid out.
+      requestAnimationFrame(() => {
+        flatListRef.current?.scrollToIndex({ index: target, animated: false });
+      });
+    } else if (hasMore && !loadingMore) {
+      loadMore();
+    } else if (!hasMore) {
+      pendingRandomIndex.current = null;
+    }
+  }, [entries.length, hasMore, loadingMore, loadMore]);
 
   const cycleImageMode = () => {
     setImageMode(prev => {
@@ -92,6 +120,45 @@ const ActivityDetailScreen: React.FC = () => {
     const newEntryId = await addActivityEntry(activityId, now, now, undefined, undefined, undefined, []);
     router.push(`/EditEntry?activityId=${activityId}&entryId=${newEntryId}`);
   };
+
+  const handleDelete = useCallback(
+    async (entryId: string) => {
+      removeEntry(entryId);
+      await deleteActivityEntry(activityId, entryId);
+    },
+    [activityId, deleteActivityEntry, removeEntry],
+  );
+
+  const renderItem = useCallback(
+    ({ item, index }: { item: ListEntry; index: number }) => {
+      const chronologicalNextItem = entries[index + 1];
+      const lastEntryEndDate = chronologicalNextItem ? chronologicalNextItem.endDate : undefined;
+      return (
+        <ActivityHistoryItem
+          entryId={item.id}
+          startDate={item.startDate}
+          endDate={item.endDate}
+          notes={item.notes}
+          images={item.images}
+          thumbnails={item.thumbnails}
+          imageMode={imageMode}
+          tags={item.tags}
+          lastEntryEndDate={lastEntryEndDate}
+          onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
+          onDelete={() => handleDelete(item.id)}
+        />
+      );
+    },
+    [activityId, entries, handleDelete, imageMode, router],
+  );
+
+  if (!activity) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <Text style={styles.title}>Activity not found</Text>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'left', 'right']}>
@@ -129,68 +196,42 @@ const ActivityDetailScreen: React.FC = () => {
       </View>
       <FlatList
         ref={flatListRef}
-        data={filteredHistory}
-        renderItem={({ item, index }) => {
-          const chronologicalNextItem = filteredHistory[index + 1];
-          const lastEntryEndDate = chronologicalNextItem ? chronologicalNextItem.endDate : undefined;
-          return (
-            <ActivityHistoryItem
-              startDate={item.startDate}
-              endDate={item.endDate}
-              notes={item.notes}
-              images={item.images}
-              thumbnails={item.thumbnails}
-              imageMode={imageMode}
-              tags={item.tags}
-              lastEntryEndDate={lastEntryEndDate}
-              onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
-              onDelete={() => deleteActivityEntry(activityId, item.id)}
-            />
-          );
-        }}
+        data={entries}
+        renderItem={renderItem}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
-        onScrollToIndexFailed={(info) => {
-          if (scrollRetryCount.current >= 3) {
-            // Stop retrying to prevent an infinite loop/snapping.
-            // Scroll to the estimated offset to get as close as possible.
-            const estimatedOffset = info.index * (info.averageItemLength || 120);
-            flatListRef.current?.scrollToOffset({
-              offset: estimatedOffset,
-              animated: false,
-            });
-            targetScrollIndex.current = null;
-            scrollRetryCount.current = 0;
-            return;
-          }
-
-          scrollRetryCount.current += 1;
-
+        // Pagination: the next page is fetched as the user approaches the end
+        // rather than loading the whole history up front.
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.6}
+        // Windowing. These are the numbers that bound how many images can be
+        // decoded at once, so they tighten as the image mode gets heavier.
+        windowSize={WINDOW_SIZE_BY_MODE[imageMode]}
+        initialNumToRender={imageMode === 'large' ? 2 : 8}
+        maxToRenderPerBatch={imageMode === 'large' ? 2 : 8}
+        updateCellsBatchingPeriod={50}
+        removeClippedSubviews
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator style={styles.footerSpinner} color={theme.colors.primary} />
+          ) : null
+        }
+        ListEmptyComponent={
+          loading ? (
+            <ActivityIndicator style={styles.footerSpinner} color={theme.colors.primary} />
+          ) : (
+            <Text style={styles.emptyText}>
+              {searchQuery ? 'No entries match your search.' : 'No entries yet.'}
+            </Text>
+          )
+        }
+        onScrollToIndexFailed={info => {
+          // With getItemLayout unavailable (rows vary in height), fall back to
+          // an estimated offset and let the list settle.
           flatListRef.current?.scrollToOffset({
-            offset: info.highestMeasuredFrameIndex * 120,
+            offset: info.averageItemLength * info.index,
             animated: false,
           });
-
-          if (scrollTimeoutRef.current) {
-            clearTimeout(scrollTimeoutRef.current);
-          }
-
-          scrollTimeoutRef.current = setTimeout(() => {
-            if (targetScrollIndex.current === info.index) {
-              flatListRef.current?.scrollToIndex({
-                index: info.index,
-                animated: false,
-              });
-            }
-          }, 50);
-        }}
-        onScrollBeginDrag={() => {
-          if (scrollTimeoutRef.current) {
-            clearTimeout(scrollTimeoutRef.current);
-            scrollTimeoutRef.current = null;
-          }
-          targetScrollIndex.current = null;
-          scrollRetryCount.current = 0;
         }}
       />
       <TouchableOpacity
@@ -247,6 +288,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 100,
+  },
+  footerSpinner: {
+    marginVertical: 20,
+  },
+  emptyText: {
+    color: theme.colors.subtext,
+    textAlign: 'center',
+    marginTop: 40,
+    fontSize: 16,
   },
   fab: {
     position: 'absolute',

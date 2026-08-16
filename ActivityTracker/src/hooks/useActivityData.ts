@@ -1,86 +1,108 @@
-import { useState, useEffect, useCallback } from 'react';
+/**
+ * Activity-level state.
+ *
+ * What changed and why: this hook used to load *every entry of every activity*
+ * into a single React state object on mount — including the base64 image data
+ * on each row. Because every screen calls the hook, opening the editor for one
+ * entry re-read the entire database. That single behaviour accounted for most
+ * of the ~900MB baseline.
+ *
+ * It now holds only what the activity list actually renders: the activities,
+ * the tags, and the single most recent entry per activity. Entry lists come
+ * from `useEntries`, and the editor loads its one row through `useEntry`.
+ *
+ * State lives in a module-level store so that four mounted screens share one
+ * copy and one load, rather than each keeping its own.
+ */
+import { useCallback, useEffect, useState } from 'react';
 import { Activity } from '../data/activities';
 import { ActivityEntry, Tag } from '../data/activity-details';
 import { generateActivityId } from '../utils/crypto';
 import * as database from '../utils/database';
-import { processImage, generateThumbnail } from '../utils/imageUtils';
-import { Platform } from 'react-native';
+import * as imageStore from '../utils/imageStore';
 
-export const useActivityData = () => {
-  const [activities, setActivities] = useState<Activity[]>([]);
-  const [activityDetails, setActivityDetails] = useState<{ [key: string]: ActivityEntry[] }>({});
-  const [tags, setTags] = useState<Tag[]>([]);
-  const [loading, setLoading] = useState(true);
+type LatestEntries = Record<string, ActivityEntry & { activityId: string }>;
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+interface ActivityStoreState {
+  activities: Activity[];
+  tags: Tag[];
+  latestEntries: LatestEntries;
+  loading: boolean;
+}
+
+let state: ActivityStoreState = {
+  activities: [],
+  tags: [],
+  latestEntries: {},
+  loading: true,
+};
+
+const subscribers = new Set<(next: ActivityStoreState) => void>();
+let inFlight: Promise<void> | null = null;
+
+const setState = (patch: Partial<ActivityStoreState>) => {
+  state = { ...state, ...patch };
+  subscribers.forEach(notify => notify(state));
+};
+
+/** Load activity-level data. Concurrent callers share one round trip. */
+const load = (): Promise<void> => {
+  if (inFlight) return inFlight;
+
+  inFlight = (async () => {
     try {
       await database.initDatabase();
-      const storedActivities = await database.getActivities();
-      setActivities(storedActivities);
-
-      const allDetails: { [key: string]: ActivityEntry[] } = {};
-      for (const activity of storedActivities) {
-        const entries = await database.getEntries(activity.id);
-        allDetails[activity.id] = entries;
-      }
-      setActivityDetails(allDetails);
-
-      const storedTags = await database.getTags();
-      setTags(storedTags);
-
-      // Background migration for legacy images to add thumbnails
-      setTimeout(() => migrateThumbnails(), 15000);
-    } catch (e) {
-      console.error('Failed to load data.', e);
+      const [activities, tags, latestEntries] = await Promise.all([
+        database.getActivities(),
+        database.getTags(),
+        database.getLatestEntryPerActivity(),
+      ]);
+      setState({ activities, tags, latestEntries, loading: false });
+    } catch (error) {
+      console.error('Failed to load data.', error);
+      setState({ loading: false });
     } finally {
-      setLoading(false);
+      inFlight = null;
     }
-  }, []);
+  })();
 
-  const migrateThumbnails = async () => {
-      try {
-          const allEntries = await database.getAllEntries();
-          const missingThumbnails = allEntries.filter(e => e.image && (e.thumbnail === undefined || e.thumbnail === null));
-          if (missingThumbnails.length > 0) {
-              console.log(`Migrating ${missingThumbnails.length} entries to resize image and include thumbnails...`);
-              for (const entry of missingThumbnails) {
-                  try {
-                      // Need to add prefix if it doesn't exist for the web/react-native consistency
-                      let uri = entry.image!;
-                      if (!uri.startsWith('data:')) {
-                         uri = `data:image/jpeg;base64,${uri}`;
-                      }
-                      const [fullImage, thumbImage] = await Promise.all([
-                          processImage(uri),
-                          generateThumbnail(uri)
-                      ]);
-                      await database.updateEntryImages(entry.id, fullImage, thumbImage);
-                  } catch (e) {
-                      console.error(`Failed to process image and generate thumbnail for entry ${entry.id}`, e);
-                      // Mark as failed by setting thumbnail to "failed" so we don't retry endlessly
-                      await database.updateEntryImages(entry.id, entry.image, "failed");
-                  }
-              }
-              // Refresh details in memory so the UI updates
-              await loadData();
-          }
-      } catch (e) {
-          console.error('Failed thumbnail migration', e);
-      }
-  };
+  return inFlight;
+};
+
+/** Refresh just one activity's cached "latest entry" tile. */
+const refreshLatestEntry = async (activityId: string) => {
+  const latest = await database.getLatestEntry(activityId);
+  const latestEntries = { ...state.latestEntries };
+  if (latest) {
+    latestEntries[activityId] = latest;
+  } else {
+    delete latestEntries[activityId];
+  }
+  setState({ latestEntries });
+};
+
+export const useActivityData = () => {
+  const [snapshot, setSnapshot] = useState(state);
 
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    subscribers.add(setSnapshot);
+    // Sync up with any load that completed between render and effect.
+    setSnapshot(state);
+    if (state.loading && !inFlight) void load();
+    return () => {
+      subscribers.delete(setSnapshot);
+    };
+  }, []);
 
-  const addActivity = async (newActivity: Omit<Activity, 'id' | 'lastDone'>) => {
+  const refreshData = useCallback(() => load(), []);
+
+  const addActivity = useCallback(async (newActivity: Omit<Activity, 'id' | 'lastDone'>) => {
     const newId = await generateActivityId(newActivity.name);
-    if (activities.some(a => a.id === newId)) {
+    if (state.activities.some(a => a.id === newId)) {
       throw new Error('An activity with this name already exists.');
     }
 
-    const maxOrderIndex = activities.reduce((max, a) => Math.max(max, a.orderIndex ?? 0), -1);
+    const maxOrderIndex = state.activities.reduce((max, a) => Math.max(max, a.orderIndex ?? 0), -1);
     const activityToAdd: Activity = {
       ...newActivity,
       id: newId,
@@ -89,143 +111,166 @@ export const useActivityData = () => {
     };
 
     await database.addActivity(activityToAdd);
-    setActivities(prev => [...prev, activityToAdd]);
-    setActivityDetails(prev => ({ ...prev, [newId]: [] }));
-
+    setState({ activities: [...state.activities, activityToAdd] });
     return activityToAdd;
-  };
+  }, []);
 
-  const updateActivity = async (updatedActivity: Activity) => {
+  const updateActivity = useCallback(async (updatedActivity: Activity) => {
     await database.updateActivity(updatedActivity);
-    setActivities(prev =>
-        prev.map(a => a.id === updatedActivity.id ? updatedActivity : a)
-            .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0))
-    );
-  };
+    setState({
+      activities: state.activities
+        .map(a => (a.id === updatedActivity.id ? updatedActivity : a))
+        .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0)),
+    });
+  }, []);
 
-  const reorderActivities = async (newActivities: Activity[]) => {
-    // Update state immediately for responsiveness
-    setActivities(newActivities);
-
-    // Persist changes to database
+  const reorderActivities = useCallback(async (newActivities: Activity[]) => {
+    setState({ activities: newActivities });
     await database.updateActivitiesOrder(newActivities);
-  };
+  }, []);
 
-  const addActivityEntry = async (activityId: string, startDate: Date, endDate: Date, notes?: string, images?: string[], thumbnails?: string[], entryTags?: Tag[]) => {
+  const addActivityEntry = useCallback(async (
+    activityId: string,
+    startDate: Date,
+    endDate: Date,
+    notes?: string,
+    images?: string[],
+    thumbnails?: string[],
+    entryTags?: Tag[],
+  ) => {
     const newEntry: ActivityEntry = {
       id: await generateActivityId(activityId + startDate.getTime().toString()),
       startDate,
       endDate,
-      notes: notes,
-      images: images,
-      thumbnails: thumbnails,
+      notes,
+      images,
+      thumbnails,
       tags: entryTags,
     };
 
     await database.addEntry(activityId, newEntry);
 
-    setActivityDetails(prev => {
-      const updated = { ...prev };
-      updated[activityId] = [newEntry, ...(updated[activityId] || [])];
-      return updated;
-    });
-
-    // Update lastDone for the activity
-    const activity = activities.find(a => a.id === activityId);
+    const activity = state.activities.find(a => a.id === activityId);
     if (activity) {
-        const updatedActivity = { ...activity, lastDone: startDate.toISOString() };
-        await updateActivity(updatedActivity);
+      await database.updateActivity({ ...activity, lastDone: startDate.toISOString() });
+      setState({
+        activities: state.activities.map(a =>
+          a.id === activityId ? { ...a, lastDone: startDate.toISOString() } : a,
+        ),
+      });
     }
+    await refreshLatestEntry(activityId);
 
     return newEntry.id;
-  };
+  }, []);
 
-  const updateActivityEntry = async (activityId: string, entryId: string, startDate: Date, endDate: Date, notes?: string, images?: string[], thumbnails?: string[], entryTags?: Tag[]) => {
+  const updateActivityEntry = useCallback(async (
+    activityId: string,
+    entryId: string,
+    startDate: Date,
+    endDate: Date,
+    notes?: string,
+    images?: string[],
+    thumbnails?: string[],
+    entryTags?: Tag[],
+  ) => {
+    // NOTE: the previous implementation assigned an undefined `entry` variable
+    // here, so in-memory state silently became a hole after every edit.
     const updatedEntry: ActivityEntry = {
-        id: entryId,
-        startDate,
-        endDate,
-        notes: notes,
-        images: images,
-        thumbnails: thumbnails,
-        tags: entryTags,
+      id: entryId,
+      startDate,
+      endDate,
+      notes,
+      images,
+      thumbnails,
+      tags: entryTags,
     };
     await database.updateEntry(updatedEntry);
+    await refreshLatestEntry(activityId);
+    return updatedEntry;
+  }, []);
 
-    setActivityDetails(prev => {
-      const updated = { ...prev };
-      const entryIndex = (updated[activityId] || []).findIndex(e => e.id === entryId);
-      if (entryIndex > -1) {
-        updated[activityId][entryIndex] = entry;
-      }
-      return updated;
-    });
-  };
-
-  const deleteActivityEntry = async (activityId: string, entryId: string) => {
+  const deleteActivityEntry = useCallback(async (activityId: string, entryId: string) => {
+    // Read the references *before* the row disappears, then delete the blobs.
+    // SQLite's ON DELETE CASCADE cannot reach the filesystem, so without this
+    // the photos would survive the entry that owned them.
+    const refs = await database.getImageRefsForEntry(entryId);
     await database.deleteEntry(entryId);
-    setActivityDetails(prev => {
-      const updated = { ...prev };
-      updated[activityId] = updated[activityId].filter(entry => entry.id !== entryId);
-      return updated;
-    });
-  };
+    await Promise.all(refs.map(ref => imageStore.deleteRef(ref)));
+    await refreshLatestEntry(activityId);
+  }, []);
 
-  const deleteActivity = async (activityId: string) => {
+  const deleteActivity = useCallback(async (activityId: string) => {
+    // Same cascade, one level up: gather every photo belonging to every entry
+    // of this activity before the rows are removed.
+    const refs = await database.getImageRefsForActivity(activityId);
     await database.deleteActivity(activityId);
-    setActivities(prev => prev.filter(a => a.id !== activityId));
-    setActivityDetails(prev => {
-      const updated = { ...prev };
-      delete updated[activityId];
-      return updated;
+    await Promise.all(refs.map(ref => imageStore.deleteRef(ref)));
+
+    const latestEntries = { ...state.latestEntries };
+    delete latestEntries[activityId];
+    setState({
+      activities: state.activities.filter(a => a.id !== activityId),
+      latestEntries,
     });
-  };
+  }, []);
 
-  const getActivityById = useCallback((activityId: string) => {
-    return activities.find(a => a.id === activityId);
-  }, [activities]);
+  /** Delete every entry across all activities, and every photo with them. */
+  const clearAllHistory = useCallback(async () => {
+    await database.deleteAllEntries();
+    // Nothing references any blob now, so a sweep removes all of them.
+    await imageStore.collectGarbage(new Set());
+    setState({
+      activities: state.activities.map(a => ({ ...a, lastDone: 'Never' })),
+      latestEntries: {},
+    });
+  }, []);
 
-  const addTag = async (name: string, color: string) => {
-    const newTag: Tag = {
-        id: await generateActivityId(name + Math.random()),
-        name,
-        color,
-    };
+  const getActivityById = useCallback(
+    (activityId: string) => snapshot.activities.find(a => a.id === activityId),
+    [snapshot.activities],
+  );
+
+  const addTag = useCallback(async (name: string, color: string) => {
+    const newTag: Tag = { id: await generateActivityId(name + Math.random()), name, color };
     await database.addTag(newTag);
-    setTags(prev => [...prev, newTag].sort((a, b) => a.name.localeCompare(b.name)));
+    setState({ tags: [...state.tags, newTag].sort((a, b) => a.name.localeCompare(b.name)) });
     return newTag;
-  };
+  }, []);
 
-  const updateTag = async (tag: Tag) => {
+  const updateTag = useCallback(async (tag: Tag) => {
     await database.updateTag(tag);
-    setTags(prev => prev.map(t => t.id === tag.id ? tag : t).sort((a, b) => a.name.localeCompare(b.name)));
-    // Refresh entries as they might have updated tag names/colors
-    loadData();
-  };
+    setState({
+      tags: state.tags.map(t => (t.id === tag.id ? tag : t)).sort((a, b) => a.name.localeCompare(b.name)),
+    });
+  }, []);
 
-  const deleteTag = async (tagId: string) => {
+  const deleteTag = useCallback(async (tagId: string) => {
     await database.deleteTag(tagId);
-    setTags(prev => prev.filter(t => t.id !== tagId));
-    // Refresh entries as tag associations are removed
-    loadData();
-  };
+    setState({ tags: state.tags.filter(t => t.id !== tagId) });
+  }, []);
 
   return {
-    activities,
-    activityDetails,
-    tags,
-    loading,
+    activities: snapshot.activities,
+    tags: snapshot.tags,
+    /** Most recent entry per activity — what the activity list tiles render. */
+    latestEntries: snapshot.latestEntries,
+    loading: snapshot.loading,
     addActivity,
     updateActivity,
     addActivityEntry,
     updateActivityEntry,
     deleteActivityEntry,
     deleteActivity,
+    clearAllHistory,
     getActivityById,
     addTag,
     updateTag,
     deleteTag,
     reorderActivities,
-    refreshData: loadData,
+    refreshData,
   };
 };
+
+/** Exposed so screens can nudge a single tile without a full reload. */
+export const refreshActivityLatestEntry = refreshLatestEntry;

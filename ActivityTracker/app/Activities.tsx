@@ -53,7 +53,10 @@ const FloatingIconComponent = ({ icon, onAnimationComplete, startX, startY }) =>
 
 const ActivitiesScreen: React.FC = () => {
   const router = useRouter();
-  const { activities, activityDetails, loading, deleteActivity, addActivityEntry, refreshData, reorderActivities } = useActivityData();
+  // `latestEntries` replaces the old `activityDetails` map. It holds one entry
+  // per activity rather than every entry of every activity, which is all this
+  // screen ever rendered.
+  const { activities, latestEntries, loading, deleteActivity, addActivityEntry, refreshData, reorderActivities } = useActivityData();
   const [searchQuery, setSearchQuery] = useState('');
   const [isEditMode, setIsEditMode] = useState(false);
   const rotation = useSharedValue(0);
@@ -177,8 +180,8 @@ const ActivitiesScreen: React.FC = () => {
         ref={flatListRef}
         data={filteredActivities}
         renderItem={({ item, index }) => {
-          const lastEntry = activityDetails[item.id]?.[0];
-        const lastEntryDate = lastEntry ? lastEntry.startDate : null;
+          const lastEntry = latestEntries[item.id];
+          const lastEntryDate = lastEntry ? lastEntry.startDate : null;
           return (
             <ActivityListItem
               item={item}

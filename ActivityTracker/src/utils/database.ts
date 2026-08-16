@@ -1,15 +1,26 @@
 import * as SQLite from 'expo-sqlite';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system';
+import { Directory, File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { Platform } from 'react-native';
 import { Activity, activities as initialActivities } from '../data/activities';
 import { ActivityEntry, Tag, activityDetails as initialActivityDetails } from '../data/activity-details';
+import { makeLegacyPlaceholder, parseRefArray, serialiseRefArray } from './imageRef';
 
 const DB_NAME = 'activities.db';
 const ACTIVITIES_KEY = '@activities';
 const ACTIVITY_DETAILS_KEY = '@activityDetails';
+
+/**
+ * Values longer than this are never pulled into JS by a list query. A migrated
+ * row holds an array of ~20-byte refs, so even 100 images stay well under it,
+ * while a single legacy base64 blob blows past it immediately.
+ */
+const MAX_INLINE_SELECT_BYTES = 8192;
+
+/** Rows fetched per page by the entry list. */
+export const DEFAULT_PAGE_SIZE = 30;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase | null> | null = null;
 
@@ -52,6 +63,10 @@ export const getDb = async () => {
             FOREIGN KEY (entryId) REFERENCES entries (id) ON DELETE CASCADE,
             FOREIGN KEY (tagId) REFERENCES tags (id) ON DELETE CASCADE
         );
+        CREATE TABLE IF NOT EXISTS app_meta (
+            key TEXT PRIMARY KEY NOT NULL,
+            value TEXT
+        );
         `);
 
         await migrateDatabase(db);
@@ -77,6 +92,7 @@ const migrateDatabase = async (db: SQLite.SQLiteDatabase) => {
     const hasDate = tableInfo.some(col => col.name === 'date');
     const hasStartDate = tableInfo.some(col => col.name === 'startDate');
     const hasThumbnail = tableInfo.some(col => col.name === 'thumbnail');
+    const hasImagesMigrated = tableInfo.some(col => col.name === 'imagesMigrated');
 
     if (hasDate && !hasStartDate) {
       console.log('Migrating entries table: adding startDate and endDate...');
@@ -90,6 +106,18 @@ const migrateDatabase = async (db: SQLite.SQLiteDatabase) => {
     if (!hasThumbnail) {
       console.log('Migrating entries table: adding thumbnail...');
       await db.execAsync('ALTER TABLE entries ADD COLUMN thumbnail TEXT');
+    }
+
+    // Marks rows whose image columns hold short references rather than inline
+    // base64. Explicit bookkeeping beats guessing from string length.
+    if (!hasImagesMigrated) {
+      console.log('Migrating entries table: adding imagesMigrated...');
+      await db.execAsync('ALTER TABLE entries ADD COLUMN imagesMigrated INTEGER NOT NULL DEFAULT 0');
+      // Rows with no image data at all need no conversion.
+      await db.execAsync(`
+        UPDATE entries SET imagesMigrated = 1
+        WHERE (image IS NULL OR image = '') AND (thumbnail IS NULL OR thumbnail = '')
+      `);
     }
 
     const activitiesTableInfo = await db.getAllAsync<any>("PRAGMA table_info(activities)");
@@ -122,6 +150,16 @@ const migrateDatabase = async (db: SQLite.SQLiteDatabase) => {
         `);
     }
 
+    // Paging and search both order by startDate within an activity; without
+    // this index every page does a full scan plus a sort of the whole table.
+    await db.execAsync(`
+      CREATE INDEX IF NOT EXISTS idx_entries_activity_start
+        ON entries (activityId, startDate DESC);
+      CREATE INDEX IF NOT EXISTS idx_entries_migration
+        ON entries (imagesMigrated);
+      CREATE INDEX IF NOT EXISTS idx_entry_tags_entry ON entry_tags (entryId);
+      CREATE INDEX IF NOT EXISTS idx_entry_tags_tag ON entry_tags (tagId);
+    `);
   } catch (error) {
     console.error('Error during database migration:', error);
   }
@@ -140,8 +178,8 @@ const seedInitialData = async (db: SQLite.SQLiteDatabase) => {
             const entries = initialActivityDetails[activity.id] || [];
             for (const entry of entries) {
                 await db.runAsync(
-                    'INSERT INTO entries (id, activityId, startDate, endDate, notes, image) VALUES (?, ?, ?, ?, ?, ?)',
-                    [entry.id, activity.id, entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.image || null]
+                    'INSERT INTO entries (id, activityId, startDate, endDate, notes, image, imagesMigrated) VALUES (?, ?, ?, ?, ?, ?, 1)',
+                    [entry.id, activity.id, entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, serialiseRefArray(entry.images)]
                 );
             }
         }
@@ -169,9 +207,11 @@ const migrateFromAsyncStorage = async (db: SQLite.SQLiteDatabase) => {
         const entries = activityDetails[activity.id] || [];
         for (const entry of entries) {
           const entryDate = new Date(entry.startDate || (entry as any).date).toISOString();
+          // Images arriving from AsyncStorage are inline base64, so they are
+          // left flagged for the image migration to convert.
           await db.runAsync(
-            'INSERT OR REPLACE INTO entries (id, activityId, startDate, endDate, notes, image) VALUES (?, ?, ?, ?, ?, ?)',
-            [entry.id, activity.id, entryDate, entryDate, entry.notes || null, entry.image || null]
+            'INSERT OR REPLACE INTO entries (id, activityId, startDate, endDate, notes, image, imagesMigrated) VALUES (?, ?, ?, ?, ?, ?, 0)',
+            [entry.id, activity.id, entryDate, entryDate, entry.notes || null, serialiseRefArray(entry.images) ?? (entry as any).image ?? null]
           );
         }
       }
@@ -229,97 +269,325 @@ export const deleteActivity = async (id: string) => {
   await db.runAsync('DELETE FROM activities WHERE id = ?', [id]);
 };
 
-const parseJsonArray = (str) => {
-    if (!str) return undefined;
-    try {
-        const parsed = JSON.parse(str);
-        if (Array.isArray(parsed)) return parsed;
-        return [str];
-    } catch (e) {
-        return [str];
-    }
+/* ------------------------------------------------------------------ *
+ * Entry reads
+ *
+ * The projection below is the heart of the memory fix. `entries.image` is
+ * never selected unguarded: on an unmigrated row it holds hundreds of
+ * kilobytes of base64, and selecting it for a whole activity was what pushed
+ * the app past 3GB. Instead:
+ *   - values under MAX_INLINE_SELECT_BYTES come through as-is (refs, and
+ *     small legacy thumbnails, which are safe)
+ *   - anything larger is replaced by a "legacy:<id>" placeholder, which the
+ *     UI renders as an empty tile until the image migration converts the row
+ * ------------------------------------------------------------------ */
+
+const ENTRY_LIST_PROJECTION = `
+  entries.id                AS id,
+  entries.activityId        AS activityId,
+  entries.startDate         AS startDate,
+  entries.endDate           AS endDate,
+  entries.notes             AS notes,
+  entries.imagesMigrated    AS imagesMigrated,
+  CASE
+    WHEN entries.thumbnail IS NULL OR entries.thumbnail = '' THEN NULL
+    WHEN length(entries.thumbnail) <= ${MAX_INLINE_SELECT_BYTES} THEN entries.thumbnail
+    ELSE 'legacy:' || entries.id
+  END                       AS thumbnail,
+  CASE
+    WHEN entries.image IS NULL OR entries.image = '' THEN NULL
+    WHEN length(entries.image) <= ${MAX_INLINE_SELECT_BYTES} THEN entries.image
+    ELSE 'legacy:' || entries.id
+  END                       AS image,
+  CASE WHEN entries.image IS NULL OR entries.image = '' THEN 0 ELSE 1 END AS hasImages
+`;
+
+const mapEntryRow = (row: any): ActivityEntry & { activityId: string } => {
+  const images = parseRefArray(row.image);
+  const thumbnails = parseRefArray(row.thumbnail);
+  return {
+    id: row.id,
+    activityId: row.activityId,
+    startDate: new Date(row.startDate),
+    endDate: new Date(row.endDate),
+    notes: row.notes ?? undefined,
+    images,
+    thumbnails,
+    hasImages: row.hasImages === 1,
+    imagesMigrated: row.imagesMigrated === 1,
+    tags: [],
+  };
 };
 
-const mapEntriesWithTags = (rows: any[]): ActivityEntry[] => {
-    const entryMap = new Map<string, ActivityEntry>();
-    rows.forEach(row => {
-        if (!entryMap.has(row.id)) {
-            entryMap.set(row.id, {
-                id: row.id,
-                startDate: new Date(row.startDate),
-                endDate: new Date(row.endDate),
-                notes: row.notes,
-                images: parseJsonArray(row.image),
-                thumbnails: parseJsonArray(row.thumbnail),
-                tags: []
-            });
-        }
-        if (row.tagId) {
-            entryMap.get(row.id)!.tags!.push({
-                id: row.tagId,
-                name: row.tagName,
-                color: row.tagColor
-            });
-        }
-    });
-    return Array.from(entryMap.values());
+/** Attach tags to a page of entries with one query rather than one per row. */
+const attachTags = async (
+  db: SQLite.SQLiteDatabase,
+  entries: (ActivityEntry & { activityId: string })[],
+): Promise<void> => {
+  if (entries.length === 0) return;
+  const byId = new Map(entries.map(entry => [entry.id, entry]));
+  const placeholders = entries.map(() => '?').join(',');
+
+  const rows = await db.getAllAsync<any>(
+    `SELECT entry_tags.entryId AS entryId, tags.id AS id, tags.name AS name, tags.color AS color
+     FROM entry_tags
+     JOIN tags ON tags.id = entry_tags.tagId
+     WHERE entry_tags.entryId IN (${placeholders})`,
+    entries.map(entry => entry.id),
+  );
+
+  rows.forEach(row => {
+    byId.get(row.entryId)?.tags!.push({ id: row.id, name: row.name, color: row.color });
+  });
 };
 
+export interface EntryPageOptions {
+  limit?: number;
+  offset?: number;
+  search?: string;
+}
+
+/**
+ * One page of entries for an activity, newest first. Search is pushed into SQL
+ * so filtering a large activity never materialises the whole history in JS.
+ */
+export const getEntriesPage = async (
+  activityId: string,
+  { limit = DEFAULT_PAGE_SIZE, offset = 0, search }: EntryPageOptions = {},
+): Promise<(ActivityEntry & { activityId: string })[]> => {
+  const db = await getDb();
+  if (!db) return [];
+
+  const term = search?.trim();
+  const where = term
+    ? 'WHERE entries.activityId = ? AND entries.notes LIKE ? ESCAPE \'\\\''
+    : 'WHERE entries.activityId = ?';
+  const params: any[] = term
+    ? [activityId, `%${escapeLike(term)}%`, limit, offset]
+    : [activityId, limit, offset];
+
+  const rows = await db.getAllAsync<any>(
+    `SELECT ${ENTRY_LIST_PROJECTION}
+     FROM entries
+     ${where}
+     ORDER BY entries.startDate DESC
+     LIMIT ? OFFSET ?`,
+    params,
+  );
+
+  const entries = rows.map(mapEntryRow);
+  await attachTags(db, entries);
+  return entries;
+};
+
+const escapeLike = (value: string) => value.replace(/[\\%_]/g, match => `\\${match}`);
+
+export const countEntries = async (activityId: string, search?: string): Promise<number> => {
+  const db = await getDb();
+  if (!db) return 0;
+  const term = search?.trim();
+  const result = term
+    ? await db.getFirstAsync<{ count: number }>(
+        'SELECT COUNT(*) as count FROM entries WHERE activityId = ? AND notes LIKE ? ESCAPE \'\\\'',
+        [activityId, `%${escapeLike(term)}%`],
+      )
+    : await db.getFirstAsync<{ count: number }>(
+        'SELECT COUNT(*) as count FROM entries WHERE activityId = ?',
+        [activityId],
+      );
+  return result?.count ?? 0;
+};
+
+/** The most recent entry for an activity — used by the activity list tiles. */
+export const getLatestEntry = async (
+  activityId: string,
+): Promise<(ActivityEntry & { activityId: string }) | null> => {
+  const db = await getDb();
+  if (!db) return null;
+  const row = await db.getFirstAsync<any>(
+    `SELECT ${ENTRY_LIST_PROJECTION}
+     FROM entries WHERE entries.activityId = ?
+     ORDER BY entries.startDate DESC LIMIT 1`,
+    [activityId],
+  );
+  if (!row) return null;
+  const entry = mapEntryRow(row);
+  await attachTags(db, [entry]);
+  return entry;
+};
+
+/** Latest entry for every activity in one query — no N+1 at app start. */
+export const getLatestEntryPerActivity = async (): Promise<Record<string, ActivityEntry & { activityId: string }>> => {
+  const db = await getDb();
+  if (!db) return {};
+  const rows = await db.getAllAsync<any>(`
+    SELECT ${ENTRY_LIST_PROJECTION}
+    FROM entries
+    JOIN (
+      SELECT activityId, MAX(startDate) AS maxStart
+      FROM entries GROUP BY activityId
+    ) latest
+      ON latest.activityId = entries.activityId
+     AND latest.maxStart   = entries.startDate
+    GROUP BY entries.activityId
+  `);
+  const entries = rows.map(mapEntryRow);
+  await attachTags(db, entries);
+  return Object.fromEntries(entries.map(entry => [entry.activityId, entry]));
+};
+
+/**
+ * Dates only. GraphView needs thousands of timestamps and zero pixels, so it
+ * must never touch the image columns.
+ */
+export const getEntryDates = async (
+  activityId: string,
+): Promise<{ id: string; startDate: Date; endDate: Date }[]> => {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.getAllAsync<any>(
+    'SELECT id, startDate, endDate FROM entries WHERE activityId = ? ORDER BY startDate DESC',
+    [activityId],
+  );
+  return rows.map(row => ({
+    id: row.id,
+    startDate: new Date(row.startDate),
+    endDate: new Date(row.endDate),
+  }));
+};
+
+/**
+ * A single entry with its image references, for the edit screen.
+ * This is the only read path that touches `entries.image` directly, and it is
+ * scoped to exactly one row.
+ */
+export const getEntryById = async (
+  entryId: string,
+): Promise<(ActivityEntry & { activityId: string }) | null> => {
+  const db = await getDb();
+  if (!db) return null;
+  const row = await db.getFirstAsync<any>(
+    `SELECT id, activityId, startDate, endDate, notes, image, thumbnail, imagesMigrated,
+            CASE WHEN image IS NULL OR image = '' THEN 0 ELSE 1 END AS hasImages
+     FROM entries WHERE id = ?`,
+    [entryId],
+  );
+  if (!row) return null;
+  const entry = mapEntryRow(row);
+  await attachTags(db, [entry]);
+  return entry;
+};
+
+/**
+ * Full history for one activity. Only used by CSV export, which walks
+ * activities one at a time — never by the UI.
+ */
 export const getEntries = async (activityId: string): Promise<ActivityEntry[]> => {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.getAllAsync<any>(`
-    SELECT entries.*, tags.id as tagId, tags.name as tagName, tags.color as tagColor
-    FROM entries
-    LEFT JOIN entry_tags ON entries.id = entry_tags.entryId
-    LEFT JOIN tags ON entry_tags.tagId = tags.id
-    WHERE entries.activityId = ?
-    ORDER BY entries.startDate DESC
-  `, [activityId]);
-  return mapEntriesWithTags(rows).sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+  const rows = await db.getAllAsync<any>(
+    `SELECT ${ENTRY_LIST_PROJECTION}
+     FROM entries WHERE entries.activityId = ?
+     ORDER BY entries.startDate DESC`,
+    [activityId],
+  );
+  const entries = rows.map(mapEntryRow);
+  await attachTags(db, entries);
+  return entries;
 };
 
+/**
+ * Every entry, image columns projected safely. Used for garbage collection and
+ * bulk operations. Still cheap because oversized values are replaced by
+ * placeholders rather than loaded.
+ */
 export const getAllEntries = async (): Promise<(ActivityEntry & { activityId: string })[]> => {
   const db = await getDb();
   if (!db) return [];
-  const rows = await db.getAllAsync<any>(`
-    SELECT entries.*, tags.id as tagId, tags.name as tagName, tags.color as tagColor
-    FROM entries
-    LEFT JOIN entry_tags ON entries.id = entry_tags.entryId
-    LEFT JOIN tags ON entry_tags.tagId = tags.id
-  `);
-
-  const entryMap = new Map<string, ActivityEntry & { activityId: string }>();
-  rows.forEach(row => {
-      if (!entryMap.has(row.id)) {
-          entryMap.set(row.id, {
-              id: row.id,
-              activityId: row.activityId,
-              startDate: new Date(row.startDate),
-              endDate: new Date(row.endDate),
-              notes: row.notes,
-              images: parseJsonArray(row.image),
-              thumbnails: parseJsonArray(row.thumbnail),
-              tags: []
-          });
-      }
-      if (row.tagId) {
-          entryMap.get(row.id)!.tags!.push({
-              id: row.tagId,
-              name: row.tagName,
-              color: row.tagColor
-          });
-      }
-  });
-  return Array.from(entryMap.values());
+  const rows = await db.getAllAsync<any>(
+    `SELECT ${ENTRY_LIST_PROJECTION} FROM entries`,
+  );
+  const entries = rows.map(mapEntryRow);
+  await attachTags(db, entries);
+  return entries;
 };
+
+/** Every managed reference currently in use — the live set for GC. */
+export const getAllImageRefs = async (): Promise<Set<string>> => {
+  const db = await getDb();
+  const refs = new Set<string>();
+  if (!db) return refs;
+  const rows = await db.getAllAsync<any>(
+    `SELECT
+       CASE WHEN length(COALESCE(image,'')) <= ${MAX_INLINE_SELECT_BYTES} THEN image ELSE NULL END AS image,
+       CASE WHEN length(COALESCE(thumbnail,'')) <= ${MAX_INLINE_SELECT_BYTES} THEN thumbnail ELSE NULL END AS thumbnail
+     FROM entries`,
+  );
+  rows.forEach(row => {
+    parseRefArray(row.image)?.forEach(ref => refs.add(ref));
+    parseRefArray(row.thumbnail)?.forEach(ref => refs.add(ref));
+  });
+  return refs;
+};
+
+/**
+ * References held by a single entry.
+ *
+ * Deleting a row does not delete its files — SQL knows nothing about the
+ * filesystem — so callers read the refs first, delete the row, then delete the
+ * blobs. Missing this step is how a file-backed store silently leaks disk.
+ */
+export const getImageRefsForEntry = async (entryId: string): Promise<string[]> => {
+  const raw = await getRawEntryImages(entryId);
+  if (!raw) return [];
+  return [...new Set([...raw.images, ...raw.thumbnails])].filter(ref => ref.startsWith('img:'));
+};
+
+/** References held by every entry of an activity, for cascading deletes. */
+export const getImageRefsForActivity = async (activityId: string): Promise<string[]> => {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.getAllAsync<any>(
+    `SELECT
+       CASE WHEN length(COALESCE(image,'')) <= ${MAX_INLINE_SELECT_BYTES} THEN image ELSE NULL END AS image,
+       CASE WHEN length(COALESCE(thumbnail,'')) <= ${MAX_INLINE_SELECT_BYTES} THEN thumbnail ELSE NULL END AS thumbnail
+     FROM entries WHERE activityId = ?`,
+    [activityId],
+  );
+  const refs = new Set<string>();
+  rows.forEach(row => {
+    parseRefArray(row.image)?.forEach(ref => ref.startsWith('img:') && refs.add(ref));
+    parseRefArray(row.thumbnail)?.forEach(ref => ref.startsWith('img:') && refs.add(ref));
+  });
+  return [...refs];
+};
+
+/** Remove every entry (and therefore every image) but keep the activities. */
+export const deleteAllEntries = async (): Promise<void> => {
+  const db = await getDb();
+  if (!db) return;
+  await db.execAsync('DELETE FROM entry_tags; DELETE FROM entries;');
+  await db.runAsync("UPDATE activities SET lastDone = 'Never'");
+};
+
+/* ------------------------------------------------------------------ *
+ * Entry writes
+ * ------------------------------------------------------------------ */
 
 export const addEntry = async (activityId: string, entry: ActivityEntry) => {
   const db = await getDb();
   if (!db) return;
   await db.runAsync(
-    'INSERT INTO entries (id, activityId, startDate, endDate, notes, image, thumbnail) VALUES (?, ?, ?, ?, ?, ?, ?)',
-    [entry.id, activityId, entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.images ? JSON.stringify(entry.images) : null, entry.thumbnails ? JSON.stringify(entry.thumbnails) : null]
+    'INSERT INTO entries (id, activityId, startDate, endDate, notes, image, thumbnail, imagesMigrated) VALUES (?, ?, ?, ?, ?, ?, ?, 1)',
+    [
+      entry.id,
+      activityId,
+      entry.startDate.toISOString(),
+      entry.endDate.toISOString(),
+      entry.notes || null,
+      serialiseRefArray(entry.images),
+      serialiseRefArray(entry.thumbnails),
+    ],
   );
   if (entry.tags) {
     for (const tag of entry.tags) {
@@ -332,8 +600,8 @@ export const updateEntryImages = async (id: string, images?: string[], thumbnail
   const db = await getDb();
   if (!db) return;
   await db.runAsync(
-    'UPDATE entries SET image = ?, thumbnail = ? WHERE id = ?',
-    [images ? JSON.stringify(images) : null, thumbnails ? JSON.stringify(thumbnails) : null, id]
+    'UPDATE entries SET image = ?, thumbnail = ?, imagesMigrated = 1 WHERE id = ?',
+    [serialiseRefArray(images), serialiseRefArray(thumbnails), id],
   );
 };
 
@@ -341,8 +609,33 @@ export const updateEntry = async (entry: ActivityEntry) => {
   const db = await getDb();
   if (!db) return;
   await db.runAsync(
-    'UPDATE entries SET startDate = ?, endDate = ?, notes = ?, image = ?, thumbnail = ? WHERE id = ?',
-    [entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.images ? JSON.stringify(entry.images) : null, entry.thumbnails ? JSON.stringify(entry.thumbnails) : null, entry.id]
+    'UPDATE entries SET startDate = ?, endDate = ?, notes = ?, image = ?, thumbnail = ?, imagesMigrated = 1 WHERE id = ?',
+    [
+      entry.startDate.toISOString(),
+      entry.endDate.toISOString(),
+      entry.notes || null,
+      serialiseRefArray(entry.images),
+      serialiseRefArray(entry.thumbnails),
+      entry.id,
+    ],
+  );
+  if (entry.tags) {
+    await db.runAsync('DELETE FROM entry_tags WHERE entryId = ?', [entry.id]);
+    for (const tag of entry.tags) {
+        await addEntryTag(entry.id, tag.id);
+    }
+  }
+};
+
+/** Update everything except images — avoids rewriting refs needlessly. */
+export const updateEntryDetails = async (
+  entry: Pick<ActivityEntry, 'id' | 'startDate' | 'endDate' | 'notes' | 'tags'>,
+) => {
+  const db = await getDb();
+  if (!db) return;
+  await db.runAsync(
+    'UPDATE entries SET startDate = ?, endDate = ?, notes = ? WHERE id = ?',
+    [entry.startDate.toISOString(), entry.endDate.toISOString(), entry.notes || null, entry.id],
   );
   if (entry.tags) {
     await db.runAsync('DELETE FROM entry_tags WHERE entryId = ?', [entry.id]);
@@ -358,7 +651,98 @@ export const deleteEntry = async (id: string) => {
   await db.runAsync('DELETE FROM entries WHERE id = ?', [id]);
 };
 
-// Tag CRUD
+/* ------------------------------------------------------------------ *
+ * Image migration bookkeeping
+ * ------------------------------------------------------------------ */
+
+export const getMeta = async (key: string): Promise<string | null> => {
+  const db = await getDb();
+  if (!db) return null;
+  const row = await db.getFirstAsync<{ value: string }>(
+    'SELECT value FROM app_meta WHERE key = ?',
+    [key],
+  );
+  return row?.value ?? null;
+};
+
+export const setMeta = async (key: string, value: string): Promise<void> => {
+  const db = await getDb();
+  if (!db) return;
+  await db.runAsync(
+    'INSERT INTO app_meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+    [key, value],
+  );
+};
+
+/** How many rows still hold inline base64. */
+export const countUnmigratedEntries = async (): Promise<number> => {
+  const db = await getDb();
+  if (!db) return 0;
+  const row = await db.getFirstAsync<{ count: number }>(
+    'SELECT COUNT(*) as count FROM entries WHERE imagesMigrated = 0',
+  );
+  return row?.count ?? 0;
+};
+
+/** Ids only — the migration then loads one row's blobs at a time. */
+export const getUnmigratedEntryIds = async (limit: number): Promise<string[]> => {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db.getAllAsync<{ id: string }>(
+    'SELECT id FROM entries WHERE imagesMigrated = 0 LIMIT ?',
+    [limit],
+  );
+  return rows.map(row => row.id);
+};
+
+/**
+ * Read one entry's raw image columns. Deliberately unguarded — this is the one
+ * place that must see the legacy base64, and it handles a single row.
+ */
+export const getRawEntryImages = async (
+  entryId: string,
+): Promise<{ images: string[]; thumbnails: string[] } | null> => {
+  const db = await getDb();
+  if (!db) return null;
+  const row = await db.getFirstAsync<any>(
+    'SELECT image, thumbnail FROM entries WHERE id = ?',
+    [entryId],
+  );
+  if (!row) return null;
+  return {
+    images: parseRefArray(row.image) ?? [],
+    thumbnails: parseRefArray(row.thumbnail) ?? [],
+  };
+};
+
+export const markEntryMigrated = async (
+  entryId: string,
+  images: string[],
+  thumbnails: string[],
+): Promise<void> => {
+  const db = await getDb();
+  if (!db) return;
+  await db.runAsync(
+    'UPDATE entries SET image = ?, thumbnail = ?, imagesMigrated = 1 WHERE id = ?',
+    [serialiseRefArray(images), serialiseRefArray(thumbnails), entryId],
+  );
+};
+
+/**
+ * Reclaim the space freed by the migration. SQLite keeps deleted pages in the
+ * file, so without this the database stays as large as it was even though the
+ * base64 is gone.
+ */
+export const compactDatabase = async (): Promise<void> => {
+  const db = await getDb();
+  if (!db) return;
+  await db.execAsync('VACUUM');
+};
+
+/* ------------------------------------------------------------------ *
+ * Tags
+ * ------------------------------------------------------------------ */
+
 export const getTags = async (): Promise<Tag[]> => {
     const db = await getDb();
     if (!db) return [];
@@ -383,7 +767,6 @@ export const deleteTag = async (id: string) => {
     await db.runAsync('DELETE FROM tags WHERE id = ?', [id]);
 };
 
-// Tag associations
 export const getEntryTags = async (entryId: string): Promise<Tag[]> => {
     const db = await getDb();
     if (!db) return [];
@@ -406,75 +789,95 @@ export const getTagUsageCount = async (tagId: string): Promise<number> => {
     return result?.count || 0;
 };
 
-export const getEntriesByTag = async (tagId: string): Promise<(ActivityEntry & { activityId: string })[]> => {
+export const getEntriesByTag = async (
+  tagId: string,
+  { limit = DEFAULT_PAGE_SIZE, offset = 0 }: { limit?: number; offset?: number } = {},
+): Promise<(ActivityEntry & { activityId: string })[]> => {
     const db = await getDb();
     if (!db) return [];
 
-    // Find entry IDs first
-    const entryIdRows = await db.getAllAsync<{entryId: string}>('SELECT entryId FROM entry_tags WHERE tagId = ?', [tagId]);
-    if (entryIdRows.length === 0) return [];
-    const entryIds = entryIdRows.map(r => r.entryId);
+    const rows = await db.getAllAsync<any>(
+      `SELECT ${ENTRY_LIST_PROJECTION}
+       FROM entries
+       JOIN entry_tags ON entry_tags.entryId = entries.id
+       WHERE entry_tags.tagId = ?
+       ORDER BY entries.startDate DESC
+       LIMIT ? OFFSET ?`,
+      [tagId, limit, offset],
+    );
 
-    // Fetch entries and their tags
-    const placeholders = entryIds.map(() => '?').join(',');
-    const rows = await db.getAllAsync<any>(`
-        SELECT entries.*, tags.id as tagId, tags.name as tagName, tags.color as tagColor
-        FROM entries
-        LEFT JOIN entry_tags ON entries.id = entry_tags.entryId
-        LEFT JOIN tags ON entry_tags.tagId = tags.id
-        WHERE entries.id IN (${placeholders})
-        ORDER BY entries.startDate DESC
-    `, entryIds);
-
-    const entryMap = new Map<string, ActivityEntry & { activityId: string }>();
-    rows.forEach(row => {
-        if (!entryMap.has(row.id)) {
-            entryMap.set(row.id, {
-                id: row.id,
-                activityId: row.activityId,
-                startDate: new Date(row.startDate),
-                endDate: new Date(row.endDate),
-                notes: row.notes,
-                images: parseJsonArray(row.image),
-              thumbnails: parseJsonArray(row.thumbnail),
-                tags: []
-            });
-        }
-        if (row.tagId) {
-            entryMap.get(row.id)!.tags!.push({
-                id: row.tagId,
-                name: row.tagName,
-                color: row.tagColor
-            });
-        }
-    });
-    return Array.from(entryMap.values()).sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+    const entries = rows.map(mapEntryRow);
+    await attachTags(db, entries);
+    return entries;
 };
 
+/** Entries carrying any of the given tags, de-duplicated, one page at a time. */
+export const getEntriesByTags = async (
+  tagIds: string[],
+  { limit = DEFAULT_PAGE_SIZE, offset = 0 }: { limit?: number; offset?: number } = {},
+): Promise<(ActivityEntry & { activityId: string })[]> => {
+    const db = await getDb();
+    if (!db || tagIds.length === 0) return [];
+
+    const placeholders = tagIds.map(() => '?').join(',');
+    const rows = await db.getAllAsync<any>(
+      `SELECT ${ENTRY_LIST_PROJECTION}
+       FROM entries
+       WHERE entries.id IN (
+         SELECT DISTINCT entryId FROM entry_tags WHERE tagId IN (${placeholders})
+       )
+       ORDER BY entries.startDate DESC
+       LIMIT ? OFFSET ?`,
+      [...tagIds, limit, offset],
+    );
+
+    const entries = rows.map(mapEntryRow);
+    await attachTags(db, entries);
+    return entries;
+};
+
+export const countEntriesByTags = async (tagIds: string[]): Promise<number> => {
+    const db = await getDb();
+    if (!db || tagIds.length === 0) return 0;
+    const placeholders = tagIds.map(() => '?').join(',');
+    const row = await db.getFirstAsync<{ count: number }>(
+      `SELECT COUNT(DISTINCT entryId) as count FROM entry_tags WHERE tagId IN (${placeholders})`,
+      tagIds,
+    );
+    return row?.count ?? 0;
+};
+
+/* ------------------------------------------------------------------ *
+ * Raw database file access (used by the backup bundle)
+ * ------------------------------------------------------------------ */
+
+export const getDatabaseFile = (): File => new File(new Directory(Paths.document, 'SQLite'), DB_NAME);
+
+/**
+ * Share the raw .db file.
+ *
+ * Note: now that images live outside the database, this file on its own is no
+ * longer a complete backup. `exportBundle` in utils/backup is the supported
+ * path; this stays for anyone who specifically wants the database.
+ */
 export const exportDatabase = async () => {
   if (Platform.OS === 'web') {
     alert('Database export is not supported on web.');
     return;
   }
 
-  const db = await getDb();
-  if (!db) return;
-
   try {
-    const dbUri = `${FileSystem.documentDirectory}SQLite/${DB_NAME}`;
-    const fileInfo = await FileSystem.getInfoAsync(dbUri);
-    if (!fileInfo.exists) {
+    const source = getDatabaseFile();
+    if (!source.exists) {
       alert('Database file not found.');
       return;
     }
 
-    const exportUri = `${FileSystem.cacheDirectory}${DB_NAME}`;
-    await FileSystem.copyAsync({
-      from: dbUri,
-      to: exportUri,
-    });
+    const destination = new File(Paths.cache, DB_NAME);
+    if (destination.exists) destination.delete();
+    source.copy(destination);
 
-    await Sharing.shareAsync(exportUri);
+    await Sharing.shareAsync(destination.uri);
   } catch (error) {
     console.error('Error exporting database:', error);
     alert('Failed to export database.');
@@ -494,20 +897,15 @@ export const importDatabase = async () => {
 
     if (result.canceled) return;
 
-    const selectedFile = result.assets[0];
-    const dbUri = `${FileSystem.documentDirectory}SQLite/${DB_NAME}`;
-
-    // Ensure the SQLite directory exists
-    const dbDir = `${FileSystem.documentDirectory}SQLite`;
-    const dirInfo = await FileSystem.getInfoAsync(dbDir);
-    if (!dirInfo.exists) {
-      await FileSystem.makeDirectoryAsync(dbDir, { intermediates: true });
+    const selectedFile = new File(result.assets[0].uri);
+    const dbDirectory = new Directory(Paths.document, 'SQLite');
+    if (!dbDirectory.exists) {
+      dbDirectory.create({ intermediates: true });
     }
 
-    await FileSystem.copyAsync({
-      from: selectedFile.uri,
-      to: dbUri,
-    });
+    const destination = new File(dbDirectory, DB_NAME);
+    if (destination.exists) destination.delete();
+    selectedFile.copy(destination);
 
     // Reset the dbPromise so it reopens the new database
     dbPromise = null;

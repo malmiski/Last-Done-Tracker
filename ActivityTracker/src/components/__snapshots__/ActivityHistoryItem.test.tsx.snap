@@ -1,303 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`ActivityHistoryItem only renders the first line of multi-line notes 1`] = `
-<View
-  style={
-    [
-      {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
-        "padding": 15,
-      },
-      undefined,
-    ]
-  }
->
-  <View
-    style={
-      [
-        {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
-        },
-        undefined,
-      ]
-    }
-  >
-    <View
-      style={
-        {
-          "flex": 1,
-        }
-      }
-    >
-      <Text
-        style={
-          {
-            "color": "#000000",
-            "fontSize": 14,
-          }
-        }
-      >
-        January 1, 2023 at 12:00:00 PM
-      </Text>
-      <Text
-        ellipsizeMode="tail"
-        numberOfLines={1}
-        style={
-          {
-            "color": "#666666",
-            "fontSize": 14,
-            "marginTop": 5,
-          }
-        }
-      >
-        Line 1
-      </Text>
-    </View>
-    <View
-      style={
-        {
-          "flexDirection": "row",
-        }
-      }
-    >
-      <View
-        accessibilityState={
-          {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": undefined,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={true}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
-        style={
-          {
-            "marginLeft": 20,
-            "opacity": 1,
-          }
-        }
-      >
-        <Icon
-          color="#666666"
-          name="pencil-outline"
-          size={24}
-        />
-      </View>
-      <View
-        accessibilityState={
-          {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": undefined,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={true}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
-        style={
-          {
-            "marginLeft": 20,
-            "opacity": 1,
-          }
-        }
-      >
-        <Icon
-          color="#666666"
-          name="trash-can-outline"
-          size={24}
-        />
-      </View>
-    </View>
-  </View>
-</View>
-`;
-
-exports[`ActivityHistoryItem renders correctly with an image and hidden imageMode 1`] = `
-<View
-  style={
-    [
-      {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
-        "padding": 15,
-      },
-      false,
-    ]
-  }
->
-  <View
-    style={
-      [
-        {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
-        },
-        false,
-      ]
-    }
-  >
-    <View
-      style={
-        {
-          "flex": 1,
-        }
-      }
-    >
-      <Text
-        style={
-          {
-            "color": "#000000",
-            "fontSize": 14,
-          }
-        }
-      >
-        January 1, 2023 at 12:00:00 PM
-      </Text>
-    </View>
-    <View
-      style={
-        {
-          "flexDirection": "row",
-        }
-      }
-    >
-      <View
-        accessibilityState={
-          {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": undefined,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={true}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
-        style={
-          {
-            "marginLeft": 20,
-            "opacity": 1,
-          }
-        }
-      >
-        <Icon
-          color="#666666"
-          name="pencil-outline"
-          size={24}
-        />
-      </View>
-      <View
-        accessibilityState={
-          {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": undefined,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={true}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
-        style={
-          {
-            "marginLeft": 20,
-            "opacity": 1,
-          }
-        }
-      >
-        <Icon
-          color="#666666"
-          name="trash-can-outline"
-          size={24}
-        />
-      </View>
-    </View>
-  </View>
-</View>
-`;
-
-exports[`ActivityHistoryItem renders correctly with an image and large imageMode 1`] = `
+exports[`ActivityHistoryItem renders correctly with an image reference and large imageMode 1`] = `
 <View
   style={
     [
@@ -320,11 +23,16 @@ exports[`ActivityHistoryItem renders correctly with an image and large imageMode
   <View
     onLayout={[Function]}
     style={
-      {
-        "marginBottom": 15,
-        "position": "relative",
-        "width": "100%",
-      }
+      [
+        {
+          "marginBottom": 15,
+          "position": "relative",
+          "width": "100%",
+        },
+        {
+          "height": 260,
+        },
+      ]
     }
   />
   <View
@@ -452,7 +160,7 @@ exports[`ActivityHistoryItem renders correctly with an image and large imageMode
 </View>
 `;
 
-exports[`ActivityHistoryItem renders correctly with an image and medium imageMode 1`] = `
+exports[`ActivityHistoryItem renders correctly with an image reference and medium imageMode 1`] = `
 <View
   style={
     [
@@ -465,7 +173,7 @@ exports[`ActivityHistoryItem renders correctly with an image and medium imageMod
         "marginBottom": 15,
         "padding": 15,
       },
-      undefined,
+      false,
     ]
   }
 >
@@ -478,14 +186,19 @@ exports[`ActivityHistoryItem renders correctly with an image and medium imageMod
           "flexDirection": "row",
           "justifyContent": "space-between",
         },
-        undefined,
+        false,
       ]
     }
   >
-    <Image
+    <ExpoImage
+      allowDownscaling={true}
+      cachePolicy="memory-disk"
+      contentFit="cover"
+      priority="normal"
+      recyclingKey="e1-0-medium"
       source={
         {
-          "uri": "data:image/jpeg;base64,mock",
+          "uri": "file:///images/abc123_thumb.jpg",
         }
       }
       style={
@@ -496,6 +209,7 @@ exports[`ActivityHistoryItem renders correctly with an image and medium imageMod
           "width": 100,
         }
       }
+      transition={0}
     />
     <View
       style={
@@ -609,7 +323,7 @@ exports[`ActivityHistoryItem renders correctly with an image and medium imageMod
 </View>
 `;
 
-exports[`ActivityHistoryItem renders correctly with an image and small imageMode 1`] = `
+exports[`ActivityHistoryItem renders correctly with an image reference and small imageMode 1`] = `
 <View
   style={
     [
@@ -622,7 +336,7 @@ exports[`ActivityHistoryItem renders correctly with an image and small imageMode
         "marginBottom": 15,
         "padding": 15,
       },
-      undefined,
+      false,
     ]
   }
 >
@@ -635,14 +349,19 @@ exports[`ActivityHistoryItem renders correctly with an image and small imageMode
           "flexDirection": "row",
           "justifyContent": "space-between",
         },
-        undefined,
+        false,
       ]
     }
   >
-    <Image
+    <ExpoImage
+      allowDownscaling={true}
+      cachePolicy="memory-disk"
+      contentFit="cover"
+      priority="normal"
+      recyclingKey="e1-0-small"
       source={
         {
-          "uri": "data:image/jpeg;base64,mock",
+          "uri": "file:///images/abc123_thumb.jpg",
         }
       }
       style={
@@ -653,6 +372,7 @@ exports[`ActivityHistoryItem renders correctly with an image and small imageMode
           "width": 50,
         }
       }
+      transition={0}
     />
     <View
       style={
@@ -779,7 +499,7 @@ exports[`ActivityHistoryItem renders correctly with lastEntryEndDate prop (blue 
         "marginBottom": 15,
         "padding": 15,
       },
-      undefined,
+      false,
     ]
   }
 >
@@ -792,7 +512,7 @@ exports[`ActivityHistoryItem renders correctly with lastEntryEndDate prop (blue 
           "flexDirection": "row",
           "justifyContent": "space-between",
         },
-        undefined,
+        false,
       ]
     }
   >
@@ -933,7 +653,7 @@ exports[`ActivityHistoryItem renders correctly with notes preview 1`] = `
         "marginBottom": 15,
         "padding": 15,
       },
-      undefined,
+      false,
     ]
   }
 >
@@ -946,7 +666,7 @@ exports[`ActivityHistoryItem renders correctly with notes preview 1`] = `
           "flexDirection": "row",
           "justifyContent": "space-between",
         },
-        undefined,
+        false,
       ]
     }
   >
@@ -1088,7 +808,7 @@ exports[`ActivityHistoryItem renders correctly without notes 1`] = `
         "marginBottom": 15,
         "padding": 15,
       },
-      undefined,
+      false,
     ]
   }
 >
@@ -1101,7 +821,7 @@ exports[`ActivityHistoryItem renders correctly without notes 1`] = `
           "flexDirection": "row",
           "justifyContent": "space-between",
         },
-        undefined,
+        false,
       ]
     }
   >
@@ -1121,161 +841,6 @@ exports[`ActivityHistoryItem renders correctly without notes 1`] = `
         }
       >
         January 1, 2023 at 12:00:00 PM
-      </Text>
-    </View>
-    <View
-      style={
-        {
-          "flexDirection": "row",
-        }
-      }
-    >
-      <View
-        accessibilityState={
-          {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": undefined,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={true}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
-        style={
-          {
-            "marginLeft": 20,
-            "opacity": 1,
-          }
-        }
-      >
-        <Icon
-          color="#666666"
-          name="pencil-outline"
-          size={24}
-        />
-      </View>
-      <View
-        accessibilityState={
-          {
-            "busy": undefined,
-            "checked": undefined,
-            "disabled": undefined,
-            "expanded": undefined,
-            "selected": undefined,
-          }
-        }
-        accessibilityValue={
-          {
-            "max": undefined,
-            "min": undefined,
-            "now": undefined,
-            "text": undefined,
-          }
-        }
-        accessible={true}
-        collapsable={false}
-        focusable={true}
-        onClick={[Function]}
-        onResponderGrant={[Function]}
-        onResponderMove={[Function]}
-        onResponderRelease={[Function]}
-        onResponderTerminate={[Function]}
-        onResponderTerminationRequest={[Function]}
-        onStartShouldSetResponder={[Function]}
-        style={
-          {
-            "marginLeft": 20,
-            "opacity": 1,
-          }
-        }
-      >
-        <Icon
-          color="#666666"
-          name="trash-can-outline"
-          size={24}
-        />
-      </View>
-    </View>
-  </View>
-</View>
-`;
-
-exports[`ActivityHistoryItem renders duration when startDate and endDate differ 1`] = `
-<View
-  style={
-    [
-      {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
-        "padding": 15,
-      },
-      undefined,
-    ]
-  }
->
-  <View
-    style={
-      [
-        {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
-        },
-        undefined,
-      ]
-    }
-  >
-    <View
-      style={
-        {
-          "flex": 1,
-        }
-      }
-    >
-      <Text
-        style={
-          {
-            "color": "#000000",
-            "fontSize": 14,
-          }
-        }
-      >
-        January 1, 2023 at 12:00:00 PM
-         - January 1, 2023 at 12:05:00 PM
-      </Text>
-      <Text
-        style={
-          {
-            "color": "#007AFF",
-            "fontSize": 12,
-            "fontWeight": "600",
-            "marginTop": 2,
-          }
-        }
-      >
-        5 minutes
       </Text>
     </View>
     <View

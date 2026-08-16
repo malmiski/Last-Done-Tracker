@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup and device-transfer rules for API 31+ (android:dataExtractionRules).
+
+  Mirrors backup_rules.xml: entry photos are excluded from cloud backup.
+
+  Device-to-device transfer has no 25MB cap and happens over a local link, so
+  photos ARE included there -- moving to a new phone keeps everything, while
+  cloud backup stays small.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="entry-images" />
+    </cloud-backup>
+    <device-transfer>
+        <!-- Everything, including photos. -->
+    </device-transfer>
+</data-extraction-rules>

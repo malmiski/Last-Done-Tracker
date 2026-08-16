@@ -1,22 +1,35 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, TextInput, Image, ScrollView, Alert, Modal } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
+import { useEntry } from '../src/hooks/useEntries';
 import * as ImagePicker from 'expo-image-picker';
 import * as Clipboard from 'expo-clipboard';
 import { Tag } from '../src/data/activity-details';
-import { processImage, generateThumbnail } from '../src/utils/imageUtils';
+import { importImage, importBase64Image } from '../src/utils/imageUtils';
+import * as imageStore from '../src/utils/imageStore';
+import AppImage, { clearImageMemoryCache } from '../src/components/AppImage';
+import LargeImageGallery from '../src/components/LargeImageGallery';
+
+/** A photo row in the editor. Holds a reference, never image data. */
+interface PhotoDraft {
+  ref: string;
+  orderStr: string;
+}
 
 const EditEntryScreen: React.FC = () => {
   const router = useRouter();
   const { activityId, entryId } = useLocalSearchParams<{ activityId: string, entryId: string }>();
-  const { activityDetails, updateActivityEntry, getActivityById, tags, addTag } = useActivityData();
+  const { updateActivityEntry, getActivityById, tags, addTag } = useActivityData();
 
   const activity = getActivityById(activityId);
-  const entry = activityDetails[activityId]?.find(e => e.id === entryId);
+  // Loads exactly one row. Previously this screen pulled the entire database
+  // (every entry of every activity, base64 included) just to find one entry --
+  // which is why editing an image-heavy entry was the reliable way to crash.
+  const { entry, loading: entryLoading } = useEntry(entryId);
 
   const [year, setYear] = useState('');
   const [month, setMonth] = useState('');
@@ -35,7 +48,15 @@ const EditEntryScreen: React.FC = () => {
   const [endAmpm, setEndAmpm] = useState('');
 
   const [notes, setNotes] = useState('');
-  const [photos, setPhotos] = useState<{ image: string, thumbnail: string, orderStr: string }[]>([]);
+  const [photos, setPhotos] = useState<PhotoDraft[]>([]);
+  const [importing, setImporting] = useState(false);
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  /**
+   * References the entry started with. Anything here that is gone at save time
+   * has been removed by the user, so its blob is deleted. Without this the
+   * files would linger until the next garbage-collection sweep.
+   */
+  const originalRefs = useRef<string[]>([]);
   const [selectedTags, setSelectedTags] = useState<Tag[]>([]);
   const [tagSearch, setTagSearch] = useState('');
   const [isFormValidState, setIsFormValidState] = useState(false);
@@ -129,23 +150,9 @@ const EditEntryScreen: React.FC = () => {
 
       setNotes(entry.notes || '');
 
-      const newPhotos: { image: string, thumbnail: string, orderStr: string }[] = [];
-      if (entry.images && entry.images.length > 0) {
-          for (let i = 0; i < entry.images.length; i++) {
-              newPhotos.push({
-                  image: entry.images[i],
-                  thumbnail: entry.thumbnails && entry.thumbnails[i] ? entry.thumbnails[i] : entry.images[i],
-                  orderStr: (i + 1).toString()
-              });
-          }
-      } else if (entry.image) {
-          newPhotos.push({
-              image: entry.image,
-              thumbnail: entry.thumbnail || entry.image,
-              orderStr: '1'
-          });
-      }
-      setPhotos(newPhotos);
+      const refs = entry.images && entry.images.length > 0 ? entry.images : entry.thumbnails || [];
+      originalRefs.current = refs.filter(ref => ref.startsWith('img:'));
+      setPhotos(refs.map((ref, index) => ({ ref, orderStr: (index + 1).toString() })));
       setSelectedTags(entry.tags || []);
     }
   }, [entry]);
@@ -154,17 +161,22 @@ const EditEntryScreen: React.FC = () => {
     setIsFormValidState(isFormValid());
   }, [year, month, day, hour, minute, second, ampm, endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm]);
 
+  /**
+   * Import an image and swap in its reference.
+   *
+   * The picker's original file is handed straight to the image store, which
+   * downscales and writes it to disk. The full-resolution bytes never enter
+   * JS, so adding a 12MP photo costs the same as adding a small one.
+   */
   const handleImageInput = async (uri: string, replaceIndex: number = -1) => {
     try {
-      const processedUri = await processImage(uri);
-      const thumbImage = await generateThumbnail(processedUri);
-
+      const stored = await importImage(uri);
       setPhotos(prev => {
           const newPhotos = [...prev];
           if (replaceIndex >= 0 && replaceIndex < newPhotos.length) {
-              newPhotos[replaceIndex] = { ...newPhotos[replaceIndex], image: processedUri, thumbnail: thumbImage };
+              newPhotos[replaceIndex] = { ...newPhotos[replaceIndex], ref: stored.ref };
           } else {
-              newPhotos.push({ image: processedUri, thumbnail: thumbImage, orderStr: (newPhotos.length + 1).toString() });
+              newPhotos.push({ ref: stored.ref, orderStr: (newPhotos.length + 1).toString() });
           }
           return newPhotos;
       });
@@ -184,32 +196,52 @@ const EditEntryScreen: React.FC = () => {
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
-      if (isMultiple) {
-        for (const asset of result.assets) {
-          if (asset.uri) {
-            await handleImageInput(asset.uri, -1);
+      setImporting(true);
+      try {
+        if (isMultiple) {
+          // Sequential, not Promise.all: parallel decodes of several 12MP
+          // photos is exactly the spike we are trying to avoid.
+          for (const asset of result.assets) {
+            if (asset.uri) {
+              await handleImageInput(asset.uri, -1);
+            }
           }
+        } else {
+          await handleImageInput(result.assets[0].uri, replaceIndex);
         }
-      } else {
-        await handleImageInput(result.assets[0].uri, replaceIndex);
+      } finally {
+        setImporting(false);
       }
     }
   };
 
   const pasteImage = async (replaceIndex: number = -1) => {
     const hasImage = await Clipboard.hasImageAsync();
-    if (hasImage) {
-      const imageBase64 = await Clipboard.getImageAsync({ format: 'png' }); // Clipboard currently only supports png/jpg
-      if (imageBase64 && imageBase64.data) {
-        // We need to add the data prefix for the image utility
-        let uri = imageBase64.data;
-        if (!uri.startsWith('data:')) {
-            uri = `data:image/png;base64,${uri}`;
-        }
-        await handleImageInput(uri, replaceIndex);
-      }
-    } else {
+    if (!hasImage) {
       Alert.alert("No image found in clipboard");
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const clipboardImage = await Clipboard.getImageAsync({ format: 'png' });
+      if (clipboardImage && clipboardImage.data) {
+        const stored = await importBase64Image(clipboardImage.data, 'image/png');
+        setPhotos(prev => {
+          const newPhotos = [...prev];
+          if (replaceIndex >= 0 && replaceIndex < newPhotos.length) {
+            newPhotos[replaceIndex] = { ...newPhotos[replaceIndex], ref: stored.ref };
+          } else {
+            newPhotos.push({ ref: stored.ref, orderStr: (newPhotos.length + 1).toString() });
+          }
+          return newPhotos;
+        });
+      }
+    } catch (e) {
+      Alert.alert("Error processing image");
+      console.error(e);
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -288,18 +320,28 @@ const EditEntryScreen: React.FC = () => {
     updateEndStates(newEnd);
   };
 
-  const handleSave = () => {
-    if (activityId && entryId && isFormValid()) {
-      const startDate = getFullDate(year, month, day, hour, minute, second, ampm);
-      const endDate = getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
-      const images = photos.length > 0 ? photos.map(p => p.image) : undefined;
-      const thumbnails = photos.length > 0 ? photos.map(p => p.thumbnail) : undefined;
-      updateActivityEntry(activityId, entryId, startDate, endDate, notes, images, thumbnails, selectedTags);
-      if (router.canGoBack()) {
-        router.back();
-      } else {
-        router.replace(`/ActivityDetail?activityId=${activityId}`);
-      }
+  const handleSave = async () => {
+    if (!activityId || !entryId || !isFormValid()) return;
+
+    const startDate = getFullDate(year, month, day, hour, minute, second, ampm);
+    const endDate = getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
+
+    // One reference addresses both the full image and its thumbnail, so both
+    // columns store the same array.
+    const refs = photos.map(photo => photo.ref);
+    const images = refs.length > 0 ? refs : undefined;
+
+    await updateActivityEntry(activityId, entryId, startDate, endDate, notes, images, images, selectedTags);
+
+    // Delete blobs for photos the user removed during this edit.
+    const kept = new Set(refs);
+    const removed = originalRefs.current.filter(ref => !kept.has(ref));
+    await Promise.all(removed.map(ref => imageStore.deleteRef(ref)));
+
+    if (router.canGoBack()) {
+      router.back();
+    } else {
+      router.replace(`/ActivityDetail?activityId=${activityId}`);
     }
   };
 
@@ -318,6 +360,17 @@ const EditEntryScreen: React.FC = () => {
     setNewTagName('');
     setNewTagModalVisible(false);
   };
+
+  // Release decoded previews when leaving the editor.
+  useEffect(() => () => { void clearImageMemoryCache(); }, []);
+
+  if (entryLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <ActivityIndicator style={{ marginTop: 60 }} color={theme.colors.primary} />
+      </SafeAreaView>
+    );
+  }
 
   if (!activity || !entry) {
     return (
@@ -653,8 +706,27 @@ const EditEntryScreen: React.FC = () => {
         )}
 
         {photos.map((photo, index) => (
-            <View key={index} style={styles.photoItemContainer}>
-                <Image source={{ uri: photo.image }} style={styles.imagePreview} />
+            <View key={`${photo.ref}-${index}`} style={styles.photoItemContainer}>
+                {/*
+                  The editor preview renders the *thumbnail* variant, not the
+                  full image. Previously this was a full-resolution decode per
+                  photo, so opening an entry with 20 photos decoded 20 full
+                  images at once purely to show 200pt previews. Tap to open the
+                  full-size viewer, which mounts one image at a time.
+                */}
+                <TouchableOpacity activeOpacity={0.8} onPress={() => setViewerIndex(index)}>
+                  <AppImage
+                    imageRef={photo.ref}
+                    variant="thumb"
+                    usage="thumbnail"
+                    recyclingKey={`editor-${photo.ref}`}
+                    contentFit="contain"
+                    style={styles.imagePreview}
+                  />
+                  <View style={styles.expandBadge}>
+                    <Icon name="arrow-expand" size={16} color="#fff" />
+                  </View>
+                </TouchableOpacity>
                 <View style={styles.photoControlsRow}>
                     <View style={styles.orderContainer}>
                         <Text style={styles.orderLabel}>Order:</Text>
@@ -967,7 +1039,14 @@ const styles = StyleSheet.create({
     width: '100%',
     height: 200,
     borderRadius: 10,
-    resizeMode: 'contain',
+  },
+  expandBadge: {
+    position: 'absolute',
+    right: 8,
+    bottom: 8,
+    backgroundColor: 'rgba(0,0,0,0.55)',
+    borderRadius: 14,
+    padding: 6,
   },
   photoItemContainer: {
     backgroundColor: theme.colors.card,

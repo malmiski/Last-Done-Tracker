@@ -1,55 +1,32 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, ScrollView, SectionList } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { ActivityIndicator, View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, SectionList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
-import { Tag, ActivityEntry } from '../src/data/activity-details';
+import { useEntriesByTags, ListEntry } from '../src/hooks/useEntries';
 import ActivityHistoryItem from '../src/components/ActivityHistoryItem';
-import * as database from '../src/utils/database';
+import { clearImageMemoryCache } from '../src/components/AppImage';
 
 const SearchByTagScreen: React.FC = () => {
   const router = useRouter();
-  const { tags, activities, deleteActivityEntry, refreshData } = useActivityData();
+  const { tags, activities, deleteActivityEntry } = useActivityData();
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
-  const [entries, setEntries] = useState<(ActivityEntry & { activityId: string })[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const fetchEntries = useCallback(async (tagIds: string[]) => {
-    if (tagIds.length === 0) {
-      setEntries([]);
-      return;
-    }
-
-    // Fetch entries for all selected tags
-    const allFetchedEntries: (ActivityEntry & { activityId: string })[] = [];
-    const entryIds = new Set<string>();
-
-    for (const tagId of tagIds) {
-      const tagEntries = await database.getEntriesByTag(tagId);
-      tagEntries.forEach(entry => {
-        if (!entryIds.has(entry.id)) {
-          entryIds.add(entry.id);
-          allFetchedEntries.push(entry);
-        }
-      });
-    }
-
-    // Sort combined entries by date desc
-    allFetchedEntries.sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
-    setEntries(allFetchedEntries);
-  }, []);
-
-  useEffect(() => {
-    fetchEntries(selectedTagIds);
-  }, [selectedTagIds, fetchEntries]);
+  // Paginated across every selected tag. Previously this fetched the complete
+  // entry list for each tag -- images included -- and de-duplicated in JS.
+  const { entries, loading, loadingMore, loadMore, refresh, removeEntry } =
+    useEntriesByTags(selectedTagIds);
 
   useFocusEffect(
     useCallback(() => {
-      fetchEntries(selectedTagIds);
-      refreshData();
-    }, [selectedTagIds, fetchEntries, refreshData])
+      void refresh();
+      return () => {
+        void clearImageMemoryCache();
+      };
+    }, [refresh])
   );
 
   const filteredEntries = entries.filter(entry => {
@@ -59,7 +36,7 @@ const SearchByTagScreen: React.FC = () => {
   });
 
   const groupedEntries = useMemo(() => {
-    const groups: { [key: string]: { title: string, data: (ActivityEntry & { activityId: string })[] } } = {};
+    const groups: { [key: string]: { title: string, data: ListEntry[] } } = {};
 
     filteredEntries.forEach(entry => {
       const activity = activities.find(a => a.id === entry.activityId);
@@ -84,8 +61,8 @@ const SearchByTagScreen: React.FC = () => {
   };
 
   const handleDeleteEntry = async (activityId: string, entryId: string) => {
+    removeEntry(entryId);
     await deleteActivityEntry(activityId, entryId);
-    fetchEntries(selectedTagIds);
   };
 
   return (
@@ -138,9 +115,17 @@ const SearchByTagScreen: React.FC = () => {
         sections={groupedEntries}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
-        initialNumToRender={10}
-        windowSize={5}
-        maxToRenderPerBatch={10}
+        onEndReached={loadMore}
+        onEndReachedThreshold={0.6}
+        initialNumToRender={8}
+        windowSize={7}
+        maxToRenderPerBatch={8}
+        removeClippedSubviews
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator style={{ marginVertical: 20 }} color={theme.colors.primary} />
+          ) : null
+        }
         renderSectionHeader={({ section: { title } }) => (
           <Text style={styles.activityLabel}>{title}</Text>
         )}
@@ -149,10 +134,12 @@ const SearchByTagScreen: React.FC = () => {
           const lastEntryEndDate = chronologicalNextItem ? chronologicalNextItem.endDate : undefined;
           return (
             <ActivityHistoryItem
+              entryId={item.id}
               startDate={item.startDate}
               endDate={item.endDate}
               notes={item.notes}
-              image={item.image}
+              images={item.images}
+              thumbnails={item.thumbnails}
               tags={item.tags}
               lastEntryEndDate={lastEntryEndDate}
               onEdit={() => router.push(`/EditEntry?activityId=${item.activityId}&entryId=${item.id}`)}
@@ -162,6 +149,7 @@ const SearchByTagScreen: React.FC = () => {
         }}
         ListEmptyComponent={() => (
           <View style={styles.emptyContainer}>
+            {loading ? <ActivityIndicator color={theme.colors.primary} /> : null}
             <Icon name={selectedTagIds.length > 0 ? "timer-sand-empty" : "tag-multiple-outline"} size={60} color={theme.colors.disabled} />
             <Text style={styles.emptyText}>
               {selectedTagIds.length > 0 ? "No entries found for these tags." : "Select one or more tags above to see entries."}

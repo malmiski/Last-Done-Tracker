@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LineChart } from 'react-native-gifted-charts';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
+import { useEntryDates } from '../src/hooks/useEntries';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { subDays, format, differenceInDays } from 'date-fns';
@@ -19,11 +20,14 @@ const timeWindows = [
 const GraphViewScreen: React.FC = () => {
   const router = useRouter();
   const { activityId } = useLocalSearchParams<{ activityId: string }>();
-  const { getActivityById, activityDetails } = useActivityData();
+  const { getActivityById } = useActivityData();
   const [timeWindow, setTimeWindow] = useState<'7d' | '30d' | 'all'>('7d');
 
   const activity = getActivityById(activityId);
-  const history = activityDetails[activityId] || [];
+  // The chart needs timestamps and nothing else. This query selects only the
+  // date columns, so opening the graph for an image-heavy activity costs the
+  // same as opening it for an empty one.
+  const { dates: history } = useEntryDates(activityId);
 
   const chartData = useMemo(() => {
     const now = new Date();

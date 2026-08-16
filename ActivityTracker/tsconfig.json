@@ -1,5 +1,21 @@
 {
   "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    /*
+     * This app ships a real web build (react-native-web) with its own
+     * `.web.ts` implementations of the database and image store, which use
+     * IndexedDB, Blob, canvas and IntersectionObserver directly.
+     *
+     * The React Native base config omits the DOM lib, so every one of those
+     * was reported as an undefined global — dozens of errors that hid the
+     * genuine ones. Including "dom" type-checks the web code properly.
+     *
+     * Native-only files are unaffected: Metro resolves `.web.ts` for web and
+     * the plain file elsewhere, so a DOM global cannot leak into a native
+     * bundle just because the type is visible here.
+     */
+    "lib": ["esnext", "dom", "dom.iterable"]
+  },
   "include": ["**/*.ts", "**/*.tsx"],
-  "exclude": ["**/node_modules", "**/Pods"]
+  "exclude": ["**/node_modules", "**/Pods", "_to_delete"]
 }

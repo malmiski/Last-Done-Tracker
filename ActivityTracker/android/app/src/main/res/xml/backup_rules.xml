@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Android Auto Backup rules for API 30 and below (android:fullBackupContent).
+
+  Entry photos are stored as files under the app's private files directory in
+  `entry-images/`. They are excluded from cloud backup for the same reason they
+  are excluded from iCloud on iOS: a photo library can run to hundreds of
+  megabytes, Auto Backup is capped at 25MB per app anyway (so a large library
+  would silently fail the whole backup), and the app can already produce a
+  self-contained .zip export that is the supported way to move data.
+
+  The SQLite database is small and still backed up, so activities, entries,
+  notes and tags survive a restore -- the photos are what get left behind.
+-->
+<full-backup-content>
+    <exclude domain="file" path="entry-images" />
+</full-backup-content>
