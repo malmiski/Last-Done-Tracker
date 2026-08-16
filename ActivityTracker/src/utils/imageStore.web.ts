@@ -10,6 +10,7 @@
  *      document, which is the web equivalent of the native leak.
  */
 import { HEADER_BYTES, ImageSize, readImageSize } from './jpegSize';
+import { BorderBounds, boundsHeight, findContentBounds, scaleBounds } from './blackBorders';
 import {
   ImageVariant,
   StoredImage,
@@ -521,6 +522,110 @@ export const getImageSize = async (
 
   dimensionCache.set(cacheKey, size);
   return size;
+};
+
+/* ------------------------------------------------------------------ *
+ * Letterbox detection and cropping
+ * ------------------------------------------------------------------ */
+
+/**
+ * Columns sampled when inspecting pixels. Only vertical resolution matters for
+ * top/bottom bars, so the image is squeezed to a few columns at full height —
+ * ~50KB of pixel data instead of the ~10MB a full-size getImageData would cost
+ * on the same picture.
+ */
+const PROBE_WIDTH = 8;
+
+export const detectBlackBorders = async (
+  ref: string,
+): Promise<(BorderBounds & { height: number }) | null> => {
+  if (!isFileRef(ref)) return null;
+
+  const blob = await getBlob(refId(ref), 'full');
+  if (!blob) return null;
+
+  let bitmap: any;
+  try {
+    // No resize hint: squeezing happens in drawImage below, and we need the
+    // true height to map bounds back.
+    bitmap = await loadBitmap(blob, FULL_MAX_DIMENSION);
+    const naturalHeight = bitmap.height as number;
+    const naturalWidth = bitmap.width as number;
+    if (!naturalHeight || !naturalWidth) return null;
+
+    const canvas = getScratchCanvas(PROBE_WIDTH, naturalHeight);
+    const ctx = (canvas as any).getContext('2d', { willReadFrequently: true });
+    ctx.drawImage(bitmap, 0, 0, PROBE_WIDTH, naturalHeight);
+
+    const imageData = ctx.getImageData(0, 0, PROBE_WIDTH, naturalHeight);
+    const bounds = findContentBounds({
+      data: new Uint8Array(imageData.data.buffer.slice(0)),
+      width: PROBE_WIDTH,
+      height: naturalHeight,
+    });
+    if (!bounds) return null;
+
+    return { ...scaleBounds(bounds, naturalHeight, naturalHeight), height: naturalHeight };
+  } catch (error) {
+    console.warn('Could not inspect image for black borders', error);
+    return null;
+  } finally {
+    try {
+      bitmap?.close?.();
+    } catch {
+      /* best effort */
+    }
+    releaseScratchCanvas();
+  }
+};
+
+export const cropStoredImage = async (
+  ref: string,
+  bounds: BorderBounds,
+): Promise<StoredImage | null> => {
+  if (!isFileRef(ref)) return null;
+
+  const blob = await getBlob(refId(ref), 'full');
+  if (!blob) return null;
+
+  let bitmap: any;
+  try {
+    bitmap = await loadBitmap(blob, FULL_MAX_DIMENSION);
+    const sourceWidth = bitmap.width as number;
+    const sourceHeight = bitmap.height as number;
+
+    const height = boundsHeight(bounds);
+    if (height <= 0 || bounds.top < 0 || bounds.top + height > sourceHeight) return null;
+
+    const canvas = getScratchCanvas(sourceWidth, height);
+    const ctx = (canvas as any).getContext('2d');
+    // Source rect skips the bars; destination is the full canvas.
+    ctx.drawImage(bitmap, 0, bounds.top, sourceWidth, height, 0, 0, sourceWidth, height);
+
+    const cropped: Blob =
+      typeof (canvas as any).convertToBlob === 'function'
+        ? await (canvas as any).convertToBlob({ type: 'image/jpeg', quality: FULL_QUALITY })
+        : await new Promise<Blob>((resolve, reject) =>
+            (canvas as HTMLCanvasElement).toBlob(
+              b => (b ? resolve(b) : reject(new Error('toBlob failed'))),
+              'image/jpeg',
+              FULL_QUALITY,
+            ),
+          );
+
+    // storeBoth re-encodes and derives a matching thumbnail.
+    return await storeBoth(cropped);
+  } catch (error) {
+    console.warn('Could not crop image', error);
+    return null;
+  } finally {
+    try {
+      bitmap?.close?.();
+    } catch {
+      /* best effort */
+    }
+    releaseScratchCanvas();
+  }
 };
 
 export const sizeOf = async (ref: string, variant: ImageVariant = 'full'): Promise<number> => {

@@ -12,6 +12,7 @@ import { Tag } from '../src/data/activity-details';
 import { importImage, importBase64Image } from '../src/utils/imageUtils';
 import * as imageStore from '../src/utils/imageStore';
 import { deleteUnreferencedRefs } from '../src/utils/imageOwnership';
+import { trimmedRows } from '../src/utils/blackBorders';
 import {
   copyEntryToClipboard,
   mergeImageRefs,
@@ -25,9 +26,42 @@ import Toast, { useToast } from '../src/components/Toast';
 
 /** A photo row in the editor. Holds a reference, never image data. */
 interface PhotoDraft {
+  /** The image as imported, bars and all. Kept so the crop can be undone. */
   ref: string;
   orderStr: string;
+  /**
+   * Set when black bars were detected. The cropped version is materialised
+   * once, on first use, then toggling is just a matter of which ref we show.
+   */
+  croppedRef?: string;
+  /** How many rows the crop removes — shown next to the checkbox. */
+  trimmed?: number;
+  /** Whether the cropped version is the one in use. */
+  cropped?: boolean;
 }
+
+/** The reference a photo row is currently displaying / will save. */
+const activeRef = (photo: PhotoDraft): string =>
+  photo.cropped && photo.croppedRef ? photo.croppedRef : photo.ref;
+
+/**
+ * Sort by the order field, which accepts decimals so a photo can be slotted
+ * between two others (2.5) without renumbering everything by hand.
+ * Blank or non-numeric values sort last rather than jumping to the front.
+ */
+const sortByOrder = (photos: PhotoDraft[]): PhotoDraft[] =>
+  [...photos].sort((a, b) => {
+    const left = parseFloat(a.orderStr);
+    const right = parseFloat(b.orderStr);
+    if (Number.isNaN(left) && Number.isNaN(right)) return 0;
+    if (Number.isNaN(left)) return 1;
+    if (Number.isNaN(right)) return -1;
+    return left - right;
+  });
+
+/** Renumber to 1..n after a sort, so the decimals collapse back to integers. */
+const renumber = (photos: PhotoDraft[]): PhotoDraft[] =>
+  photos.map((photo, index) => ({ ...photo, orderStr: (index + 1).toString() }));
 
 const EditEntryScreen: React.FC = () => {
   const router = useRouter();
@@ -183,12 +217,17 @@ const EditEntryScreen: React.FC = () => {
   const handleImageInput = async (uri: string, replaceIndex: number = -1) => {
     try {
       const stored = await importImage(uri);
+      const draft = await withBorderDetection({
+        ref: stored.ref,
+        orderStr: (photos.length + 1).toString(),
+      });
+
       setPhotos(prev => {
           const newPhotos = [...prev];
           if (replaceIndex >= 0 && replaceIndex < newPhotos.length) {
-              newPhotos[replaceIndex] = { ...newPhotos[replaceIndex], ref: stored.ref };
+              newPhotos[replaceIndex] = { ...draft, orderStr: newPhotos[replaceIndex].orderStr };
           } else {
-              newPhotos.push({ ref: stored.ref, orderStr: (newPhotos.length + 1).toString() });
+              newPhotos.push({ ...draft, orderStr: (newPhotos.length + 1).toString() });
           }
           return newPhotos;
       });
@@ -196,6 +235,44 @@ const EditEntryScreen: React.FC = () => {
       Alert.alert("Error processing image");
       console.error(e);
     }
+  };
+
+  /**
+   * Look for letterbox bars and, if found, prepare the cropped version.
+   *
+   * The crop is materialised now rather than on first toggle so the checkbox
+   * is instant and the preview is the real result rather than an approximation.
+   * Both versions exist until save, which keeps whichever one is selected and
+   * releases the other.
+   *
+   * Detection failing is never fatal — the photo is simply added uncropped.
+   */
+  const withBorderDetection = async (draft: PhotoDraft): Promise<PhotoDraft> => {
+    try {
+      const bounds = await imageStore.detectBlackBorders(draft.ref);
+      if (!bounds) return draft;
+
+      const cropped = await imageStore.cropStoredImage(draft.ref, bounds);
+      if (!cropped) return draft;
+
+      return {
+        ...draft,
+        croppedRef: cropped.ref,
+        trimmed: trimmedRows(bounds, bounds.height),
+        // Removing the bars is the point of detecting them, so this starts on.
+        // The checkbox is right there to put them back.
+        cropped: true,
+      };
+    } catch (error) {
+      console.warn('Border detection failed; keeping the original image', error);
+      return draft;
+    }
+  };
+
+  const toggleCrop = (index: number) => {
+    setPhotos(prev =>
+      prev.map((photo, i) => (i === index ? { ...photo, cropped: !photo.cropped } : photo)),
+    );
   };
 
   const pickImage = async (replaceIndex: number = -1) => {
@@ -239,12 +316,15 @@ const EditEntryScreen: React.FC = () => {
       const clipboardImage = await Clipboard.getImageAsync({ format: 'png' });
       if (clipboardImage && clipboardImage.data) {
         const stored = await importBase64Image(clipboardImage.data, 'image/png');
+        // Screenshots of video are the common source of letterbox bars, and
+        // pasting is the common way they arrive.
+        const draft = await withBorderDetection({ ref: stored.ref, orderStr: '1' });
         setPhotos(prev => {
           const newPhotos = [...prev];
           if (replaceIndex >= 0 && replaceIndex < newPhotos.length) {
-            newPhotos[replaceIndex] = { ...newPhotos[replaceIndex], ref: stored.ref };
+            newPhotos[replaceIndex] = { ...draft, orderStr: newPhotos[replaceIndex].orderStr };
           } else {
-            newPhotos.push({ ref: stored.ref, orderStr: (newPhotos.length + 1).toString() });
+            newPhotos.push({ ...draft, orderStr: (newPhotos.length + 1).toString() });
           }
           return newPhotos;
         });
@@ -338,18 +418,26 @@ const EditEntryScreen: React.FC = () => {
     const startDate = getFullDate(year, month, day, hour, minute, second, ampm);
     const endDate = getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm);
 
+    // Saving applies the ordering implicitly, so the Rearrange button is only
+    // needed if you want to see the result before committing.
+    const ordered = sortByOrder(photos);
+
     // One reference addresses both the full image and its thumbnail, so both
     // columns store the same array.
-    const refs = photos.map(photo => photo.ref);
+    const refs = ordered.map(activeRef);
     const images = refs.length > 0 ? refs : undefined;
 
     await updateActivityEntry(activityId, entryId, startDate, endDate, notes, images, images, selectedTags);
 
-    // Clean up photos the user removed during this edit — but only those no
-    // other entry references, since a pasted entry can share these images.
+    // Clean up anything this edit left behind — photos the user removed, and
+    // the unused half of any crop pair. Only blobs that no other entry
+    // references are actually deleted, since images can be shared via paste.
     const kept = new Set(refs);
+    const discardedCropVariants = photos
+      .flatMap(photo => [photo.ref, photo.croppedRef])
+      .filter((ref): ref is string => Boolean(ref) && !kept.has(ref!));
     const removed = originalRefs.current.filter(ref => !kept.has(ref));
-    await deleteUnreferencedRefs(removed);
+    await deleteUnreferencedRefs([...new Set([...removed, ...discardedCropVariants])]);
 
     if (router.canGoBack()) {
       router.back();
@@ -376,7 +464,7 @@ const EditEntryScreen: React.FC = () => {
           startDate: getFullDate(year, month, day, hour, minute, second, ampm),
           endDate: getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm),
           notes,
-          images: photos.map(photo => photo.ref),
+          images: photos.map(activeRef),
           tags: selectedTags,
         },
         activity?.name,
@@ -428,8 +516,10 @@ const EditEntryScreen: React.FC = () => {
       let addedImages = 0;
       if (available.length > 0) {
         setPhotos(previous => {
-          const mergedRefs = mergeImageRefs(previous.map(photo => photo.ref), available);
+          const mergedRefs = mergeImageRefs(previous.map(activeRef), available);
           addedImages = mergedRefs.length - previous.length;
+          // Merged rows are plain refs: a pasted image keeps whatever crop the
+          // source entry saved, so there is nothing further to toggle.
           return mergedRefs.map((ref, index) => ({ ref, orderStr: (index + 1).toString() }));
         });
       }
@@ -846,12 +936,7 @@ const EditEntryScreen: React.FC = () => {
 
         {photos.length > 0 && (
             <TouchableOpacity style={[styles.imageButton, { marginBottom: 15, justifyContent: 'center', backgroundColor: theme.colors.primary }]} onPress={() => {
-                const sorted = [...photos].sort((a, b) => {
-                    const numA = parseInt(a.orderStr) || 0;
-                    const numB = parseInt(b.orderStr) || 0;
-                    return numA - numB;
-                }).map((p, idx) => ({...p, orderStr: (idx + 1).toString()}));
-                setPhotos(sorted);
+                setPhotos(renumber(sortByOrder(photos)));
             }}>
                 <Icon name="sort" size={20} color="#fff" />
                 <Text style={[styles.imageButtonText, { color: '#fff' }]}>Rearrange</Text>
@@ -869,10 +954,12 @@ const EditEntryScreen: React.FC = () => {
                 */}
                 <TouchableOpacity activeOpacity={0.8} onPress={() => setViewerIndex(index)}>
                   <AppImage
-                    imageRef={photo.ref}
+                    imageRef={activeRef(photo)}
                     variant="thumb"
                     usage="thumbnail"
-                    recyclingKey={`editor-${photo.ref}`}
+                    // Keyed on the active ref so toggling the crop swaps the
+                    // bitmap rather than reusing the previous one.
+                    recyclingKey={`editor-${activeRef(photo)}`}
                     contentFit="contain"
                     style={styles.imagePreview}
                   />
@@ -880,6 +967,31 @@ const EditEntryScreen: React.FC = () => {
                     <Icon name="arrow-expand" size={16} color="#fff" />
                   </View>
                 </TouchableOpacity>
+
+                {/*
+                  Only appears when bars were actually found, so its presence
+                  is itself the signal that this image had them. Starts checked
+                  — removing them is the point — and the preview above updates
+                  the moment it is toggled.
+                */}
+                {photo.croppedRef ? (
+                  <TouchableOpacity
+                    style={styles.cropRow}
+                    onPress={() => toggleCrop(index)}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: !!photo.cropped }}
+                  >
+                    <Icon
+                      name={photo.cropped ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                      size={22}
+                      color={photo.cropped ? theme.colors.primary : theme.colors.subtext}
+                    />
+                    <Text style={styles.cropLabel}>Remove black borders</Text>
+                    {photo.trimmed ? (
+                      <Text style={styles.cropDetail}>{photo.trimmed}px</Text>
+                    ) : null}
+                  </TouchableOpacity>
+                ) : null}
                 <View style={styles.photoControlsRow}>
                     <View style={styles.orderContainer}>
                         <Text style={styles.orderLabel}>Order:</Text>
@@ -893,7 +1005,7 @@ const EditEntryScreen: React.FC = () => {
                                     return newPhotos;
                                 });
                             }}
-                            keyboardType="number-pad"
+                            keyboardType="decimal-pad"
                         />
                     </View>
                     <TouchableOpacity style={styles.photoControlButton} onPress={() => pickImage(index)}>
@@ -952,7 +1064,7 @@ const EditEntryScreen: React.FC = () => {
           </TouchableOpacity>
           {viewerIndex !== null && photos.length > 0 && (
             <LargeImageGallery
-              imageRefs={photos.map(photo => photo.ref)}
+              imageRefs={photos.map(activeRef)}
               entryId={`${entryId}-viewer`}
               initialIndex={viewerIndex}
             />
@@ -1240,6 +1352,22 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.55)',
     borderRadius: 14,
     padding: 6,
+  },
+  cropRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 10,
+    paddingVertical: 4,
+  },
+  cropLabel: {
+    color: theme.colors.text,
+    fontSize: 14,
+    flex: 1,
+  },
+  cropDetail: {
+    color: theme.colors.subtext,
+    fontSize: 12,
   },
   viewerOverlay: {
     flex: 1,

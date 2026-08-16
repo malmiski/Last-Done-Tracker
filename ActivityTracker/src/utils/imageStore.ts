@@ -13,6 +13,8 @@ import { Directory, File, Paths } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
 import { HEADER_BYTES, ImageSize, readImageSize } from './jpegSize';
+import { BorderBounds, boundsHeight, findContentBounds, scaleBounds } from './blackBorders';
+import { decodePng } from './pngDecode';
 import {
   FAILED_SENTINEL,
   ImageVariant,
@@ -312,6 +314,134 @@ export const getImageSize = async (
 
   dimensionCache.set(cacheKey, size);
   return size;
+};
+
+/* ------------------------------------------------------------------ *
+ * Letterbox detection and cropping
+ * ------------------------------------------------------------------ */
+
+/**
+ * Width of the proxy used to inspect pixels.
+ *
+ * Only vertical resolution matters for finding top/bottom bars, so the proxy
+ * is squeezed to a few columns at the image's *full height*. At 8 x 1600 that
+ * is ~50KB of pixels — the alternative, decoding the real image, would be
+ * ~10MB and is exactly what this branch exists to avoid.
+ */
+const PROBE_WIDTH = 8;
+
+/**
+ * Inspect a stored image for black bars at the top and bottom.
+ * Returns bounds in the full-size image's coordinates, or null if there is
+ * nothing worth trimming.
+ */
+export const detectBlackBorders = async (
+  ref: string,
+): Promise<(BorderBounds & { height: number }) | null> => {
+  if (!isFileRef(ref)) return null;
+
+  const size = await getImageSize(ref, 'full');
+  if (!size) return null;
+
+  const file = await fileFor(refId(ref), 'full');
+  if (!file.exists) return null;
+
+  const IM = ImageManipulator as any;
+  let image: any;
+  let proxyUri: string | null = null;
+
+  try {
+    if (typeof IM.manipulate !== 'function') return null;
+
+    const context = IM.manipulate(file.uri);
+    // Full height, a handful of columns.
+    context.resize({ width: PROBE_WIDTH, height: size.height });
+    image = await context.renderAsync();
+    const saved = await image.saveAsync({ format: IM.SaveFormat.PNG });
+    proxyUri = saved.uri;
+
+    const bytes = new File(saved.uri).bytes();
+    const pixels = decodePng(await bytes);
+    if (!pixels) return null;
+
+    const bounds = findContentBounds(pixels);
+    if (!bounds) return null;
+
+    const scaled = scaleBounds(bounds, pixels.height, size.height);
+    return { ...scaled, height: size.height };
+  } catch (error) {
+    // Detection is a convenience; never let it block adding a photo.
+    console.warn('Could not inspect image for black borders', error);
+    return null;
+  } finally {
+    try {
+      image?.release?.();
+    } catch {
+      /* best effort */
+    }
+    try {
+      if (proxyUri) {
+        const proxy = new File(proxyUri);
+        if (proxy.exists) proxy.delete();
+      }
+    } catch {
+      /* cache file, fine to leave */
+    }
+  }
+};
+
+/**
+ * Write a new stored image containing only the rows between `bounds`.
+ * The original is left untouched so the user can toggle the crop off.
+ */
+export const cropStoredImage = async (
+  ref: string,
+  bounds: BorderBounds,
+): Promise<StoredImage | null> => {
+  if (!isFileRef(ref)) return null;
+
+  const size = await getImageSize(ref, 'full');
+  if (!size) return null;
+
+  const source = await fileFor(refId(ref), 'full');
+  if (!source.exists) return null;
+
+  const height = boundsHeight(bounds);
+  if (height <= 0 || bounds.top < 0 || bounds.top + height > size.height) return null;
+
+  const IM = ImageManipulator as any;
+  let image: any;
+
+  try {
+    if (typeof IM.manipulate !== 'function') return null;
+
+    const context = IM.manipulate(source.uri);
+    context.crop({ originX: 0, originY: bounds.top, width: size.width, height });
+    image = await context.renderAsync();
+    const saved = await image.saveAsync({
+      format: IM.SaveFormat.JPEG,
+      compress: FULL_COMPRESSION,
+    });
+
+    const id = newId();
+    const bytes = await adoptInto(saved.uri, id, 'full');
+
+    // Thumbnail from the cropped file, so the tile matches the full image.
+    const stored = await fileFor(id, 'full');
+    const thumb = await renderResized(stored.uri, THUMB_MAX_DIMENSION, THUMB_COMPRESSION);
+    await adoptInto(thumb.uri, id, 'thumb');
+
+    return { ref: makeFileRef(id), width: size.width, height, bytes };
+  } catch (error) {
+    console.warn('Could not crop image', error);
+    return null;
+  } finally {
+    try {
+      image?.release?.();
+    } catch {
+      /* best effort */
+    }
+  }
 };
 
 export const sizeOf = async (ref: string, variant: ImageVariant = 'full'): Promise<number> => {
