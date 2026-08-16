@@ -1,5 +1,5 @@
-import React, { useState, memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView } from 'react-native';
+import React, { useState, useEffect, memo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, Image, ScrollView, Platform } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
 import { Tag } from '../data/activity-details';
@@ -38,68 +38,25 @@ const formatDuration = (start: Date, end: Date) => {
   const diffMs = end.getTime() - start.getTime();
   if (diffMs <= 0) return null;
 
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const remainingMins = diffMins % 60;
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
-  if (diffHours > 0) {
-    return `${diffHours} hour${diffHours > 1 ? 's' : ''}${remainingMins > 0 ? ` ${remainingMins} minute${remainingMins > 1 ? 's' : ''}` : ''}`;
-  }
-  return `${diffMins} minute${diffMins !== 1 ? 's' : ''}`;
+  if (diffHours > 0 && diffMins > 0) return `${diffHours}h ${diffMins}m`;
+  if (diffHours > 0) return `${diffHours}h`;
+  return `${diffMins}m`;
 };
 
-const formatSinceLastTime = (start: Date, end: Date) => {
-  const diffMs = end.getTime() - start.getTime();
+const formatSinceLastTime = (lastEndDate: Date, currentStartDate: Date) => {
+  const diffMs = currentStartDate.getTime() - lastEndDate.getTime();
   if (diffMs <= 0) return null;
 
-  const diffMins = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMins / 60);
-  const remainingMins = diffMins % 60;
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+  const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
 
-  const diffDays = Math.floor(diffHours / 24);
-  const remainingHours = diffHours % 24;
-
-  if (diffDays > 0) {
-    return `${diffDays} day${diffDays > 1 ? 's' : ''}${remainingHours > 0 ? ` ${remainingHours} hour${remainingHours > 1 ? 's' : ''}` : ''} since last time`;
-  }
-
-  if (diffHours > 0) {
-    return `${diffHours} hour${diffHours > 1 ? 's' : ''}${remainingMins > 0 ? ` ${remainingMins} minute${remainingMins > 1 ? 's' : ''}` : ''} since last time`;
-  }
-  return `${diffMins} minute${diffMins !== 1 ? 's' : ''} since last time`;
-};
-
-const areEqual = (prevProps: ActivityHistoryItemProps, nextProps: ActivityHistoryItemProps) => {
-  if (prevProps.imageMode !== nextProps.imageMode) return false;
-  if (prevProps.notes !== nextProps.notes) return false;
-  if (prevProps.image !== nextProps.image) return false;
-
-  if (prevProps.startDate?.getTime() !== nextProps.startDate?.getTime()) return false;
-  if (prevProps.endDate?.getTime() !== nextProps.endDate?.getTime()) return false;
-  if (prevProps.lastEntryEndDate?.getTime() !== nextProps.lastEntryEndDate?.getTime()) return false;
-
-  const prevImages = prevProps.images || [];
-  const nextImages = nextProps.images || [];
-  if (prevImages.length !== nextImages.length) return false;
-  for (let i = 0; i < prevImages.length; i++) {
-    if (prevImages[i] !== nextImages[i]) return false;
-  }
-
-  const prevThumbnails = prevProps.thumbnails || [];
-  const nextThumbnails = nextProps.thumbnails || [];
-  if (prevThumbnails.length !== nextThumbnails.length) return false;
-  for (let i = 0; i < prevThumbnails.length; i++) {
-    if (prevThumbnails[i] !== nextThumbnails[i]) return false;
-  }
-
-  const prevTags = prevProps.tags || [];
-  const nextTags = nextProps.tags || [];
-  if (prevTags.length !== nextTags.length) return false;
-  for (let i = 0; i < prevTags.length; i++) {
-    if (prevTags[i].id !== nextTags[i].id || prevTags[i].name !== nextTags[i].name || prevTags[i].color !== nextTags[i].color) return false;
-  }
-
-  return true;
+  if (diffDays > 0) return `${diffDays}d ${diffHours}h since last time`;
+  if (diffHours > 0) return `${diffHours}h ${diffMins}m since last time`;
+  return `${diffMins}m since last time`;
 };
 
 const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
@@ -120,11 +77,66 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
   const isDifferentDate = startDate.getTime() !== endDate.getTime();
   const timeSinceLast = lastEntryEndDate ? formatSinceLastTime(lastEntryEndDate, startDate) : null;
 
+  const [webBlobImages, setWebBlobImages] = useState<string[]>([]);
+  const [webBlobThumbnails, setWebBlobThumbnails] = useState<string[]>([]);
+  const [isProcessingBlobs, setIsProcessingBlobs] = useState(Platform.OS === 'web');
+
+  useEffect(() => {
+    let activeBlobs: string[] = [];
+
+    if (Platform.OS === 'web') {
+      setIsProcessingBlobs(true);
+      const convertToBlobUrl = async (imgStr: string) => {
+        if (imgStr.startsWith('blob:') || imgStr === "failed") return imgStr;
+        const base64Uri = imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}`;
+        try {
+          const res = await fetch(base64Uri);
+          const blob = await res.blob();
+          const objUrl = URL.createObjectURL(blob);
+          activeBlobs.push(objUrl);
+          return objUrl;
+        } catch (e) {
+          return base64Uri;
+        }
+      };
+
+      const processImages = async () => {
+        if (images && images.length > 0) {
+          const blobs = await Promise.all(images.map(convertToBlobUrl));
+          setWebBlobImages(blobs);
+        } else if (image) {
+           const blob = await convertToBlobUrl(image);
+           setWebBlobImages([blob]);
+        }
+
+        if (thumbnails && thumbnails.length > 0) {
+          const blobs = await Promise.all(thumbnails.map(convertToBlobUrl));
+          setWebBlobThumbnails(blobs);
+        } else if (image) {
+           const blob = await convertToBlobUrl(image);
+           setWebBlobThumbnails([blob]);
+        }
+        setIsProcessingBlobs(false);
+      };
+      processImages();
+
+      return () => {
+         activeBlobs.forEach(blobUrl => URL.revokeObjectURL(blobUrl));
+      };
+    }
+  }, [images, thumbnails, image]);
+
   const renderImages = () => {
     if (imageMode === 'hidden' && !image) return null;
 
-    const availableImages = images && images.length > 0 ? images : (image ? [image] : null);
-    const availableThumbnails = thumbnails && thumbnails.length > 0 ? thumbnails : (image ? [image] : null);
+    if (Platform.OS === 'web' && isProcessingBlobs) {
+        // Return a transparent loading container while we generate blobs
+        // to avoid ever rendering raw base64 to the DOM string limit
+        return <View style={{ width: '100%', height: imageMode === 'large' ? 200 : 50 }} />;
+    }
+
+    const availableImages = Platform.OS === 'web' && webBlobImages.length > 0 ? webBlobImages : (images && images.length > 0 ? images : (image ? [image] : null));
+    const availableThumbnails = Platform.OS === 'web' && webBlobThumbnails.length > 0 ? webBlobThumbnails : (thumbnails && thumbnails.length > 0 ? thumbnails : (image ? [image] : null));
 
     if (!availableImages && !availableThumbnails) return null;
 
@@ -134,7 +146,7 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
 
       const elements = itemsToRender.map((imgStr, idx) => {
          if (imgStr === "failed") return null;
-         const source = { uri: imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}` };
+         const source = { uri: (imgStr.startsWith('data:') || imgStr.startsWith('file:') || imgStr.startsWith('blob:')) ? imgStr : `data:image/jpeg;base64,${imgStr}` };
          return <LazyImage key={idx} source={source} style={imageMode === 'medium' ? styles.thumbnailMedium : styles.thumbnailSmall} />;
       });
 
@@ -161,133 +173,176 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
   };
 
   const isLarge = imageMode === 'large' && ((images && images.length > 0) || (thumbnails && thumbnails.length > 0) || image);
-  const hasMultipleInRow = (imageMode === 'small' || imageMode === 'medium') && ((images && images.length > 1) || (thumbnails && thumbnails.length > 1));
 
   return (
-    <View style={[styles.container, (isLarge || hasMultipleInRow) && styles.containerLarge]}>
-      {(isLarge || hasMultipleInRow) ? renderImages() : null}
-      <View style={[styles.contentWrapper, hasMultipleInRow && { marginTop: 0 }]}>
-        {!(isLarge || hasMultipleInRow) ? renderImages() : null}
-        <View style={styles.textContainer}>
+    <View style={[styles.container, isLarge ? styles.containerLarge : null]}>
+      {timeSinceLast && (
+        <Text style={styles.sinceLastText}>
+          {timeSinceLast}
+        </Text>
+      )}
+
+      {renderImages()}
+
+      {isLarge && (
+         <Text style={[styles.dateText, { marginBottom: 15, width: '100%' }]} numberOfLines={2}>
+           {firstLine || ''}
+         </Text>
+      )}
+
+      <View style={styles.contentRow}>
+        <View style={styles.infoContainer}>
+          {!isLarge && (
+            <Text style={styles.notesText} numberOfLines={1} ellipsizeMode="tail">
+              {firstLine || ''}
+            </Text>
+          )}
+
           <Text style={styles.dateText}>
             {formatDate(startDate)}
-            {isDifferentDate ? ` - ${formatDate(endDate)}` : ''}
           </Text>
-          {duration ? <Text style={styles.durationText}>{duration}</Text> : null}
-          {timeSinceLast ? <Text style={styles.sinceLastText}>{timeSinceLast}</Text> : null}
-          {firstLine ? (
-            <Text style={styles.notesPreview} numberOfLines={1} ellipsizeMode="tail">
-              {firstLine}
-            </Text>
-          ) : null}
-          {tags && tags.length > 0 && (
-            <View style={styles.tagContainer}>
-              {tags.map(tag => (
-                <View key={tag.id} style={[styles.tag, { backgroundColor: tag.color }]}>
-                  <Text style={styles.tagText}>{tag.name}</Text>
-                </View>
-              ))}
-            </View>
+
+          {isDifferentDate && (
+             <Text style={styles.dateText}>
+               to {formatDate(endDate)}
+               {duration ? ` (${duration})` : ''}
+             </Text>
           )}
         </View>
-        <View style={styles.buttons}>
+
+        <View style={styles.actionContainer}>
           <TouchableOpacity onPress={onEdit} style={styles.button}>
-            <Icon name="pencil-outline" size={24} color={theme.colors.subtext} />
+            <Icon name="pencil" size={24} color={theme.colors.text} />
           </TouchableOpacity>
           <TouchableOpacity onPress={onDelete} style={styles.button}>
-            <Icon name="trash-can-outline" size={24} color={theme.colors.subtext} />
+            <Icon name="delete" size={24} color={theme.colors.error} />
           </TouchableOpacity>
         </View>
       </View>
+
+      {tags && tags.length > 0 && (
+         <View style={styles.tagsContainer}>
+            {tags.map((tag) => (
+               <View key={tag.id} style={[styles.tagBadge, { backgroundColor: tag.color + '20' }]}>
+                  <Text style={[styles.tagText, { color: tag.color }]}>{tag.name}</Text>
+               </View>
+            ))}
+         </View>
+      )}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: theme.colors.card,
-    borderRadius: 15,
+    backgroundColor: '#fff',
     padding: 15,
-    marginBottom: 15,
+    borderRadius: 12,
+    marginBottom: 10,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 5,
+    elevation: 2,
   },
   containerLarge: {
-    flexDirection: 'column',
-    alignItems: 'stretch',
-  },
-  contentWrapper: {
-    flex: 1,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  thumbnailSmall: {
-    width: 50,
-    height: 50,
-    borderRadius: 5,
-    marginRight: 15,
-  },
-  thumbnailMedium: {
-    width: 100,
-    height: 100,
-    borderRadius: 10,
-    marginRight: 15,
-  },
-  thumbnailLarge: {
-    width: '100%',
-    height: 200,
-    borderRadius: 10,
-    marginBottom: 15,
-  },
-  dateText: {
-    color: theme.colors.text,
-    fontSize: 14,
-  },
-  durationText: {
-    color: theme.colors.primary,
-    fontSize: 12,
-    marginTop: 2,
-    fontWeight: '600',
+     flexDirection: 'column',
+     alignItems: 'center',
   },
   sinceLastText: {
     color: '#007AFF',
     fontSize: 12,
-    marginTop: 2,
+    fontWeight: '500',
+    marginBottom: 10,
+    width: '100%',
+  },
+  contentRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    width: '100%',
+  },
+  infoContainer: {
+    flex: 1,
+    marginRight: 10,
+  },
+  actionContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  notesText: {
+    fontSize: 16,
+    color: theme.colors.text,
+    marginBottom: 5,
     fontWeight: '600',
   },
-  textContainer: {
-    flex: 1,
-  },
-  notesPreview: {
-    color: theme.colors.subtext,
+  dateText: {
     fontSize: 14,
-    marginTop: 5,
+    color: theme.colors.textSecondary,
+    marginBottom: 2,
   },
-  tagContainer: {
+  thumbnailSmall: {
+    width: 40,
+    height: 40,
+    borderRadius: 8,
+    marginRight: 10,
+    backgroundColor: '#eee',
+  },
+  thumbnailMedium: {
+    width: 60,
+    height: 60,
+    borderRadius: 10,
+    marginRight: 15,
+    backgroundColor: '#eee',
+  },
+  tagsContainer: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginTop: 5,
-    gap: 5,
+    marginTop: 10,
+    width: '100%',
   },
-  tag: {
+  tagBadge: {
     paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 5,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginRight: 6,
+    marginBottom: 6,
   },
   tagText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
-  buttons: {
-    flexDirection: 'row',
+    fontSize: 12,
+    fontWeight: '600',
   },
   button: {
     marginLeft: 20,
   },
 });
+
+const areEqual = (prevProps: ActivityHistoryItemProps, nextProps: ActivityHistoryItemProps) => {
+  if (prevProps.imageMode !== nextProps.imageMode) return false;
+  if (prevProps.notes !== nextProps.notes) return false;
+  if (prevProps.image !== nextProps.image) return false;
+
+  if (prevProps.startDate?.getTime() !== nextProps.startDate?.getTime()) return false;
+  if (prevProps.endDate?.getTime() !== nextProps.endDate?.getTime()) return false;
+  if (prevProps.lastEntryEndDate?.getTime() !== nextProps.lastEntryEndDate?.getTime()) return false;
+
+  const prevImages = prevProps.images || [];
+  const nextImages = nextProps.images || [];
+  if (prevImages.length !== nextImages.length) return false;
+  if (prevImages.some((img, i) => img !== nextImages[i])) return false;
+
+  const prevThumbnails = prevProps.thumbnails || [];
+  const nextThumbnails = nextProps.thumbnails || [];
+  if (prevThumbnails.length !== nextThumbnails.length) return false;
+  if (prevThumbnails.some((img, i) => img !== nextThumbnails[i])) return false;
+
+  const prevTags = prevProps.tags || [];
+  const nextTags = nextProps.tags || [];
+  if (prevTags.length !== nextTags.length) return false;
+  if (prevTags.some((tag, i) => tag.id !== nextTags[i].id)) return false;
+
+  return true;
+};
 
 const ActivityHistoryItem = memo(ActivityHistoryItemComponent, areEqual);
 export default ActivityHistoryItem;

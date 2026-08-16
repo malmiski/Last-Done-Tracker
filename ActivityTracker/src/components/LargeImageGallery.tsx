@@ -19,7 +19,7 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
 
     images.forEach((imgStr, idx) => {
       if (imgStr === "failed") return;
-      const uri = imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}`;
+      const uri = (imgStr.startsWith('data:') || imgStr.startsWith('file:') || imgStr.startsWith('blob:')) ? imgStr : `data:image/jpeg;base64,${imgStr}`;
       Image.getSize(uri, (width, height) => {
         let scaledWidth = width;
         let scaledHeight = height;
@@ -75,7 +75,7 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
         >
           {images.map((imgStr, idx) => {
             if (imgStr === "failed") return null;
-            const uri = imgStr.startsWith('data:') ? imgStr : `data:image/jpeg;base64,${imgStr}`;
+            const uri = (imgStr.startsWith('data:') || imgStr.startsWith('file:') || imgStr.startsWith('blob:')) ? imgStr : `data:image/jpeg;base64,${imgStr}`;
             const size = imageSizes[idx] || { width: containerWidth, height: 200 };
 
             return (
@@ -88,7 +88,7 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({ images }) => {
                   alignItems: 'center'
                 }}
               >
-                <Image
+                <LazyImage
                   source={{ uri }}
                   style={{ width: size.width, height: size.height, borderRadius: 10 }}
                   resizeMode="contain"

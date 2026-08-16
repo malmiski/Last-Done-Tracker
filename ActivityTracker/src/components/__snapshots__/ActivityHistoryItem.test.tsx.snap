@@ -5,65 +5,71 @@ exports[`ActivityHistoryItem only renders the first line of multi-line notes 1`]
   style={
     [
       {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
+        "backgroundColor": "#fff",
+        "borderRadius": 12,
+        "elevation": 2,
+        "marginBottom": 10,
         "padding": 15,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "height": 2,
+          "width": 0,
+        },
+        "shadowOpacity": 0.05,
+        "shadowRadius": 5,
       },
-      undefined,
+      null,
     ]
   }
 >
   <View
     style={
-      [
-        {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
-        },
-        undefined,
-      ]
+      {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "width": "100%",
+      }
     }
   >
     <View
       style={
         {
           "flex": 1,
+          "marginRight": 10,
         }
       }
     >
-      <Text
-        style={
-          {
-            "color": "#000000",
-            "fontSize": 14,
-          }
-        }
-      >
-        January 1, 2023 at 12:00:00 PM
-      </Text>
       <Text
         ellipsizeMode="tail"
         numberOfLines={1}
         style={
           {
-            "color": "#666666",
-            "fontSize": 14,
-            "marginTop": 5,
+            "color": "#000000",
+            "fontSize": 16,
+            "fontWeight": "600",
+            "marginBottom": 5,
           }
         }
       >
         Line 1
       </Text>
+      <Text
+        style={
+          {
+            "color": undefined,
+            "fontSize": 14,
+            "marginBottom": 2,
+          }
+        }
+      >
+        January 1, 2023 at 12:00:00 PM
+      </Text>
     </View>
     <View
       style={
         {
+          "alignItems": "center",
           "flexDirection": "row",
         }
       }
@@ -104,8 +110,8 @@ exports[`ActivityHistoryItem only renders the first line of multi-line notes 1`]
         }
       >
         <Icon
-          color="#666666"
-          name="pencil-outline"
+          color="#000000"
+          name="pencil"
           size={24}
         />
       </View>
@@ -145,8 +151,7 @@ exports[`ActivityHistoryItem only renders the first line of multi-line notes 1`]
         }
       >
         <Icon
-          color="#666666"
-          name="trash-can-outline"
+          name="delete"
           size={24}
         />
       </View>
@@ -160,43 +165,59 @@ exports[`ActivityHistoryItem renders correctly with an image and hidden imageMod
   style={
     [
       {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
+        "backgroundColor": "#fff",
+        "borderRadius": 12,
+        "elevation": 2,
+        "marginBottom": 10,
         "padding": 15,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "height": 2,
+          "width": 0,
+        },
+        "shadowOpacity": 0.05,
+        "shadowRadius": 5,
       },
-      false,
+      null,
     ]
   }
 >
   <View
     style={
-      [
-        {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
-        },
-        false,
-      ]
+      {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "width": "100%",
+      }
     }
   >
     <View
       style={
         {
           "flex": 1,
+          "marginRight": 10,
         }
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
+            "fontSize": 16,
+            "fontWeight": "600",
+            "marginBottom": 5,
+          }
+        }
+      />
+      <Text
+        style={
+          {
+            "color": undefined,
             "fontSize": 14,
+            "marginBottom": 2,
           }
         }
       >
@@ -206,6 +227,7 @@ exports[`ActivityHistoryItem renders correctly with an image and hidden imageMod
     <View
       style={
         {
+          "alignItems": "center",
           "flexDirection": "row",
         }
       }
@@ -246,8 +268,8 @@ exports[`ActivityHistoryItem renders correctly with an image and hidden imageMod
         }
       >
         <Icon
-          color="#666666"
-          name="pencil-outline"
+          color="#000000"
+          name="pencil"
           size={24}
         />
       </View>
@@ -287,8 +309,7 @@ exports[`ActivityHistoryItem renders correctly with an image and hidden imageMod
         }
       >
         <Icon
-          color="#666666"
-          name="trash-can-outline"
+          name="delete"
           size={24}
         />
       </View>
@@ -302,16 +323,21 @@ exports[`ActivityHistoryItem renders correctly with an image and large imageMode
   style={
     [
       {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
+        "backgroundColor": "#fff",
+        "borderRadius": 12,
+        "elevation": 2,
+        "marginBottom": 10,
         "padding": 15,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "height": 2,
+          "width": 0,
+        },
+        "shadowOpacity": 0.05,
+        "shadowRadius": 5,
       },
       {
-        "alignItems": "stretch",
+        "alignItems": "center",
         "flexDirection": "column",
       },
     ]
@@ -327,31 +353,46 @@ exports[`ActivityHistoryItem renders correctly with an image and large imageMode
       }
     }
   />
-  <View
+  <Text
+    numberOfLines={2}
     style={
       [
         {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
+          "color": undefined,
+          "fontSize": 14,
+          "marginBottom": 2,
         },
-        false,
+        {
+          "marginBottom": 15,
+          "width": "100%",
+        },
       ]
+    }
+  />
+  <View
+    style={
+      {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "width": "100%",
+      }
     }
   >
     <View
       style={
         {
           "flex": 1,
+          "marginRight": 10,
         }
       }
     >
       <Text
         style={
           {
-            "color": "#000000",
+            "color": undefined,
             "fontSize": 14,
+            "marginBottom": 2,
           }
         }
       >
@@ -361,6 +402,7 @@ exports[`ActivityHistoryItem renders correctly with an image and large imageMode
     <View
       style={
         {
+          "alignItems": "center",
           "flexDirection": "row",
         }
       }
@@ -401,8 +443,8 @@ exports[`ActivityHistoryItem renders correctly with an image and large imageMode
         }
       >
         <Icon
-          color="#666666"
-          name="pencil-outline"
+          color="#000000"
+          name="pencil"
           size={24}
         />
       </View>
@@ -442,8 +484,7 @@ exports[`ActivityHistoryItem renders correctly with an image and large imageMode
         }
       >
         <Icon
-          color="#666666"
-          name="trash-can-outline"
+          name="delete"
           size={24}
         />
       </View>
@@ -457,58 +498,75 @@ exports[`ActivityHistoryItem renders correctly with an image and medium imageMod
   style={
     [
       {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
+        "backgroundColor": "#fff",
+        "borderRadius": 12,
+        "elevation": 2,
+        "marginBottom": 10,
         "padding": 15,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "height": 2,
+          "width": 0,
+        },
+        "shadowOpacity": 0.05,
+        "shadowRadius": 5,
       },
-      undefined,
+      null,
     ]
   }
 >
+  <Image
+    source={
+      {
+        "uri": "data:image/jpeg;base64,mock",
+      }
+    }
+    style={
+      {
+        "backgroundColor": "#eee",
+        "borderRadius": 10,
+        "height": 60,
+        "marginRight": 15,
+        "width": 60,
+      }
+    }
+  />
   <View
     style={
-      [
-        {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
-        },
-        undefined,
-      ]
+      {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "width": "100%",
+      }
     }
   >
-    <Image
-      source={
-        {
-          "uri": "data:image/jpeg;base64,mock",
-        }
-      }
-      style={
-        {
-          "borderRadius": 10,
-          "height": 100,
-          "marginRight": 15,
-          "width": 100,
-        }
-      }
-    />
     <View
       style={
         {
           "flex": 1,
+          "marginRight": 10,
         }
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
+            "fontSize": 16,
+            "fontWeight": "600",
+            "marginBottom": 5,
+          }
+        }
+      />
+      <Text
+        style={
+          {
+            "color": undefined,
             "fontSize": 14,
+            "marginBottom": 2,
           }
         }
       >
@@ -518,6 +576,7 @@ exports[`ActivityHistoryItem renders correctly with an image and medium imageMod
     <View
       style={
         {
+          "alignItems": "center",
           "flexDirection": "row",
         }
       }
@@ -558,8 +617,8 @@ exports[`ActivityHistoryItem renders correctly with an image and medium imageMod
         }
       >
         <Icon
-          color="#666666"
-          name="pencil-outline"
+          color="#000000"
+          name="pencil"
           size={24}
         />
       </View>
@@ -599,8 +658,7 @@ exports[`ActivityHistoryItem renders correctly with an image and medium imageMod
         }
       >
         <Icon
-          color="#666666"
-          name="trash-can-outline"
+          name="delete"
           size={24}
         />
       </View>
@@ -614,58 +672,75 @@ exports[`ActivityHistoryItem renders correctly with an image and small imageMode
   style={
     [
       {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
+        "backgroundColor": "#fff",
+        "borderRadius": 12,
+        "elevation": 2,
+        "marginBottom": 10,
         "padding": 15,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "height": 2,
+          "width": 0,
+        },
+        "shadowOpacity": 0.05,
+        "shadowRadius": 5,
       },
-      undefined,
+      null,
     ]
   }
 >
+  <Image
+    source={
+      {
+        "uri": "data:image/jpeg;base64,mock",
+      }
+    }
+    style={
+      {
+        "backgroundColor": "#eee",
+        "borderRadius": 8,
+        "height": 40,
+        "marginRight": 10,
+        "width": 40,
+      }
+    }
+  />
   <View
     style={
-      [
-        {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
-        },
-        undefined,
-      ]
+      {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "width": "100%",
+      }
     }
   >
-    <Image
-      source={
-        {
-          "uri": "data:image/jpeg;base64,mock",
-        }
-      }
-      style={
-        {
-          "borderRadius": 5,
-          "height": 50,
-          "marginRight": 15,
-          "width": 50,
-        }
-      }
-    />
     <View
       style={
         {
           "flex": 1,
+          "marginRight": 10,
         }
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
+            "fontSize": 16,
+            "fontWeight": "600",
+            "marginBottom": 5,
+          }
+        }
+      />
+      <Text
+        style={
+          {
+            "color": undefined,
             "fontSize": 14,
+            "marginBottom": 2,
           }
         }
       >
@@ -675,6 +750,7 @@ exports[`ActivityHistoryItem renders correctly with an image and small imageMode
     <View
       style={
         {
+          "alignItems": "center",
           "flexDirection": "row",
         }
       }
@@ -715,8 +791,8 @@ exports[`ActivityHistoryItem renders correctly with an image and small imageMode
         }
       >
         <Icon
-          color="#666666"
-          name="pencil-outline"
+          color="#000000"
+          name="pencil"
           size={24}
         />
       </View>
@@ -756,8 +832,7 @@ exports[`ActivityHistoryItem renders correctly with an image and small imageMode
         }
       >
         <Icon
-          color="#666666"
-          name="trash-can-outline"
+          name="delete"
           size={24}
         />
       </View>
@@ -771,64 +846,82 @@ exports[`ActivityHistoryItem renders correctly with lastEntryEndDate prop (blue 
   style={
     [
       {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
+        "backgroundColor": "#fff",
+        "borderRadius": 12,
+        "elevation": 2,
+        "marginBottom": 10,
         "padding": 15,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "height": 2,
+          "width": 0,
+        },
+        "shadowOpacity": 0.05,
+        "shadowRadius": 5,
       },
-      undefined,
+      null,
     ]
   }
 >
+  <Text
+    style={
+      {
+        "color": "#007AFF",
+        "fontSize": 12,
+        "fontWeight": "500",
+        "marginBottom": 10,
+        "width": "100%",
+      }
+    }
+  >
+    5m since last time
+  </Text>
   <View
     style={
-      [
-        {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
-        },
-        undefined,
-      ]
+      {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "width": "100%",
+      }
     }
   >
     <View
       style={
         {
           "flex": 1,
+          "marginRight": 10,
         }
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
+            "fontSize": 16,
+            "fontWeight": "600",
+            "marginBottom": 5,
+          }
+        }
+      />
+      <Text
+        style={
+          {
+            "color": undefined,
             "fontSize": 14,
+            "marginBottom": 2,
           }
         }
       >
         January 1, 2023 at 12:05:00 PM
       </Text>
-      <Text
-        style={
-          {
-            "color": "#007AFF",
-            "fontSize": 12,
-            "fontWeight": "600",
-            "marginTop": 2,
-          }
-        }
-      >
-        5 minutes since last time
-      </Text>
     </View>
     <View
       style={
         {
+          "alignItems": "center",
           "flexDirection": "row",
         }
       }
@@ -869,8 +962,8 @@ exports[`ActivityHistoryItem renders correctly with lastEntryEndDate prop (blue 
         }
       >
         <Icon
-          color="#666666"
-          name="pencil-outline"
+          color="#000000"
+          name="pencil"
           size={24}
         />
       </View>
@@ -910,8 +1003,7 @@ exports[`ActivityHistoryItem renders correctly with lastEntryEndDate prop (blue 
         }
       >
         <Icon
-          color="#666666"
-          name="trash-can-outline"
+          name="delete"
           size={24}
         />
       </View>
@@ -925,65 +1017,71 @@ exports[`ActivityHistoryItem renders correctly with notes preview 1`] = `
   style={
     [
       {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
+        "backgroundColor": "#fff",
+        "borderRadius": 12,
+        "elevation": 2,
+        "marginBottom": 10,
         "padding": 15,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "height": 2,
+          "width": 0,
+        },
+        "shadowOpacity": 0.05,
+        "shadowRadius": 5,
       },
-      undefined,
+      null,
     ]
   }
 >
   <View
     style={
-      [
-        {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
-        },
-        undefined,
-      ]
+      {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "width": "100%",
+      }
     }
   >
     <View
       style={
         {
           "flex": 1,
+          "marginRight": 10,
         }
       }
     >
-      <Text
-        style={
-          {
-            "color": "#000000",
-            "fontSize": 14,
-          }
-        }
-      >
-        January 1, 2023 at 12:00:00 PM
-      </Text>
       <Text
         ellipsizeMode="tail"
         numberOfLines={1}
         style={
           {
-            "color": "#666666",
-            "fontSize": 14,
-            "marginTop": 5,
+            "color": "#000000",
+            "fontSize": 16,
+            "fontWeight": "600",
+            "marginBottom": 5,
           }
         }
       >
         Test Note
       </Text>
+      <Text
+        style={
+          {
+            "color": undefined,
+            "fontSize": 14,
+            "marginBottom": 2,
+          }
+        }
+      >
+        January 1, 2023 at 12:00:00 PM
+      </Text>
     </View>
     <View
       style={
         {
+          "alignItems": "center",
           "flexDirection": "row",
         }
       }
@@ -1024,8 +1122,8 @@ exports[`ActivityHistoryItem renders correctly with notes preview 1`] = `
         }
       >
         <Icon
-          color="#666666"
-          name="pencil-outline"
+          color="#000000"
+          name="pencil"
           size={24}
         />
       </View>
@@ -1065,8 +1163,7 @@ exports[`ActivityHistoryItem renders correctly with notes preview 1`] = `
         }
       >
         <Icon
-          color="#666666"
-          name="trash-can-outline"
+          name="delete"
           size={24}
         />
       </View>
@@ -1080,43 +1177,59 @@ exports[`ActivityHistoryItem renders correctly without notes 1`] = `
   style={
     [
       {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
+        "backgroundColor": "#fff",
+        "borderRadius": 12,
+        "elevation": 2,
+        "marginBottom": 10,
         "padding": 15,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "height": 2,
+          "width": 0,
+        },
+        "shadowOpacity": 0.05,
+        "shadowRadius": 5,
       },
-      undefined,
+      null,
     ]
   }
 >
   <View
     style={
-      [
-        {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
-        },
-        undefined,
-      ]
+      {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "width": "100%",
+      }
     }
   >
     <View
       style={
         {
           "flex": 1,
+          "marginRight": 10,
         }
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
+            "fontSize": 16,
+            "fontWeight": "600",
+            "marginBottom": 5,
+          }
+        }
+      />
+      <Text
+        style={
+          {
+            "color": undefined,
             "fontSize": 14,
+            "marginBottom": 2,
           }
         }
       >
@@ -1126,6 +1239,7 @@ exports[`ActivityHistoryItem renders correctly without notes 1`] = `
     <View
       style={
         {
+          "alignItems": "center",
           "flexDirection": "row",
         }
       }
@@ -1166,8 +1280,8 @@ exports[`ActivityHistoryItem renders correctly without notes 1`] = `
         }
       >
         <Icon
-          color="#666666"
-          name="pencil-outline"
+          color="#000000"
+          name="pencil"
           size={24}
         />
       </View>
@@ -1207,8 +1321,7 @@ exports[`ActivityHistoryItem renders correctly without notes 1`] = `
         }
       >
         <Icon
-          color="#666666"
-          name="trash-can-outline"
+          name="delete"
           size={24}
         />
       </View>
@@ -1222,65 +1335,82 @@ exports[`ActivityHistoryItem renders duration when startDate and endDate differ 
   style={
     [
       {
-        "alignItems": "center",
-        "backgroundColor": "#F0F0F0",
-        "borderRadius": 15,
-        "flexDirection": "row",
-        "justifyContent": "space-between",
-        "marginBottom": 15,
+        "backgroundColor": "#fff",
+        "borderRadius": 12,
+        "elevation": 2,
+        "marginBottom": 10,
         "padding": 15,
+        "shadowColor": "#000",
+        "shadowOffset": {
+          "height": 2,
+          "width": 0,
+        },
+        "shadowOpacity": 0.05,
+        "shadowRadius": 5,
       },
-      undefined,
+      null,
     ]
   }
 >
   <View
     style={
-      [
-        {
-          "alignItems": "center",
-          "flex": 1,
-          "flexDirection": "row",
-          "justifyContent": "space-between",
-        },
-        undefined,
-      ]
+      {
+        "alignItems": "center",
+        "flexDirection": "row",
+        "justifyContent": "space-between",
+        "width": "100%",
+      }
     }
   >
     <View
       style={
         {
           "flex": 1,
+          "marginRight": 10,
         }
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
+            "fontSize": 16,
+            "fontWeight": "600",
+            "marginBottom": 5,
+          }
+        }
+      />
+      <Text
+        style={
+          {
+            "color": undefined,
             "fontSize": 14,
+            "marginBottom": 2,
           }
         }
       >
         January 1, 2023 at 12:00:00 PM
-         - January 1, 2023 at 12:05:00 PM
       </Text>
       <Text
         style={
           {
-            "color": "#007AFF",
-            "fontSize": 12,
-            "fontWeight": "600",
-            "marginTop": 2,
+            "color": undefined,
+            "fontSize": 14,
+            "marginBottom": 2,
           }
         }
       >
-        5 minutes
+        to
+        January 1, 2023 at 12:05:00 PM
+         (5m)
       </Text>
     </View>
     <View
       style={
         {
+          "alignItems": "center",
           "flexDirection": "row",
         }
       }
@@ -1321,8 +1451,8 @@ exports[`ActivityHistoryItem renders duration when startDate and endDate differ 
         }
       >
         <Icon
-          color="#666666"
-          name="pencil-outline"
+          color="#000000"
+          name="pencil"
           size={24}
         />
       </View>
@@ -1362,8 +1492,7 @@ exports[`ActivityHistoryItem renders duration when startDate and endDate differ 
         }
       >
         <Icon
-          color="#666666"
-          name="trash-can-outline"
+          name="delete"
           size={24}
         />
       </View>
