@@ -1,4 +1,4 @@
-import { fitToWidth, readImageSize, readJpegSize, readPngSize } from './jpegSize';
+import { fillWidth, fitToWidth, readImageSize, readJpegSize, readPngSize } from './jpegSize';
 
 /**
  * These replace `Image.getSize()`, which decoded every image just to measure
@@ -139,5 +139,55 @@ describe('fitToWidth', () => {
 
   it('is a no-op when the container has not been measured yet', () => {
     expect(fitToWidth({ width: 800, height: 600 }, 0)).toEqual({ width: 800, height: 600 });
+  });
+});
+
+describe('thumbnail vs full-size dimensions', () => {
+  /**
+   * The regression this guards: the gallery measured the *thumbnail* and fed
+   * its pixel dimensions to fitToWidth. Thumbnails are capped at 400px and
+   * fitToWidth only scales down, so newly uploaded images rendered 400px wide
+   * inside a much wider container — visibly shrunken. Older images escaped it
+   * only because they failed to measure and hit the fill-the-width fallback.
+   */
+  const THUMB_CAP = 400;
+  const CONTAINER = 800;
+
+  it('leaves a thumbnail-sized measurement shrunken — why full must be measured', () => {
+    const thumb = { width: THUMB_CAP, height: 300 };
+    expect(fitToWidth(thumb, CONTAINER).width).toBe(THUMB_CAP);
+    expect(fitToWidth(thumb, CONTAINER).width).toBeLessThan(CONTAINER);
+  });
+
+  it('fills the container when the full-size image is measured', () => {
+    const full = { width: 1600, height: 1200 };
+    expect(fitToWidth(full, CONTAINER)).toEqual({ width: 800, height: 600 });
+  });
+
+  it('gives the same result whether measured from full or from thumb ratio', () => {
+    // A 4:3 image, measured either way, should lay out identically.
+    const viaFull = fitToWidth({ width: 1600, height: 1200 }, CONTAINER);
+    const viaThumbRatio = fillWidth({ width: 400, height: 300 }, CONTAINER);
+    expect(viaThumbRatio).toEqual(viaFull);
+  });
+});
+
+describe('fillWidth', () => {
+  it('scales a small image up to the container width', () => {
+    // Unlike fitToWidth, this is allowed to enlarge: the input is a proxy
+    // ratio, not the image's true resolution.
+    expect(fillWidth({ width: 400, height: 300 }, 800)).toEqual({ width: 800, height: 600 });
+  });
+
+  it('scales a large image down to the container width', () => {
+    expect(fillWidth({ width: 1600, height: 1200 }, 400)).toEqual({ width: 400, height: 300 });
+  });
+
+  it('preserves portrait aspect ratio', () => {
+    expect(fillWidth({ width: 300, height: 400 }, 600)).toEqual({ width: 600, height: 800 });
+  });
+
+  it('is a no-op before the container has been measured', () => {
+    expect(fillWidth({ width: 400, height: 300 }, 0)).toEqual({ width: 400, height: 300 });
   });
 });

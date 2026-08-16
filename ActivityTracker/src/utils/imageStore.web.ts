@@ -489,10 +489,14 @@ const dimensionCache = new Map<string, ImageSize | null>();
  * `blob.slice()` is lazy — it does not copy — so this reads at most 64KB off
  * storage per image. Decoding to measure would cost the full bitmap, which on
  * web is ~7.7MB for a 1600x1200 image and is exactly what we are avoiding.
+ *
+ * Pass 'full' when the result will drive layout: the thumbnail shares the
+ * aspect ratio but is capped at 400px, so its absolute dimensions are not the
+ * image's real size. Both headers cost the same bounded slice.
  */
 export const getImageSize = async (
   ref: string,
-  variant: ImageVariant = 'thumb',
+  variant: ImageVariant = 'full',
 ): Promise<ImageSize | null> => {
   if (!isFileRef(ref)) return null;
 

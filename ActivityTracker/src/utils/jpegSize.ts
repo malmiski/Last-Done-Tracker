@@ -95,6 +95,12 @@ export const readImageSize = (bytes: Uint8Array): ImageSize | null =>
 /**
  * Fit `natural` into `containerWidth`, matching the original gallery: scale
  * down to fit the width, but never scale a small image up.
+ *
+ * IMPORTANT: `natural` must be the dimensions of the **full-size** image, not
+ * the thumbnail. The thumbnail is a 400px proxy — its aspect ratio is correct
+ * but its absolute size is not — and because this only ever scales down, a
+ * 400px-wide thumbnail measured in an 800px container would be left at 400px
+ * and render visibly shrunken.
  */
 export const fitToWidth = (natural: ImageSize, containerWidth: number): ImageSize => {
   if (containerWidth <= 0 || natural.width <= 0) return natural;
@@ -102,5 +108,21 @@ export const fitToWidth = (natural: ImageSize, containerWidth: number): ImageSiz
   return {
     width: Math.round(natural.width * scale),
     height: Math.round(natural.height * scale),
+  };
+};
+
+/**
+ * Scale to exactly `containerWidth`, up or down, preserving aspect ratio.
+ *
+ * Used when only the thumbnail is available: its ratio is trustworthy but its
+ * resolution is not, so filling the width is a better guess than pinning the
+ * image to the proxy's pixel size.
+ */
+export const fillWidth = (ratio: ImageSize, containerWidth: number): ImageSize => {
+  if (containerWidth <= 0 || ratio.width <= 0) return ratio;
+  const scale = containerWidth / ratio.width;
+  return {
+    width: Math.round(ratio.width * scale),
+    height: Math.round(ratio.height * scale),
   };
 };

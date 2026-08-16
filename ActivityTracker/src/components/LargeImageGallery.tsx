@@ -28,7 +28,7 @@ import {
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import AppImage from './AppImage';
 import { getImageSize } from '../utils/imageStore';
-import { ImageSize, fitToWidth } from '../utils/jpegSize';
+import { ImageSize, fillWidth, fitToWidth } from '../utils/jpegSize';
 
 interface LargeImageGalleryProps {
   /** Full-size image references. */
@@ -64,15 +64,33 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({
     let cancelled = false;
     void (async () => {
       for (let index = 0; index < imageRefs.length; index++) {
-        const natural = await getImageSize(imageRefs[index], 'thumb');
-        if (cancelled) return;
-        if (!natural) continue;
+        const ref = imageRefs[index];
 
-        const scaled = fitToWidth(natural, containerWidth);
+        // Measure the FULL image, not the thumbnail. The thumbnail is a 400px
+        // proxy, and since fitToWidth only scales down, measuring it would pin
+        // every image to 400px wide however wide the container is. Reading the
+        // full file's header costs the same bounded 64KB as the thumbnail's.
+        const natural = await getImageSize(ref, 'full');
+        if (cancelled) return;
+
+        let scaled: ImageSize | null = null;
+        if (natural) {
+          scaled = fitToWidth(natural, containerWidth);
+        } else {
+          // No full-size file (an unusual, partially restored entry). The
+          // thumbnail still gives a trustworthy aspect ratio, so fill the
+          // width with that rather than fall back to the proxy's pixel size.
+          const ratio = await getImageSize(ref, 'thumb');
+          if (cancelled) return;
+          if (ratio) scaled = fillWidth(ratio, containerWidth);
+        }
+        if (!scaled) continue;
+
+        const next = scaled;
         setSizes(previous =>
-          previous[index]?.width === scaled.width && previous[index]?.height === scaled.height
+          previous[index]?.width === next.width && previous[index]?.height === next.height
             ? previous
-            : { ...previous, [index]: scaled },
+            : { ...previous, [index]: next },
         );
       }
     })();

@@ -270,13 +270,17 @@ const dimensionCache = new Map<string, ImageSize | null>();
 /**
  * Natural pixel dimensions, read from the file header without decoding.
  *
- * Measures the thumbnail by default: same aspect ratio as the full image, a
- * fraction of the bytes. Results are cached because the gallery asks for every
- * image each time it mounts.
+ * Pass 'full' when the result will drive layout. The thumbnail shares the full
+ * image's aspect ratio but is capped at 400px, so its absolute dimensions are
+ * not the image's real size — using them to lay out a wider container leaves
+ * the image shrunken. Reading either header costs the same bounded slice, so
+ * there is no saving in measuring the smaller file.
+ *
+ * Results are cached; the gallery asks for every image each time it mounts.
  */
 export const getImageSize = async (
   ref: string,
-  variant: ImageVariant = 'thumb',
+  variant: ImageVariant = 'full',
 ): Promise<ImageSize | null> => {
   if (!isFileRef(ref)) return null;
 
