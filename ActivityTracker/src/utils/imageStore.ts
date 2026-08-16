@@ -328,6 +328,28 @@ export const collectGarbage = async (liveRefs: Set<string>): Promise<number> => 
  */
 export const clearMemoryCache = (): void => {};
 
+/* ------------------------------------------------------------------ *
+ * Retain / release
+ *
+ * Mirrors the web store's reference-counted object-URL pool so AppImage can
+ * use one code path. Native URIs are plain file paths with no lifetime to
+ * manage, so acquiring is just resolving and releasing does nothing.
+ * ------------------------------------------------------------------ */
+
+export const acquireImageUri = async (
+  ref?: string | null,
+  variant: ImageVariant = 'full',
+): Promise<{ uri: string; key: string | null } | null> => {
+  const uri = await resolveImageUri(ref, variant);
+  return uri ? { uri, key: null } : null;
+};
+
+export const releaseImageUri = (_key: string | null): void => {};
+
+export const getCacheEpoch = (): number => 0;
+
+export const subscribeToCacheEpoch = (_listener: (epoch: number) => void): (() => void) => () => {};
+
 /** Total bytes on disk — surfaced in Settings. */
 export const totalBytes = async (): Promise<number> => {
   const dir = await getDir();

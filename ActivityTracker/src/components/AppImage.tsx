@@ -16,7 +16,13 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { Image, ImageContentFit } from 'expo-image';
 import { ImageVariant, isFailed, isLegacyPlaceholder, isRenderable } from '../utils/imageRef';
-import { clearMemoryCache as clearStoreMemoryCache, resolveImageUri } from '../utils/imageStore';
+import {
+  acquireImageUri,
+  clearMemoryCache as clearStoreMemoryCache,
+  getCacheEpoch,
+  releaseImageUri,
+  subscribeToCacheEpoch,
+} from '../utils/imageStore';
 import theme from '../theme/theme';
 
 export interface AppImageProps {
@@ -48,30 +54,42 @@ export const useImageUri = (
   variant: ImageVariant = 'full',
 ): string | null => {
   const [uri, setUri] = useState<string | null>(null);
-  const activeRef = useRef(0);
+  // Re-resolve when the store invalidates cached URLs, so this component can
+  // never be left pointing at one that has been revoked.
+  const [epoch, setEpoch] = useState(getCacheEpoch);
+
+  useEffect(() => subscribeToCacheEpoch(setEpoch), []);
 
   useEffect(() => {
-    const token = ++activeRef.current;
-
     if (!isRenderable(imageRef)) {
       setUri(null);
       return;
     }
 
     let cancelled = false;
-    resolveImageUri(imageRef, variant)
+    let heldKey: string | null = null;
+
+    acquireImageUri(imageRef, variant)
       .then((resolved) => {
-        // Ignore results from a ref we have since navigated away from.
-        if (!cancelled && activeRef.current === token) setUri(resolved);
+        if (cancelled) {
+          // Unmounted while resolving — hand the hold straight back.
+          releaseImageUri(resolved?.key ?? null);
+          return;
+        }
+        heldKey = resolved?.key ?? null;
+        setUri(resolved?.uri ?? null);
       })
       .catch(() => {
-        if (!cancelled && activeRef.current === token) setUri(null);
+        if (!cancelled) setUri(null);
       });
 
     return () => {
       cancelled = true;
+      // Releasing lets the pool reclaim this URL once nothing else displays it.
+      releaseImageUri(heldKey);
+      heldKey = null;
     };
-  }, [imageRef, variant]);
+  }, [imageRef, variant, epoch]);
 
   return uri;
 };

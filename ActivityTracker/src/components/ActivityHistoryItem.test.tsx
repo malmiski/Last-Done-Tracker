@@ -22,13 +22,21 @@ jest.mock(
   { virtual: true },
 );
 
-// The store is exercised directly in imageStore tests; here we only care that
-// the component asks for the right variant and renders once a URI arrives.
+// The store is exercised directly in imageStore.pool.test; here we only care
+// that the component asks for the right variant and renders once a URI arrives.
 jest.mock('../utils/imageStore', () => ({
-  resolveImageUri: jest.fn((ref: string, variant: string) =>
-    Promise.resolve(ref?.startsWith('img:') ? `file:///images/${ref.slice(4)}_${variant}.jpg` : null),
+  acquireImageUri: jest.fn((ref: string, variant: string) =>
+    Promise.resolve(
+      ref?.startsWith('img:')
+        ? { uri: `file:///images/${ref.slice(4)}_${variant}.jpg`, key: null }
+        : null,
+    ),
   ),
+  releaseImageUri: jest.fn(),
+  resolveImageUri: jest.fn(),
   clearMemoryCache: jest.fn(),
+  getCacheEpoch: jest.fn(() => 0),
+  subscribeToCacheEpoch: jest.fn(() => () => {}),
 }));
 
 // The first render in a jest-expo suite pays a one-off transform cost that can
@@ -118,13 +126,24 @@ describe('ActivityHistoryItem', () => {
 
   it('requests the thumbnail variant for list tiles, never the full image', async () => {
     const imageStore = require('../utils/imageStore');
-    imageStore.resolveImageUri.mockClear();
+    imageStore.acquireImageUri.mockClear();
 
     await render({ entryId: 'e1', images: [REF], thumbnails: [REF], imageMode: 'small' });
 
     // This is the regression that mattered: a 50pt tile must not pull the
     // full-size file, which is what made long lists explode.
-    expect(imageStore.resolveImageUri).toHaveBeenCalledWith(REF, 'thumb');
-    expect(imageStore.resolveImageUri).not.toHaveBeenCalledWith(REF, 'full');
+    expect(imageStore.acquireImageUri).toHaveBeenCalledWith(REF, 'thumb');
+    expect(imageStore.acquireImageUri).not.toHaveBeenCalledWith(REF, 'full');
+  });
+
+  it('releases its hold on the URL when unmounted', async () => {
+    const imageStore = require('../utils/imageStore');
+    imageStore.releaseImageUri.mockClear();
+
+    const tree = await render({ entryId: 'e1', images: [REF], thumbnails: [REF], imageMode: 'small' });
+    await act(async () => { tree.unmount(); });
+
+    // Without this the pool would never reclaim off-screen images.
+    expect(imageStore.releaseImageUri).toHaveBeenCalled();
   });
 });

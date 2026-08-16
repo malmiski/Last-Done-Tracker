@@ -91,37 +91,127 @@ const removeBlob = async (id: string, variant: ImageVariant): Promise<void> => {
  * Object URL LRU
  * ------------------------------------------------------------------ */
 
-const urlCache = new Map<string, string>();
+/**
+ * Object URLs are reference counted.
+ *
+ * An earlier version revoked URLs unconditionally, which produced a subtle and
+ * unrecoverable bug: revoking a URL that a mounted <img> is still pointing at
+ * breaks that element permanently. It does not retry, and React will not
+ * re-resolve because the ref and variant it depends on have not changed. The
+ * visible symptom was switching from small to medium thumbnails — both use the
+ * 'thumb' variant, so nothing re-resolved — leaving the already-rendered tiles
+ * broken while ones scrolled into view afterwards loaded fine.
+ *
+ * The rule now: a URL is only ever revoked when nothing holds it. Components
+ * retain on mount and release on unmount, so "free memory" means "free what is
+ * off-screen", which is what was actually intended.
+ */
+interface PooledUrl {
+  url: string;
+  /** Number of mounted components currently displaying this URL. */
+  refs: number;
+}
 
-const rememberUrl = (key: string, url: string): string => {
-  // Re-inserting moves the key to the most-recent position.
-  if (urlCache.has(key)) urlCache.delete(key);
-  urlCache.set(key, url);
+const urlCache = new Map<string, PooledUrl>();
 
-  while (urlCache.size > URL_CACHE_LIMIT) {
-    const oldestKey = urlCache.keys().next().value as string | undefined;
-    if (oldestKey === undefined) break;
-    const oldestUrl = urlCache.get(oldestKey)!;
-    urlCache.delete(oldestKey);
-    try {
-      URL.revokeObjectURL(oldestUrl);
-    } catch {
-      /* already revoked */
-    }
-  }
-  return url;
+/**
+ * Bumped whenever cached URLs are invalidated. Components observe it and
+ * re-resolve, so a released-then-revoked URL cannot linger in the DOM.
+ */
+let cacheEpoch = 0;
+const epochListeners = new Set<(epoch: number) => void>();
+
+const bumpEpoch = () => {
+  cacheEpoch += 1;
+  epochListeners.forEach(listener => listener(cacheEpoch));
 };
 
-/** Drop every cached object URL. Called when navigating away from a gallery. */
+export const getCacheEpoch = (): number => cacheEpoch;
+
+export const subscribeToCacheEpoch = (listener: (epoch: number) => void): (() => void) => {
+  epochListeners.add(listener);
+  return () => {
+    epochListeners.delete(listener);
+  };
+};
+
+const revoke = (entry: PooledUrl) => {
+  try {
+    URL.revokeObjectURL(entry.url);
+  } catch {
+    /* already revoked */
+  }
+};
+
+/** Evict idle entries, oldest first, until the pool is back within budget. */
+const trimPool = () => {
+  if (urlCache.size <= URL_CACHE_LIMIT) return;
+  for (const [key, entry] of urlCache) {
+    if (urlCache.size <= URL_CACHE_LIMIT) break;
+    // Never evict something on screen — that is the bug described above.
+    if (entry.refs > 0) continue;
+    urlCache.delete(key);
+    revoke(entry);
+  }
+};
+
+const rememberUrl = (key: string, url: string): PooledUrl => {
+  const existing = urlCache.get(key);
+  if (existing) {
+    // Re-inserting moves the key to the most-recent position in the LRU.
+    urlCache.delete(key);
+    urlCache.set(key, existing);
+    return existing;
+  }
+  const entry: PooledUrl = { url, refs: 0 };
+  urlCache.set(key, entry);
+  trimPool();
+  return entry;
+};
+
+/** Take a hold on a URL so it cannot be revoked while it is being displayed. */
+export const retainUrl = (key: string): void => {
+  const entry = urlCache.get(key);
+  if (entry) entry.refs += 1;
+};
+
+/** Give up a hold. The URL stays pooled for reuse until it is evicted. */
+export const releaseUrl = (key: string): void => {
+  const entry = urlCache.get(key);
+  if (!entry) return;
+  entry.refs = Math.max(0, entry.refs - 1);
+  if (entry.refs === 0) trimPool();
+};
+
+/**
+ * Release the memory held by images that are not currently on screen.
+ *
+ * Deliberately leaves retained URLs alone: revoking those would break visible
+ * images without reclaiming anything the user is not looking at.
+ */
 export const clearMemoryCache = (): void => {
-  urlCache.forEach((url) => {
-    try {
-      URL.revokeObjectURL(url);
-    } catch {
-      /* already revoked */
-    }
-  });
-  urlCache.clear();
+  let released = 0;
+  for (const [key, entry] of [...urlCache]) {
+    if (entry.refs > 0) continue;
+    urlCache.delete(key);
+    revoke(entry);
+    released += 1;
+  }
+  if (released > 0) bumpEpoch();
+};
+
+/**
+ * Drop a specific cached URL, retained or not.
+ * Used when the underlying blob changes or is deleted, where continuing to
+ * serve the old URL would show stale content. The epoch bump makes any mounted
+ * component re-resolve rather than keep a dead reference.
+ */
+const invalidateKey = (key: string): void => {
+  const entry = urlCache.get(key);
+  if (!entry) return;
+  urlCache.delete(key);
+  revoke(entry);
+  bumpEpoch();
 };
 
 /* ------------------------------------------------------------------ *
@@ -244,17 +334,58 @@ const newId = (): string => {
  * Public API — mirrors imageStore.ts
  * ------------------------------------------------------------------ */
 
-export const fileUriFor = async (
+/**
+ * Resolve to an object URL and report the pool key alongside it, so the caller
+ * can retain and release. Returns null when there is no blob for this variant.
+ */
+export const acquireUrl = async (
   id: string,
   variant: ImageVariant = 'full',
-): Promise<string | null> => {
+): Promise<{ uri: string; key: string } | null> => {
   const key = blobKey(id, variant);
+
   const cached = urlCache.get(key);
-  if (cached) return rememberUrl(key, cached);
+  if (cached) return { uri: rememberUrl(key, cached.url).url, key };
 
   const blob = await getBlob(id, variant);
   if (!blob) return null;
-  return rememberUrl(key, URL.createObjectURL(blob));
+  return { uri: rememberUrl(key, URL.createObjectURL(blob)).url, key };
+};
+
+export const fileUriFor = async (
+  id: string,
+  variant: ImageVariant = 'full',
+): Promise<string | null> => (await acquireUrl(id, variant))?.uri ?? null;
+
+/**
+ * Resolve a stored reference and take a hold on the result.
+ *
+ * `key` is null for values that are not pooled (inline base64), in which case
+ * `releaseImageUri` is a no-op.
+ */
+export const acquireImageUri = async (
+  ref?: string | null,
+  variant: ImageVariant = 'full',
+): Promise<{ uri: string; key: string | null } | null> => {
+  if (!isRenderable(ref)) return null;
+  const value = ref as string;
+
+  if (isFileRef(value)) {
+    const id = refId(value);
+    // A missing thumbnail is not fatal — fall back to the full image.
+    const resolved = (await acquireUrl(id, variant)) ??
+      (variant === 'thumb' ? await acquireUrl(id, 'full') : null);
+    if (!resolved) return null;
+    retainUrl(resolved.key);
+    return resolved;
+  }
+
+  if (isInlineBase64(value)) return { uri: toDataUri(value), key: null };
+  return null;
+};
+
+export const releaseImageUri = (key: string | null): void => {
+  if (key) releaseUrl(key);
 };
 
 export const resolveImageUri = async (
@@ -336,6 +467,12 @@ export const writeFromBytes = async (
   // implementation accepts — some TypedArray views are rejected on older
   // Safari builds.
   await putBlob(id, variant, new Blob([bytes.slice().buffer], { type: 'image/jpeg' }));
+
+  // Importing over an existing id replaces the blob, but an object URL pins the
+  // *old* Blob for its lifetime — without this, a re-import would keep showing
+  // the previous image.
+  invalidateKey(blobKey(id, variant));
+
   return makeFileRef(id);
 };
 
@@ -349,16 +486,7 @@ export const deleteRef = async (ref: string): Promise<void> => {
   if (!isFileRef(ref)) return;
   const id = refId(ref);
   for (const variant of ['full', 'thumb'] as ImageVariant[]) {
-    const key = blobKey(id, variant);
-    const url = urlCache.get(key);
-    if (url) {
-      urlCache.delete(key);
-      try {
-        URL.revokeObjectURL(url);
-      } catch {
-        /* already revoked */
-      }
-    }
+    invalidateKey(blobKey(id, variant));
     await removeBlob(id, variant);
   }
 };
