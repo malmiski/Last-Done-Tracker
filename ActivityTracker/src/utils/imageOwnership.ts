@@ -15,7 +15,25 @@
  */
 import * as database from './database';
 import * as imageStore from './imageStore';
+import { getHeldRefs } from './clipboardHold';
 import { isFileRef } from './imageRef';
+
+/**
+ * Every reference that must survive: those held by an entry, plus those held
+ * by the clipboard.
+ *
+ * The clipboard half matters more than it looks. Copy an entry, delete it,
+ * then paste — without counting the clipboard, the delete reclaims the blobs
+ * and the paste arrives with no photos. A copy is a real reference to an
+ * image, so it is treated as one.
+ */
+export const getLiveRefs = async (): Promise<Set<string>> => {
+  const [stored, held] = await Promise.all([database.getAllImageRefs(), getHeldRefs()]);
+  // Build a new Set rather than adding into `stored`: mutating a collection
+  // another module handed back is a good way to corrupt a cached value it
+  // still owns.
+  return new Set([...stored, ...held]);
+};
 
 /**
  * Delete each candidate blob that nothing references any more.
@@ -28,7 +46,7 @@ export const deleteUnreferencedRefs = async (candidates: string[]): Promise<stri
   // Deduplicate: an entry can list the same ref for both variants.
   const unique = [...new Set(managed)];
 
-  const stillReferenced = await database.getAllImageRefs();
+  const stillReferenced = await getLiveRefs();
   const orphaned = unique.filter(ref => !stillReferenced.has(ref));
 
   await Promise.all(orphaned.map(ref => imageStore.deleteRef(ref)));

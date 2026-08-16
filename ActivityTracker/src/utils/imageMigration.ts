@@ -15,6 +15,7 @@
 import { InteractionManager, Platform } from 'react-native';
 import * as database from './database';
 import * as imageStore from './imageStore';
+import { getLiveRefs } from './imageOwnership';
 import { FAILED_SENTINEL, isFileRef, isInlineBase64 } from './imageRef';
 
 const MIGRATION_VERSION = '2';
@@ -180,7 +181,9 @@ const finalise = async () => {
   try {
     await database.setMeta(META_KEY_VERSION, MIGRATION_VERSION);
 
-    const liveRefs = await database.getAllImageRefs();
+    // Includes clipboard-held refs, so a copied-then-deleted entry's images
+    // are not swept away before the paste.
+    const liveRefs = await getLiveRefs();
     const removed = await imageStore.collectGarbage(liveRefs);
     if (removed > 0) console.log(`Image store: removed ${removed} orphaned files.`);
 
@@ -219,8 +222,12 @@ export const scheduleImageMigration = (delayMs = 2500) => {
 /** Manual "Optimize image storage" action in Settings. */
 export const runImageMigrationNow = () => runImageMigration();
 
-/** Drop blobs no entry references any more. Cheap; safe to call after deletes. */
+/**
+ * Drop blobs nothing references any more. Cheap; safe to call after deletes.
+ * "Nothing" includes the clipboard: a copied entry's images are protected
+ * until the hold is replaced by another copy or expires.
+ */
 export const collectImageGarbage = async (): Promise<number> => {
-  const liveRefs = await database.getAllImageRefs();
+  const liveRefs = await getLiveRefs();
   return imageStore.collectGarbage(liveRefs);
 };

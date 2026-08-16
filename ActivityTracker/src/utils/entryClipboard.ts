@@ -17,6 +17,7 @@
 import * as Clipboard from 'expo-clipboard';
 import { Tag } from '../data/activity-details';
 import * as imageStore from './imageStore';
+import { holdRefs } from './clipboardHold';
 import { isFileRef } from './imageRef';
 
 /** Marker so we can recognise our own payload and reject unrelated text. */
@@ -116,6 +117,12 @@ export const copyEntryToClipboard = async (
 ): Promise<number> => {
   const payload = buildPayload(entry, sourceActivityName);
   await Clipboard.setStringAsync(serialisePayload(payload));
+
+  // Protect the referenced blobs until this copy is superseded or expires.
+  // Without it, copying an entry and then deleting it would reclaim the very
+  // images the clipboard points at, and the paste would arrive empty.
+  await holdRefs(payload.images);
+
   return payload.images.length;
 };
 

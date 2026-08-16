@@ -3,6 +3,10 @@ jest.mock('expo-clipboard', () => ({
   getStringAsync: jest.fn(() => Promise.resolve('')),
 }));
 
+jest.mock('./clipboardHold', () => ({
+  holdRefs: jest.fn(() => Promise.resolve()),
+}));
+
 jest.mock('./imageStore', () => ({
   resolveImageUri: jest.fn((ref: string) =>
     Promise.resolve(ref === 'img:missing' ? null : `file:///images/${ref.slice(4)}.jpg`),
@@ -116,6 +120,12 @@ describe('clipboard IO', () => {
 
     const written = (Clipboard.setStringAsync as jest.Mock).mock.calls[0][0];
     expect(parsePayload(written)).not.toBeNull();
+  });
+
+  it('holds the copied images so deleting the source entry cannot reclaim them', async () => {
+    const { holdRefs } = require('./clipboardHold');
+    await copyEntryToClipboard(sampleEntry, 'Running');
+    expect(holdRefs).toHaveBeenCalledWith(['img:aaa', 'img:bbb']);
   });
 
   it('surfaces a blocked clipboard read rather than throwing', async () => {

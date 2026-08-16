@@ -14,6 +14,12 @@ jest.mock('./imageStore', () => ({
   deleteRef: jest.fn(() => Promise.resolve()),
 }));
 
+// Clipboard holds are exercised in clipboardHold.test; here nothing is held so
+// these tests describe database-only ownership.
+jest.mock('./clipboardHold', () => ({
+  getHeldRefs: jest.fn(() => Promise.resolve(new Set<string>())),
+}));
+
 import * as database from './database';
 import * as imageStore from './imageStore';
 import { countReferencesTo, deleteUnreferencedRefs } from './imageOwnership';

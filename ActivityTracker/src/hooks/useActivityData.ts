@@ -21,6 +21,7 @@ import { generateActivityId } from '../utils/crypto';
 import * as database from '../utils/database';
 import * as imageStore from '../utils/imageStore';
 import { deleteUnreferencedRefs } from '../utils/imageOwnership';
+import { clearHold } from '../utils/clipboardHold';
 
 type LatestEntries = Record<string, ActivityEntry & { activityId: string }>;
 
@@ -225,6 +226,9 @@ export const useActivityData = () => {
   /** Delete every entry across all activities, and every photo with them. */
   const clearAllHistory = useCallback(async () => {
     await database.deleteAllEntries();
+    // "Delete everything" is explicit intent, so a pending clipboard copy is
+    // released too rather than keeping deleted photos on disk.
+    await clearHold();
     // Nothing references any blob now, so a sweep removes all of them.
     await imageStore.collectGarbage(new Set());
     setState({
