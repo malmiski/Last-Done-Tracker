@@ -37,6 +37,9 @@ jest.mock('../utils/imageStore', () => ({
   clearMemoryCache: jest.fn(),
   getCacheEpoch: jest.fn(() => 0),
   subscribeToCacheEpoch: jest.fn(() => () => {}),
+  // Returns null so the gallery uses its fallback height. Header parsing is
+  // covered directly in jpegSize.test.
+  getImageSize: jest.fn(() => Promise.resolve(null)),
 }));
 
 // The first render in a jest-expo suite pays a one-off transform cost that can

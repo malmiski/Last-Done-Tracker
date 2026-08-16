@@ -12,6 +12,7 @@
 import { Directory, File, Paths } from 'expo-file-system';
 import * as ImageManipulator from 'expo-image-manipulator';
 import * as Crypto from 'expo-crypto';
+import { HEADER_BYTES, ImageSize, readImageSize } from './jpegSize';
 import {
   FAILED_SENTINEL,
   ImageVariant,
@@ -258,6 +259,55 @@ export const writeFromBytes = async (
   file.create();
   file.write(bytes);
   return makeFileRef(id);
+};
+
+/* ------------------------------------------------------------------ *
+ * Dimensions
+ * ------------------------------------------------------------------ */
+
+const dimensionCache = new Map<string, ImageSize | null>();
+
+/**
+ * Natural pixel dimensions, read from the file header without decoding.
+ *
+ * Measures the thumbnail by default: same aspect ratio as the full image, a
+ * fraction of the bytes. Results are cached because the gallery asks for every
+ * image each time it mounts.
+ */
+export const getImageSize = async (
+  ref: string,
+  variant: ImageVariant = 'thumb',
+): Promise<ImageSize | null> => {
+  if (!isFileRef(ref)) return null;
+
+  const cacheKey = `${ref}:${variant}`;
+  const cached = dimensionCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const id = refId(ref);
+  let file = await fileFor(id, variant);
+  if (!file.exists && variant === 'thumb') file = await fileFor(id, 'full');
+  if (!file.exists) {
+    dimensionCache.set(cacheKey, null);
+    return null;
+  }
+
+  let size: ImageSize | null = null;
+  try {
+    const handle = file.open();
+    try {
+      // Bounded read: only the header, never the pixel data.
+      const bytes = handle.readBytes(Math.min(HEADER_BYTES, file.size ?? HEADER_BYTES));
+      size = readImageSize(bytes);
+    } finally {
+      handle.close();
+    }
+  } catch {
+    size = null;
+  }
+
+  dimensionCache.set(cacheKey, size);
+  return size;
 };
 
 export const sizeOf = async (ref: string, variant: ImageVariant = 'full'): Promise<number> => {

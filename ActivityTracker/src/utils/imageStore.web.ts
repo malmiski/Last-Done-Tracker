@@ -9,6 +9,7 @@
  *      every createObjectURL pins its blob in memory for the life of the
  *      document, which is the web equivalent of the native leak.
  */
+import { HEADER_BYTES, ImageSize, readImageSize } from './jpegSize';
 import {
   ImageVariant,
   StoredImage,
@@ -474,6 +475,48 @@ export const writeFromBytes = async (
   invalidateKey(blobKey(id, variant));
 
   return makeFileRef(id);
+};
+
+/* ------------------------------------------------------------------ *
+ * Dimensions
+ * ------------------------------------------------------------------ */
+
+const dimensionCache = new Map<string, ImageSize | null>();
+
+/**
+ * Natural pixel dimensions, read from the blob header without decoding.
+ *
+ * `blob.slice()` is lazy — it does not copy — so this reads at most 64KB off
+ * storage per image. Decoding to measure would cost the full bitmap, which on
+ * web is ~7.7MB for a 1600x1200 image and is exactly what we are avoiding.
+ */
+export const getImageSize = async (
+  ref: string,
+  variant: ImageVariant = 'thumb',
+): Promise<ImageSize | null> => {
+  if (!isFileRef(ref)) return null;
+
+  const cacheKey = `${ref}:${variant}`;
+  const cached = dimensionCache.get(cacheKey);
+  if (cached !== undefined) return cached;
+
+  const id = refId(ref);
+  const blob = (await getBlob(id, variant)) ?? (variant === 'thumb' ? await getBlob(id, 'full') : null);
+  if (!blob) {
+    dimensionCache.set(cacheKey, null);
+    return null;
+  }
+
+  let size: ImageSize | null = null;
+  try {
+    const header = blob.slice(0, HEADER_BYTES);
+    size = readImageSize(new Uint8Array(await header.arrayBuffer()));
+  } catch {
+    size = null;
+  }
+
+  dimensionCache.set(cacheKey, size);
+  return size;
 };
 
 export const sizeOf = async (ref: string, variant: ImageVariant = 'full'): Promise<number> => {

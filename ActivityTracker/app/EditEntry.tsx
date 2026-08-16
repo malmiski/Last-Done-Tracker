@@ -778,6 +778,35 @@ const EditEntryScreen: React.FC = () => {
         </TouchableOpacity>
       </View>
 
+      {/*
+        Full-size viewer. The inline previews deliberately render the thumbnail
+        variant, so this is where the full image is actually loaded — one at a
+        time, via the gallery's windowing.
+      */}
+      <Modal
+        visible={viewerIndex !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewerIndex(null)}
+      >
+        <View style={styles.viewerOverlay}>
+          <TouchableOpacity
+            style={styles.viewerClose}
+            onPress={() => setViewerIndex(null)}
+            accessibilityLabel="Close image viewer"
+          >
+            <Icon name="close" size={30} color="#FFFFFF" />
+          </TouchableOpacity>
+          {viewerIndex !== null && photos.length > 0 && (
+            <LargeImageGallery
+              imageRefs={photos.map(photo => photo.ref)}
+              entryId={`${entryId}-viewer`}
+              initialIndex={viewerIndex}
+            />
+          )}
+        </View>
+      </Modal>
+
       <Modal
         visible={newTagModalVisible}
         transparent={true}
@@ -1046,6 +1075,21 @@ const styles = StyleSheet.create({
     bottom: 8,
     backgroundColor: 'rgba(0,0,0,0.55)',
     borderRadius: 14,
+    padding: 6,
+  },
+  viewerOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.92)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  viewerClose: {
+    position: 'absolute',
+    top: 50,
+    right: 20,
+    zIndex: 10,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    borderRadius: 20,
     padding: 6,
   },
   photoItemContainer: {
