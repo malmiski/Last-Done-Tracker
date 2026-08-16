@@ -900,7 +900,12 @@ export const importDatabase = async () => {
     const selectedFile = new File(result.assets[0].uri);
     const dbDirectory = new Directory(Paths.document, 'SQLite');
     if (!dbDirectory.exists) {
-      dbDirectory.create({ intermediates: true });
+      // Same typings/native mismatch guarded in imageStore.getDir().
+      try {
+        dbDirectory.create({ intermediates: true });
+      } catch {
+        dbDirectory.create();
+      }
     }
 
     const destination = new File(dbDirectory, DB_NAME);

@@ -16,6 +16,7 @@ import {
   FAILED_SENTINEL,
   ImageVariant,
   StoredImage,
+  base64ToBytes,
   isFileRef,
   isInlineBase64,
   isRenderable,
@@ -50,7 +51,14 @@ const getDir = (): Promise<Directory> => {
     dirPromise = (async () => {
       const dir = new Directory(Paths.document, DIR_NAME);
       if (!dir.exists) {
-        dir.create({ intermediates: true });
+        // expo-file-system's typings and its native module disagree about
+        // optional-argument support in 19.0.17 (see importFromBase64), so fall
+        // back to the no-argument form rather than failing to create the store.
+        try {
+          dir.create({ intermediates: true });
+        } catch {
+          dir.create();
+        }
       }
       return dir;
     })().catch((err) => {
@@ -193,7 +201,18 @@ export const importFromBase64 = async (
   const dir = await getDir();
   const scratch = new File(dir, `scratch-${newId()}.tmp`);
   try {
-    scratch.write(stripDataUri(value), { encoding: 'base64' });
+    // Decoded in JS and written as bytes. The `write(content, { encoding:
+    // 'base64' })` overload exists in expo-file-system's typings but not in
+    // the native module shipped with 19.0.17, which accepts a single argument
+    // and throws InvalidArgsNumberException for the options object.
+    const bytes = base64ToBytes(value);
+    if (bytes.length === 0) {
+      throw new Error('Image data was empty or not valid base64');
+    }
+
+    scratch.create();
+    scratch.write(bytes);
+
     return await importFromUri(scratch.uri);
   } finally {
     try {

@@ -1,4 +1,6 @@
 import {
+  base64ToBytes,
+  bytesToBase64,
   isFileRef,
   isInlineBase64,
   isLegacyPlaceholder,
@@ -73,5 +75,68 @@ describe('persisted column parsing', () => {
     expect(parseRefArray(serialiseRefArray(refs))).toEqual(refs);
     expect(serialiseRefArray([])).toBeNull();
     expect(serialiseRefArray(undefined)).toBeNull();
+  });
+});
+
+/**
+ * These replaced expo-file-system's `write(content, { encoding: 'base64' })`,
+ * whose native module rejects the options argument in 19.0.17. Every migrated
+ * image now passes through this decoder, so correctness here is not optional:
+ * a bug corrupts photos rather than merely failing loudly.
+ */
+describe('base64 codec', () => {
+  const roundTrip = (bytes: number[]) =>
+    Array.from(base64ToBytes(bytesToBase64(new Uint8Array(bytes))));
+
+  it('round-trips every byte value', () => {
+    const all = Array.from({ length: 256 }, (_, i) => i);
+    expect(roundTrip(all)).toEqual(all);
+  });
+
+  it('handles each padding case', () => {
+    // Lengths mod 3 of 0, 1 and 2 produce '', '==' and '=' padding.
+    expect(roundTrip([1, 2, 3])).toEqual([1, 2, 3]);
+    expect(roundTrip([1])).toEqual([1]);
+    expect(roundTrip([1, 2])).toEqual([1, 2]);
+    expect(bytesToBase64(new Uint8Array([1]))).toMatch(/==$/);
+    expect(bytesToBase64(new Uint8Array([1, 2]))).toMatch(/[^=]=$/);
+  });
+
+  it('matches known vectors', () => {
+    const encode = (text: string) =>
+      bytesToBase64(new Uint8Array([...text].map(c => c.charCodeAt(0))));
+    expect(encode('Man')).toBe('TWFu');
+    expect(encode('Ma')).toBe('TWE=');
+    expect(encode('M')).toBe('TQ==');
+    expect(encode('hello world')).toBe('aGVsbG8gd29ybGQ=');
+  });
+
+  it('decodes a real JPEG header', () => {
+    // FF D8 FF E0 is the SOI + APP0 marker every JPEG starts with.
+    const bytes = base64ToBytes('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAA==');
+    expect(Array.from(bytes.subarray(0, 4))).toEqual([0xff, 0xd8, 0xff, 0xe0]);
+  });
+
+  it('strips a data URI prefix before decoding', () => {
+    expect(Array.from(base64ToBytes('data:image/jpeg;base64,TWFu'))).toEqual(
+      Array.from(base64ToBytes('TWFu')),
+    );
+  });
+
+  it('tolerates whitespace, newlines and missing padding', () => {
+    const expected = Array.from(base64ToBytes('aGVsbG8gd29ybGQ='));
+    expect(Array.from(base64ToBytes('aGVsbG8g\nd29ybGQ='))).toEqual(expected);
+    expect(Array.from(base64ToBytes('aGVsbG8gd29ybGQ'))).toEqual(expected);
+  });
+
+  it('returns an empty array for empty input rather than throwing', () => {
+    expect(base64ToBytes('').length).toBe(0);
+    expect(base64ToBytes('data:image/jpeg;base64,').length).toBe(0);
+  });
+
+  it('produces byte-exact output for a large payload', () => {
+    // Guards against drift in the accumulator across many 3-byte groups.
+    const original = Array.from({ length: 5000 }, (_, i) => (i * 37) % 256);
+    expect(roundTrip(original)).toEqual(original);
   });
 });

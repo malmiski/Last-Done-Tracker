@@ -99,6 +99,77 @@ export const parseRefArray = (value: unknown): string[] | undefined => {
   }
 };
 
+/* ------------------------------------------------------------------ *
+ * base64 <-> bytes
+ *
+ * Hand-rolled rather than using `atob`/`btoa` (not guaranteed on Hermes) or
+ * `Buffer` (needs a polyfill), and rather than expo-file-system's
+ * `write(content, { encoding: 'base64' })` — the TypeScript declares that
+ * overload but the native module shipped in expo-file-system 19.0.17 accepts
+ * only one argument and throws:
+ *
+ *   InvalidArgsNumberException: Received 2 arguments, but 1 was expected
+ *
+ * so base64 has to be decoded in JS and written as bytes.
+ * ------------------------------------------------------------------ */
+
+const BASE64_ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+const BASE64_LOOKUP = /*#__PURE__*/ (() => {
+  const table = new Uint8Array(256).fill(255);
+  for (let i = 0; i < BASE64_ALPHABET.length; i++) {
+    table[BASE64_ALPHABET.charCodeAt(i)] = i;
+  }
+  return table;
+})();
+
+/** Decode base64 (with or without a `data:` prefix) into raw bytes. */
+export const base64ToBytes = (value: string): Uint8Array => {
+  const input = stripDataUri(value).replace(/[\r\n\s]/g, '');
+  if (input.length === 0) return new Uint8Array(0);
+
+  // Tolerate missing padding, which some clipboard sources omit.
+  let length = input.length;
+  while (length > 0 && input[length - 1] === '=') length--;
+
+  const byteLength = Math.floor((length * 3) / 4);
+  const bytes = new Uint8Array(byteLength);
+
+  let byteIndex = 0;
+  let accumulator = 0;
+  let bitsCollected = 0;
+
+  for (let i = 0; i < length; i++) {
+    const sextet = BASE64_LOOKUP[input.charCodeAt(i)];
+    if (sextet === 255) continue; // skip anything not in the alphabet
+    accumulator = (accumulator << 6) | sextet;
+    bitsCollected += 6;
+    if (bitsCollected >= 8) {
+      bitsCollected -= 8;
+      bytes[byteIndex++] = (accumulator >> bitsCollected) & 0xff;
+    }
+  }
+
+  // The computed length can overshoot by one when input was unpadded.
+  return byteIndex === byteLength ? bytes : bytes.subarray(0, byteIndex);
+};
+
+/** Encode raw bytes as base64. */
+export const bytesToBase64 = (bytes: Uint8Array): string => {
+  let result = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i];
+    const b1 = bytes[i + 1];
+    const b2 = bytes[i + 2];
+
+    result += BASE64_ALPHABET[b0 >> 2];
+    result += BASE64_ALPHABET[((b0 & 0x03) << 4) | ((b1 ?? 0) >> 4)];
+    result += b1 === undefined ? '=' : BASE64_ALPHABET[((b1 & 0x0f) << 2) | ((b2 ?? 0) >> 6)];
+    result += b2 === undefined ? '=' : BASE64_ALPHABET[b2 & 0x3f];
+  }
+  return result;
+};
+
 /** Serialise refs back to the persisted column representation. */
 export const serialiseRefArray = (refs?: string[] | null): string | null => {
   if (!refs || refs.length === 0) return null;
