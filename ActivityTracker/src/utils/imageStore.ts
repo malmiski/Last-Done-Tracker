@@ -83,6 +83,27 @@ const fileFor = async (id: string, variant: ImageVariant): Promise<File> => {
 const newId = (): string => Crypto.randomUUID().replace(/-/g, '');
 
 /**
+ * Open a manipulation context for a URI, or null if the contextual API is not
+ * available.
+ *
+ * expo-image-manipulator exports the modern API as a *nested* `ImageManipulator`
+ * object, not as a top-level `manipulate` function:
+ *
+ *   export { ExpoImageManipulator as ImageManipulator }
+ *
+ * Reaching for `IM.manipulate` on the module namespace therefore always finds
+ * undefined. That silently disabled black-border detection entirely, and made
+ * every resize fall through to the deprecated `manipulateAsync` path — which
+ * works, but gives up the `release()` that frees native bitmaps promptly.
+ */
+const manipulatorContext = (uri: string): any | null => {
+  const IM = ImageManipulator as any;
+  const api = IM.ImageManipulator ?? IM.default?.ImageManipulator;
+  if (api && typeof api.manipulate === 'function') return api.manipulate(uri);
+  return null;
+};
+
+/**
  * Resize + re-encode. Prefers the modern ImageManipulator context API, which
  * exposes `release()` so the native bitmap is freed immediately instead of
  * lingering until GC — important when importing many images in a row.
@@ -93,11 +114,11 @@ const renderResized = async (
   compress: number,
 ): Promise<{ uri: string; width: number; height: number }> => {
   const IM = ImageManipulator as any;
+  const context = manipulatorContext(uri);
 
-  if (typeof IM.manipulate === 'function') {
+  if (context) {
     let image: any;
     try {
-      const context = IM.manipulate(uri);
       context.resize({ width: maxDimension });
       image = await context.renderAsync();
       const saved = await image.saveAsync({
@@ -351,9 +372,11 @@ export const detectBlackBorders = async (
   let proxyUri: string | null = null;
 
   try {
-    if (typeof IM.manipulate !== 'function') return null;
+    const context = manipulatorContext(file.uri);
+    // Detection needs the contextual API; the deprecated manipulateAsync path
+    // cannot render to a PNG proxy without also writing a file per call.
+    if (!context) return null;
 
-    const context = IM.manipulate(file.uri);
     // Full height, a handful of columns.
     context.resize({ width: PROBE_WIDTH, height: size.height });
     image = await context.renderAsync();
@@ -413,9 +436,9 @@ export const cropStoredImage = async (
   let image: any;
 
   try {
-    if (typeof IM.manipulate !== 'function') return null;
+    const context = manipulatorContext(source.uri);
+    if (!context) return null;
 
-    const context = IM.manipulate(source.uri);
     context.crop({ originX: 0, originY: bounds.top, width: size.width, height });
     image = await context.renderAsync();
     const saved = await image.saveAsync({

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, TextInput, ScrollView, Alert, Modal, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
@@ -30,8 +30,13 @@ interface PhotoDraft {
   ref: string;
   orderStr: string;
   /**
-   * Set when black bars were detected. The cropped version is materialised
-   * once, on first use, then toggling is just a matter of which ref we show.
+   * Detected letterbox bounds. Present means "bars were found", which is what
+   * makes the checkbox appear — the cropped copy may not exist yet.
+   */
+  bounds?: { top: number; bottom: number; height: number };
+  /**
+   * The cropped version, built on first use. Once it exists, toggling is just
+   * a matter of which ref we show.
    */
   croppedRef?: string;
   /** How many rows the crop removes — shown next to the checkbox. */
@@ -200,6 +205,9 @@ const EditEntryScreen: React.FC = () => {
       originalRefs.current = refs.filter(ref => ref.startsWith('img:'));
       setPhotos(refs.map((ref, index) => ({ ref, orderStr: (index + 1).toString() })));
       setSelectedTags(entry.tags || []);
+      // Photos already on the entry are inspected too, not just newly added
+      // ones — otherwise an entry saved with bars never offers to remove them.
+      void detectBordersOnExisting(refs);
     }
   }, [entry]);
 
@@ -269,10 +277,75 @@ const EditEntryScreen: React.FC = () => {
     }
   };
 
-  const toggleCrop = (index: number) => {
-    setPhotos(prev =>
-      prev.map((photo, i) => (i === index ? { ...photo, cropped: !photo.cropped } : photo)),
-    );
+  /**
+   * Inspect photos that were already on the entry.
+   *
+   * Detection previously only ran when a photo was added, so opening an entry
+   * whose images have bars showed no checkbox at all — the common case, since
+   * you usually notice the bars after saving.
+   *
+   * Unlike the add path this does *not* pre-build the cropped copy: an entry
+   * with twenty photos would mean twenty crops on open. The bounds are recorded
+   * so the checkbox can appear, and the crop is produced the first time it is
+   * ticked. The box starts unticked because the saved image is whatever the
+   * user last chose.
+   */
+  const detectBordersOnExisting = useCallback(async (refs: string[]) => {
+    for (let index = 0; index < refs.length; index++) {
+      const ref = refs[index];
+      if (!ref.startsWith('img:')) continue;
+
+      try {
+        const bounds = await imageStore.detectBlackBorders(ref);
+        if (!bounds) continue;
+
+        setPhotos(prev =>
+          prev.map(photo =>
+            photo.ref === ref && !photo.bounds
+              ? { ...photo, bounds, trimmed: trimmedRows(bounds, bounds.height) }
+              : photo,
+          ),
+        );
+      } catch (error) {
+        console.warn('Border detection failed for an existing photo', error);
+      }
+      // One at a time, yielding between: this runs while the editor is usable.
+      await new Promise<void>(resolve => setTimeout(resolve, 0));
+    }
+  }, []);
+
+  /**
+   * Toggle the crop, building the cropped copy on first use.
+   */
+  const toggleCrop = async (index: number) => {
+    const photo = photos[index];
+    if (!photo) return;
+
+    // Turning it off, or the copy already exists: just flip which one shows.
+    if (photo.cropped || photo.croppedRef) {
+      setPhotos(prev =>
+        prev.map((item, i) => (i === index ? { ...item, cropped: !item.cropped } : item)),
+      );
+      return;
+    }
+
+    if (!photo.bounds) return;
+
+    setImporting(true);
+    try {
+      const cropped = await imageStore.cropStoredImage(photo.ref, photo.bounds);
+      if (!cropped) {
+        showToast('Could not crop', 'The image could not be trimmed.', 'error');
+        return;
+      }
+      setPhotos(prev =>
+        prev.map((item, i) =>
+          i === index ? { ...item, croppedRef: cropped.ref, cropped: true } : item,
+        ),
+      );
+    } finally {
+      setImporting(false);
+    }
   };
 
   const pickImage = async (replaceIndex: number = -1) => {
@@ -974,7 +1047,7 @@ const EditEntryScreen: React.FC = () => {
                   — removing them is the point — and the preview above updates
                   the moment it is toggled.
                 */}
-                {photo.croppedRef ? (
+                {photo.bounds || photo.croppedRef ? (
                   <TouchableOpacity
                     style={styles.cropRow}
                     onPress={() => toggleCrop(index)}
