@@ -11,6 +11,14 @@ import * as Clipboard from 'expo-clipboard';
 import { Tag } from '../src/data/activity-details';
 import { importImage, importBase64Image } from '../src/utils/imageUtils';
 import * as imageStore from '../src/utils/imageStore';
+import { deleteUnreferencedRefs } from '../src/utils/imageOwnership';
+import {
+  copyEntryToClipboard,
+  mergeImageRefs,
+  mergeTags,
+  readEntryFromClipboard,
+  resolveAvailableImages,
+} from '../src/utils/entryClipboard';
 import AppImage, { clearImageMemoryCache } from '../src/components/AppImage';
 import LargeImageGallery from '../src/components/LargeImageGallery';
 
@@ -333,15 +341,132 @@ const EditEntryScreen: React.FC = () => {
 
     await updateActivityEntry(activityId, entryId, startDate, endDate, notes, images, images, selectedTags);
 
-    // Delete blobs for photos the user removed during this edit.
+    // Clean up photos the user removed during this edit — but only those no
+    // other entry references, since a pasted entry can share these images.
     const kept = new Set(refs);
     const removed = originalRefs.current.filter(ref => !kept.has(ref));
-    await Promise.all(removed.map(ref => imageStore.deleteRef(ref)));
+    await deleteUnreferencedRefs(removed);
 
     if (router.canGoBack()) {
       router.back();
     } else {
       router.replace(`/ActivityDetail?activityId=${activityId}`);
+    }
+  };
+
+  /* ------------------------------------------------------------------ *
+   * Copy / paste an entry between activities
+   * ------------------------------------------------------------------ */
+
+  /**
+   * Copy this entry to the clipboard.
+   *
+   * Images travel as references, not data: embedding base64 would produce a
+   * multi-megabyte clipboard string. The pasted entry ends up sharing the same
+   * stored files, which is safe because deletes are reference-counted.
+   */
+  const handleCopyEntry = async () => {
+    try {
+      const imageCount = await copyEntryToClipboard(
+        {
+          startDate: getFullDate(year, month, day, hour, minute, second, ampm),
+          endDate: getFullDate(endYear, endMonth, endDay, endHour, endMinute, endSecond, endAmpm),
+          notes,
+          images: photos.map(photo => photo.ref),
+          tags: selectedTags,
+        },
+        activity?.name,
+      );
+
+      const parts = ['Entry copied'];
+      if (imageCount > 0) parts.push(`${imageCount} image${imageCount === 1 ? '' : 's'}`);
+      if (selectedTags.length > 0) {
+        parts.push(`${selectedTags.length} tag${selectedTags.length === 1 ? '' : 's'}`);
+      }
+      Alert.alert('Copied', `${parts.join(' · ')}.\n\nOpen an entry in another activity and tap the paste icon.`);
+    } catch (error) {
+      console.error('Failed to copy entry', error);
+      Alert.alert('Could not copy', 'Something went wrong writing to the clipboard.');
+    }
+  };
+
+  /**
+   * Paste a copied entry over this one.
+   *
+   * Notes and dates are overwritten; images and tags are merged in. Images
+   * that cannot be resolved on this device are reported rather than silently
+   * dropped — the clipboard text can travel between devices (Universal
+   * Clipboard) but the image files cannot.
+   */
+  const handlePasteEntry = async () => {
+    const { payload, error } = await readEntryFromClipboard();
+
+    if (error) {
+      Alert.alert('Could not read clipboard', error);
+      return;
+    }
+    if (!payload) {
+      Alert.alert(
+        'Nothing to paste',
+        'The clipboard does not contain a copied entry. Open the entry you want to copy and tap the copy icon first.',
+      );
+      return;
+    }
+
+    setImporting(true);
+    try {
+      // Dates: overwritten with the copied entry's.
+      updateStartStates(new Date(payload.startDate));
+      updateEndStates(new Date(payload.endDate));
+
+      // Notes: overwritten.
+      setNotes(payload.notes ?? '');
+
+      // Images: appended, sharing the source entry's files.
+      const { available, missing } = await resolveAvailableImages(payload.images);
+      let addedImages = 0;
+      if (available.length > 0) {
+        setPhotos(previous => {
+          const mergedRefs = mergeImageRefs(previous.map(photo => photo.ref), available);
+          addedImages = mergedRefs.length - previous.length;
+          return mergedRefs.map((ref, index) => ({ ref, orderStr: (index + 1).toString() }));
+        });
+      }
+
+      // Tags: merged by name, creating any this device does not have yet.
+      const { merged, missing: tagsToCreate } = mergeTags(
+        selectedTags,
+        payload.tags,
+        (name) => tags.find(tag => tag.name.toLowerCase() === name.toLowerCase()),
+      );
+      const created: Tag[] = [];
+      for (const definition of tagsToCreate) {
+        try {
+          created.push(await addTag(definition.name, definition.color));
+        } catch (tagError) {
+          console.warn(`Could not create tag "${definition.name}"`, tagError);
+        }
+      }
+      setSelectedTags([...merged, ...created]);
+
+      const summary = [
+        'Notes and dates replaced',
+        addedImages > 0 ? `${addedImages} image${addedImages === 1 ? '' : 's'} added` : null,
+        merged.length + created.length > selectedTags.length
+          ? `${merged.length + created.length - selectedTags.length} tag(s) added`
+          : null,
+        missing > 0 ? `${missing} image(s) unavailable on this device` : null,
+      ].filter(Boolean);
+
+      Alert.alert(
+        payload.sourceActivityName ? `Pasted from ${payload.sourceActivityName}` : 'Pasted',
+        `${summary.join('\n')}.\n\nNothing is saved until you tap Save Changes.`,
+      );
+    } catch (pasteError) {
+      console.error('Failed to paste entry', pasteError);
+      Alert.alert('Could not paste', 'Something went wrong reading the copied entry.');
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -392,8 +517,27 @@ const EditEntryScreen: React.FC = () => {
         }}>
           <Icon name="close" size={30} color={theme.colors.text} />
         </TouchableOpacity>
-        <Text style={styles.title}>Edit Entry for {activity.name}</Text>
-        <View style={{ width: 30 }} />
+        <Text style={styles.title} numberOfLines={1}>Edit Entry for {activity.name}</Text>
+        {/*
+          Copy this entry, or paste one copied from another activity. Paste
+          overwrites the notes and dates and merges in images and tags.
+        */}
+        <View style={styles.headerActions}>
+          <TouchableOpacity
+            onPress={handleCopyEntry}
+            style={styles.headerButton}
+            accessibilityLabel="Copy this entry"
+          >
+            <Icon name="content-copy" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            onPress={handlePasteEntry}
+            style={styles.headerButton}
+            accessibilityLabel="Paste a copied entry"
+          >
+            <Icon name="content-paste" size={24} color={theme.colors.text} />
+          </TouchableOpacity>
+        </View>
       </View>
       <ScrollView style={styles.content}>
         <View style={styles.sectionHeaderRow}>
@@ -869,6 +1013,17 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     textAlign: 'center',
+    // Flexes so a long activity name truncates instead of squeezing the icons.
+    flex: 1,
+    marginHorizontal: 10,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+  },
+  headerButton: {
+    padding: 2,
   },
   content: {
     flex: 1,

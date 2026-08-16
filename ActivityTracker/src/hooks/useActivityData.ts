@@ -20,6 +20,7 @@ import { ActivityEntry, Tag } from '../data/activity-details';
 import { generateActivityId } from '../utils/crypto';
 import * as database from '../utils/database';
 import * as imageStore from '../utils/imageStore';
+import { deleteUnreferencedRefs } from '../utils/imageOwnership';
 
 type LatestEntries = Record<string, ActivityEntry & { activityId: string }>;
 
@@ -194,18 +195,24 @@ export const useActivityData = () => {
     // Read the references *before* the row disappears, then delete the blobs.
     // SQLite's ON DELETE CASCADE cannot reach the filesystem, so without this
     // the photos would survive the entry that owned them.
+    //
+    // Deletion is reference-counted rather than eager: copy/paste lets two
+    // entries share one stored image, so a blob is only removed once no
+    // surviving entry points at it. Runs after the row is gone, so the live
+    // set already excludes this entry.
     const refs = await database.getImageRefsForEntry(entryId);
     await database.deleteEntry(entryId);
-    await Promise.all(refs.map(ref => imageStore.deleteRef(ref)));
+    await deleteUnreferencedRefs(refs);
     await refreshLatestEntry(activityId);
   }, []);
 
   const deleteActivity = useCallback(async (activityId: string) => {
     // Same cascade, one level up: gather every photo belonging to every entry
-    // of this activity before the rows are removed.
+    // of this activity before the rows are removed. Still reference-counted —
+    // an entry in another activity may share one of these images.
     const refs = await database.getImageRefsForActivity(activityId);
     await database.deleteActivity(activityId);
-    await Promise.all(refs.map(ref => imageStore.deleteRef(ref)));
+    await deleteUnreferencedRefs(refs);
 
     const latestEntries = { ...state.latestEntries };
     delete latestEntries[activityId];
