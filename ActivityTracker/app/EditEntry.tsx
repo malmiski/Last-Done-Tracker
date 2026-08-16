@@ -21,6 +21,7 @@ import {
 } from '../src/utils/entryClipboard';
 import AppImage, { clearImageMemoryCache } from '../src/components/AppImage';
 import LargeImageGallery from '../src/components/LargeImageGallery';
+import Toast, { useToast } from '../src/components/Toast';
 
 /** A photo row in the editor. Holds a reference, never image data. */
 interface PhotoDraft {
@@ -59,6 +60,9 @@ const EditEntryScreen: React.FC = () => {
   const [photos, setPhotos] = useState<PhotoDraft[]>([]);
   const [importing, setImporting] = useState(false);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+  // Copy and paste change nothing visible on their own, so they confirm
+  // themselves with a brief pill under the header buttons.
+  const { toast, showToast, hideToast } = useToast();
   /**
    * References the entry started with. Anything here that is gone at save time
    * has been removed by the user, so its blob is deleted. Without this the
@@ -378,15 +382,15 @@ const EditEntryScreen: React.FC = () => {
         activity?.name,
       );
 
-      const parts = ['Entry copied'];
+      const parts: string[] = [];
       if (imageCount > 0) parts.push(`${imageCount} image${imageCount === 1 ? '' : 's'}`);
       if (selectedTags.length > 0) {
         parts.push(`${selectedTags.length} tag${selectedTags.length === 1 ? '' : 's'}`);
       }
-      Alert.alert('Copied', `${parts.join(' · ')}.\n\nOpen an entry in another activity and tap the paste icon.`);
+      showToast('Copied!', parts.length > 0 ? parts.join(' · ') : undefined);
     } catch (error) {
       console.error('Failed to copy entry', error);
-      Alert.alert('Could not copy', 'Something went wrong writing to the clipboard.');
+      showToast('Could not copy', 'Writing to the clipboard failed.', 'error');
     }
   };
 
@@ -402,14 +406,11 @@ const EditEntryScreen: React.FC = () => {
     const { payload, error } = await readEntryFromClipboard();
 
     if (error) {
-      Alert.alert('Could not read clipboard', error);
+      showToast('Could not read clipboard', error, 'error');
       return;
     }
     if (!payload) {
-      Alert.alert(
-        'Nothing to paste',
-        'The clipboard does not contain a copied entry. Open the entry you want to copy and tap the copy icon first.',
-      );
+      showToast('Nothing to paste', 'Copy an entry first, then paste it here.', 'warning');
       return;
     }
 
@@ -449,22 +450,26 @@ const EditEntryScreen: React.FC = () => {
       }
       setSelectedTags([...merged, ...created]);
 
-      const summary = [
-        'Notes and dates replaced',
-        addedImages > 0 ? `${addedImages} image${addedImages === 1 ? '' : 's'} added` : null,
-        merged.length + created.length > selectedTags.length
-          ? `${merged.length + created.length - selectedTags.length} tag(s) added`
-          : null,
-        missing > 0 ? `${missing} image(s) unavailable on this device` : null,
+      const addedTags = merged.length + created.length - selectedTags.length;
+      const detail = [
+        addedImages > 0 ? `${addedImages} image${addedImages === 1 ? '' : 's'}` : null,
+        addedTags > 0 ? `${addedTags} tag${addedTags === 1 ? '' : 's'}` : null,
       ].filter(Boolean);
 
-      Alert.alert(
-        payload.sourceActivityName ? `Pasted from ${payload.sourceActivityName}` : 'Pasted',
-        `${summary.join('\n')}.\n\nNothing is saved until you tap Save Changes.`,
-      );
+      if (missing > 0) {
+        // Worth interrupting for: images the copy referenced are not on this
+        // device, so the paste is quietly incomplete.
+        showToast(
+          'Pasted!',
+          `${missing} image${missing === 1 ? '' : 's'} unavailable on this device`,
+          'warning',
+        );
+      } else {
+        showToast('Pasted!', detail.length > 0 ? `${detail.join(' · ')} added` : undefined);
+      }
     } catch (pasteError) {
       console.error('Failed to paste entry', pasteError);
-      Alert.alert('Could not paste', 'Something went wrong reading the copied entry.');
+      showToast('Could not paste', 'The copied entry could not be read.', 'error');
     } finally {
       setImporting(false);
     }
@@ -539,6 +544,10 @@ const EditEntryScreen: React.FC = () => {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Anchored just under the copy/paste buttons that trigger it. */}
+      <Toast toast={toast} onHide={hideToast} />
+
       <ScrollView style={styles.content}>
         <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionLabel}>Start Date & Time</Text>
