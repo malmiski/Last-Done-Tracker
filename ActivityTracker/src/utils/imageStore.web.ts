@@ -69,15 +69,68 @@ const putBlob = async (id: string, variant: ImageVariant, blob: Blob): Promise<v
   });
 };
 
-const getBlob = async (id: string, variant: ImageVariant): Promise<Blob | null> => {
-  const db = await openDb();
-  return new Promise<Blob | null>((resolve, reject) => {
+/**
+ * Cap on simultaneous IndexedDB reads.
+ *
+ * A screen of thumbnails resolves all at once, and each read used to open its
+ * own transaction with nothing limiting how many were in flight. Browsers abort
+ * transactions under that kind of pressure — iOS WKWebView soonest — and an
+ * aborted read surfaced as a permanently blank tile. Queueing keeps the number
+ * of open transactions small; the images still arrive, just in batches.
+ */
+const MAX_CONCURRENT_READS = 6;
+
+let activeReads = 0;
+const readQueue: (() => void)[] = [];
+
+const withReadSlot = async <T>(work: () => Promise<T>): Promise<T> => {
+  if (activeReads >= MAX_CONCURRENT_READS) {
+    await new Promise<void>(resolve => readQueue.push(resolve));
+  }
+  activeReads += 1;
+  try {
+    return await work();
+  } finally {
+    activeReads -= 1;
+    readQueue.shift()?.();
+  }
+};
+
+const readBlob = (db: IDBDatabase, id: string, variant: ImageVariant): Promise<Blob | null> =>
+  new Promise<Blob | null>((resolve, reject) => {
     const tx = db.transaction(BLOB_STORE, 'readonly');
     const request = tx.objectStore(BLOB_STORE).get(blobKey(id, variant));
     request.onsuccess = () => resolve(request.result ?? null);
     request.onerror = () => reject(request.error);
+    // A transaction can abort without the request itself erroring.
+    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
   });
-};
+
+/**
+ * Read one stored blob.
+ *
+ * Returns null both for "no such blob" and for a read that failed after a
+ * retry. Callers cannot act differently on the distinction anyway, and the
+ * component retries on an empty result, so a transient failure recovers rather
+ * than leaving a blank tile forever.
+ */
+const getBlob = async (id: string, variant: ImageVariant): Promise<Blob | null> =>
+  withReadSlot(async () => {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const db = await openDb();
+        return await readBlob(db, id, variant);
+      } catch (error) {
+        if (attempt === 1) {
+          console.warn(`Could not read image blob ${id}:${variant}`, error);
+          return null;
+        }
+        // Brief pause so a contended transaction queue can drain.
+        await new Promise<void>(resolve => setTimeout(resolve, 40));
+      }
+    }
+    return null;
+  });
 
 const removeBlob = async (id: string, variant: ImageVariant): Promise<void> => {
   const db = await openDb();

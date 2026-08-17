@@ -12,7 +12,7 @@
  * Callers pass a stored reference, not a URI. Resolution happens here, is
  * cancelled on unmount, and never puts image bytes on the JS heap.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { Image, ImageContentFit } from 'expo-image';
 import { ImageVariant, isFailed, isLegacyPlaceholder, isRenderable } from '../utils/imageRef';
@@ -49,18 +49,38 @@ export interface AppImageProps {
  * Resolve a ref to a renderable URI. Returns null while loading or when the ref
  * cannot be rendered (missing file, unmigrated oversized legacy blob).
  */
+/**
+ * How many times a resolve is retried before the tile is left blank.
+ *
+ * A resolve can come back empty for a transient reason — a contended
+ * IndexedDB read, say — and without a retry that tile stays blank for as long
+ * as it remains mounted, because none of its inputs change afterwards. The
+ * image's own onError cannot help here: there is no source to fail.
+ */
+const MAX_RESOLVE_ATTEMPTS = 4;
+
 export const useImageUri = (
   imageRef?: string | null,
   variant: ImageVariant = 'full',
-  /** Bump to force a fresh resolve after a load failure. */
-  attempt = 0,
+  /** Increment to force a fresh resolve with a full retry budget. */
+  nudge = 0,
 ): string | null => {
   const [uri, setUri] = useState<string | null>(null);
   // Re-resolve when the store invalidates cached URLs, so this component can
   // never be left pointing at one that has been revoked.
   const [epoch, setEpoch] = useState(getCacheEpoch);
+  // Incremented to re-run the resolve; the count itself lives in a ref so a
+  // retry does not cause an extra render on its own.
+  const [retryTick, setRetryTick] = useState(0);
+  const attemptsRef = useRef(0);
 
   useEffect(() => subscribeToCacheEpoch(setEpoch), []);
+
+  // Declared before the resolve effect so it runs first on any commit where
+  // the target changed: a new image starts with a fresh retry budget.
+  useEffect(() => {
+    attemptsRef.current = 0;
+  }, [imageRef, variant, epoch, nudge]);
 
   useEffect(() => {
     if (!isRenderable(imageRef)) {
@@ -70,6 +90,7 @@ export const useImageUri = (
 
     let cancelled = false;
     let heldKey: string | null = null;
+    let retryTimer: any;
 
     acquireImageUri(imageRef, variant)
       .then((resolved) => {
@@ -78,20 +99,43 @@ export const useImageUri = (
           releaseImageUri(resolved?.key ?? null);
           return;
         }
-        heldKey = resolved?.key ?? null;
-        setUri(resolved?.uri ?? null);
+
+        if (!resolved) {
+          setUri(null);
+          attemptsRef.current += 1;
+          if (attemptsRef.current < MAX_RESOLVE_ATTEMPTS) {
+            // Backs off so a burst of contending reads has room to clear.
+            retryTimer = setTimeout(
+              () => setRetryTick(tick => tick + 1),
+              120 * attemptsRef.current,
+            );
+          }
+          return;
+        }
+
+        heldKey = resolved.key;
+        setUri(resolved.uri);
       })
       .catch(() => {
-        if (!cancelled) setUri(null);
+        if (cancelled) return;
+        setUri(null);
+        attemptsRef.current += 1;
+        if (attemptsRef.current < MAX_RESOLVE_ATTEMPTS) {
+          retryTimer = setTimeout(
+            () => setRetryTick(tick => tick + 1),
+            120 * attemptsRef.current,
+          );
+        }
       });
 
     return () => {
       cancelled = true;
+      if (retryTimer) clearTimeout(retryTimer);
       // Releasing lets the pool reclaim this URL once nothing else displays it.
       releaseImageUri(heldKey);
       heldKey = null;
     };
-  }, [imageRef, variant, epoch, attempt]);
+  }, [imageRef, variant, epoch, nudge, retryTick]);
 
   return uri;
 };
@@ -159,11 +203,11 @@ const AppImageComponent: React.FC<AppImageProps> = ({
   priority,
 }) => {
   const { inViewport, nodeRef } = useInViewport(Platform.OS === 'web');
-  // Retried once if the resolved URL turns out not to load.
-  const [attempt, setAttempt] = useState(0);
+  // Bumped when a rendered image fails to load, to re-resolve from scratch.
+  const [nudge, setNudge] = useState(0);
   // Do not even resolve the blob until the tile is near the viewport: on web
   // resolving means creating an object URL, which pins the blob in memory.
-  const uri = useImageUri(inViewport ? imageRef : null, variant, attempt);
+  const uri = useImageUri(inViewport ? imageRef : null, variant, nudge);
 
   const source = useMemo(() => (uri ? { uri } : null), [uri]);
 
@@ -210,7 +254,7 @@ const AppImageComponent: React.FC<AppImageProps> = ({
       // Last-resort recovery. The pool should never hand out a dead URL now
       // that references are taken before it can be evicted, but a blank tile
       // is invisible and unrecoverable, so one retry is cheap insurance.
-      onError={() => setAttempt(previous => (previous === 0 ? 1 : previous))}
+      onError={() => setNudge(previous => previous + 1)}
     />
   );
 };
