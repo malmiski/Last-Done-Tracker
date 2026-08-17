@@ -300,7 +300,11 @@ describe('object URL pool', () => {
     const uri = await store.resolveImageUri('img:abc', 'thumb');
     expect(uri).toBeTruthy();
 
+    // the store computes clearMemoryCache using Date.now() internally, we can mock it here
+    const originalDateNow = Date.now;
+    Date.now = () => originalDateNow() + 11000;
     store.clearMemoryCache();
+    Date.now = originalDateNow;
     expect(revoked).toContain(uri);
   });
 });
