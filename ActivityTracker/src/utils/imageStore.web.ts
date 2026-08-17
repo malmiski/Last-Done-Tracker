@@ -165,7 +165,24 @@ interface PooledUrl {
   url: string;
   /** Number of mounted components currently displaying this URL. */
   refs: number;
+  /** When refs last hit zero. Undefined while the URL is in use. */
+  idleSince?: number;
 }
+
+/**
+ * How long a released URL is protected from eviction.
+ *
+ * Releasing happens in an effect's *cleanup*, which React runs before the
+ * replacement effect re-acquires. In that window the component is still
+ * rendering the old URL — so revoking on release destroyed a URL that was
+ * on screen, and the browser reported ERR_FILE_NOT_FOUND for it. Every cache
+ * epoch bump put every visible image through exactly that release/re-acquire
+ * cycle, which is why it showed up in bursts.
+ *
+ * A grace period means a release immediately followed by a re-acquire — the
+ * common case by far — never revokes anything.
+ */
+const IDLE_GRACE_MS = 10_000;
 
 const urlCache = new Map<string, PooledUrl>();
 
@@ -199,12 +216,14 @@ const revoke = (entry: PooledUrl) => {
 };
 
 /** Evict idle entries, oldest first, until the pool is back within budget. */
-const trimPool = () => {
+const trimPool = (now = Date.now()) => {
   if (urlCache.size <= URL_CACHE_LIMIT) return;
   for (const [key, entry] of urlCache) {
     if (urlCache.size <= URL_CACHE_LIMIT) break;
-    // Never evict something on screen — that is the bug described above.
+    // Never evict something on screen.
     if (entry.refs > 0) continue;
+    // Nor something only just released — it is probably being re-acquired.
+    if (entry.idleSince !== undefined && now - entry.idleSince < IDLE_GRACE_MS) continue;
     urlCache.delete(key);
     revoke(entry);
   }
@@ -227,7 +246,9 @@ const rememberUrl = (key: string, url: string): PooledUrl => {
 /** Take a hold on a URL so it cannot be revoked while it is being displayed. */
 export const retainUrl = (key: string): void => {
   const entry = urlCache.get(key);
-  if (entry) entry.refs += 1;
+  if (!entry) return;
+  entry.refs += 1;
+  entry.idleSince = undefined;
 };
 
 /** Give up a hold. The URL stays pooled for reuse until it is evicted. */
@@ -235,7 +256,11 @@ export const releaseUrl = (key: string): void => {
   const entry = urlCache.get(key);
   if (!entry) return;
   entry.refs = Math.max(0, entry.refs - 1);
-  if (entry.refs === 0) trimPool();
+  if (entry.refs === 0) {
+    // Marked idle, not evicted. Trimming here would revoke a URL the caller
+    // is still rendering, because cleanup runs before the re-acquire.
+    entry.idleSince = Date.now();
+  }
 };
 
 /**
@@ -245,9 +270,13 @@ export const releaseUrl = (key: string): void => {
  * images without reclaiming anything the user is not looking at.
  */
 export const clearMemoryCache = (): void => {
+  const now = Date.now();
   let released = 0;
   for (const [key, entry] of [...urlCache]) {
     if (entry.refs > 0) continue;
+    // Same grace as trimPool: an image released moments ago is very likely
+    // mid re-acquire, and revoking it now breaks the tile that shows it.
+    if (entry.idleSince !== undefined && now - entry.idleSince < IDLE_GRACE_MS) continue;
     urlCache.delete(key);
     revoke(entry);
     released += 1;
@@ -416,7 +445,10 @@ export const acquireUrl = async (
   const cached = urlCache.get(key);
   if (cached) {
     const entry = rememberUrl(key, cached.url);
-    if (retain) entry.refs += 1;
+    if (retain) {
+      entry.refs += 1;
+      entry.idleSince = undefined;
+    }
     return { uri: entry.url, key };
   }
 
@@ -424,7 +456,10 @@ export const acquireUrl = async (
   if (!blob) return null;
 
   const entry = rememberUrl(key, URL.createObjectURL(blob));
-  if (retain) entry.refs += 1;
+  if (retain) {
+    entry.refs += 1;
+    entry.idleSince = undefined;
+  }
   return { uri: entry.url, key };
 };
 

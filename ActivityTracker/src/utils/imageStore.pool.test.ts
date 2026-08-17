@@ -21,11 +21,30 @@ let created = 0;
 
 const blobs = new Map<string, { size: number }>();
 
+/**
+ * The pool protects a just-released URL for a grace period, so eviction is
+ * time dependent. A controlled clock lets these tests express "released and
+ * immediately re-acquired" and "released and long since forgotten" as
+ * different situations, which is exactly the distinction the grace encodes.
+ */
+let clock = 1_700_000_000_000;
+const advanceClock = (ms: number) => {
+  clock += ms;
+};
+/** Comfortably past IDLE_GRACE_MS. */
+const PAST_GRACE_MS = 60_000;
+
 beforeEach(() => {
   revoked.length = 0;
   created = 0;
   blobs.clear();
+  clock = 1_700_000_000_000;
+  jest.spyOn(Date, 'now').mockImplementation(() => clock);
   jest.resetModules();
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 /** Minimal IndexedDB + URL stand-ins: enough to exercise the pool logic. */
@@ -101,6 +120,7 @@ describe('object URL pool', () => {
 
     const held = await store.acquireImageUri('img:abc', 'thumb');
     store.releaseImageUri(held!.key);
+    advanceClock(PAST_GRACE_MS);
     store.clearMemoryCache();
 
     expect(revoked).toContain(held!.uri);
@@ -119,8 +139,38 @@ describe('object URL pool', () => {
     expect(revoked).not.toContain(first!.uri);
 
     store.releaseImageUri(second!.key);
+    advanceClock(PAST_GRACE_MS);
     store.clearMemoryCache();
     expect(revoked).toContain(first!.uri);
+  });
+
+  it('protects a URL released moments ago, because a re-acquire is coming', async () => {
+    /*
+     * The ERR_FILE_NOT_FOUND bug. React runs an effect's cleanup *before* the
+     * replacement effect, so a re-render that changes nothing visible still
+     * produces release -> re-acquire, and in that gap the component is still
+     * displaying the URL it just released. Revoking there broke a tile that
+     * was on screen the whole time. Every cache epoch bump did this to every
+     * visible image at once, which is why it appeared in bursts.
+     */
+    const store = await loadStore();
+
+    const held = await store.acquireImageUri('img:abc', 'thumb');
+    store.releaseImageUri(held!.key);
+
+    // No time has passed: a sweep must leave this alone.
+    store.clearMemoryCache();
+    expect(revoked).not.toContain(held!.uri);
+
+    // The re-acquire lands and gets the same, still-valid URL.
+    const again = await store.acquireImageUri('img:abc', 'thumb');
+    expect(again!.uri).toBe(held!.uri);
+
+    // And the re-acquire cleared the idle mark, so the grace expiring later
+    // does not revoke a URL that is being displayed again.
+    advanceClock(PAST_GRACE_MS);
+    store.clearMemoryCache();
+    expect(revoked).not.toContain(held!.uri);
   });
 
   it('survives the small -> medium transition that originally broke', async () => {
@@ -165,6 +215,7 @@ describe('object URL pool', () => {
 
     const held = await store.acquireImageUri('img:abc', 'thumb');
     store.releaseImageUri(held!.key);
+    advanceClock(PAST_GRACE_MS);
     store.clearMemoryCache();
 
     expect(listener).toHaveBeenCalled();
@@ -233,8 +284,10 @@ describe('object URL pool', () => {
     store.clearMemoryCache();
     held.forEach(entry => expect(revoked).not.toContain(entry!.uri));
 
-    // Released the same number of times as acquired -> now collectable.
+    // Released the same number of times as acquired -> collectable once the
+    // grace period for a re-acquire has passed.
     held.forEach(entry => store.releaseImageUri(entry!.key));
+    advanceClock(PAST_GRACE_MS);
     store.clearMemoryCache();
     held.forEach(entry => expect(revoked).toContain(entry!.uri));
   });

@@ -12,8 +12,8 @@
  * Callers pass a stored reference, not a URI. Resolution happens here, is
  * cancelled on unmount, and never puts image bytes on the JS heap.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { Image, ImageContentFit } from 'expo-image';
 import { ImageVariant, isFailed, isLegacyPlaceholder, isRenderable } from '../utils/imageRef';
 import {
@@ -140,55 +140,21 @@ export const useImageUri = (
   return uri;
 };
 
-/**
- * Viewport gating for web.
+/*
+ * There used to be an IntersectionObserver here that held a tile's resolve
+ * back until it came near the viewport, on the theory that react-native-web's
+ * virtualisation is too weak to bound how many object URLs are alive at once.
  *
- * react-native-web's FlatList virtualisation is much weaker than the native
- * one, and on iOS WKWebView (Chrome and Safari both) a tab is killed well
- * before a native app would be. Holding image elements back until they are
- * close to the viewport is what keeps a long list survivable there. On native
- * this always returns true and costs nothing — FlatList already handles it.
+ * It has been removed. It was speculative, it was the least verifiable piece
+ * of this component, and it was implicated in the recurring "thumbnails stay
+ * blank until you switch size modes" bug: a tile whose observer never fired
+ * had no input that could change afterwards, so it stayed blank forever, and
+ * only a remount (which is what changing size mode causes) recovered it.
+ *
+ * What actually bounds memory is FlatList windowing, which decides what is
+ * mounted at all, plus the reference-counted URL pool in imageStore.web,
+ * which caps how many blobs are held and evicts the idle ones.
  */
-const useInViewport = (enabled: boolean) => {
-  const [inViewport, setInViewport] = useState(!enabled);
-  // A callback ref, not useRef: the effect must re-run when the node actually
-  // arrives or is replaced. With a plain ref the observer attaches once to
-  // whatever node existed at mount, and if that node is later swapped the
-  // observer is left watching a detached element that can never intersect —
-  // the tile then stays blank no matter how far you scroll.
-  const [node, setNode] = useState<any>(null);
-  const nodeRef = useCallback((next: any) => setNode(next), []);
-
-  useEffect(() => {
-    if (!enabled || inViewport) return;
-
-    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
-      setInViewport(true);
-      return;
-    }
-
-    // Wait for the node rather than giving up; it arrives on the next commit.
-    if (!node) return;
-
-    const observer = new IntersectionObserver(
-      entries => {
-        // One-way: once shown, stay shown. Unmounting a visible image on
-        // scroll-back causes flicker, and the object-URL pool already bounds
-        // how many blobs can be alive at once.
-        if (entries.some(entry => entry.isIntersecting)) {
-          setInViewport(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '300px', threshold: 0 },
-    );
-
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [enabled, inViewport, node]);
-
-  return { inViewport, nodeRef };
-};
 
 const AppImageComponent: React.FC<AppImageProps> = ({
   imageRef,
@@ -202,23 +168,19 @@ const AppImageComponent: React.FC<AppImageProps> = ({
   onLoad,
   priority,
 }) => {
-  const { inViewport, nodeRef } = useInViewport(Platform.OS === 'web');
   // Bumped when a rendered image fails to load, to re-resolve from scratch.
   const [nudge, setNudge] = useState(0);
-  // Do not even resolve the blob until the tile is near the viewport: on web
-  // resolving means creating an object URL, which pins the blob in memory.
-  const uri = useImageUri(inViewport ? imageRef : null, variant, nudge);
+  const uri = useImageUri(imageRef, variant, nudge);
 
   const source = useMemo(() => (uri ? { uri } : null), [uri]);
 
   if (!source) {
     // Reserve the layout box so the list does not reflow when the image lands.
-    // A pending resolve, an off-screen tile, a failed legacy image and a
-    // not-yet-migrated blob all land here and look the same: an empty tile.
+    // A pending resolve, a failed legacy image and a not-yet-migrated blob all
+    // land here and look the same: an empty tile.
     const isPending = !isFailed(imageRef) && !isLegacyPlaceholder(imageRef);
     return (
       <View
-        ref={nodeRef}
         style={[
           style,
           styles.placeholder,
