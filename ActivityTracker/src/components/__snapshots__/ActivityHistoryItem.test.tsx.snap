@@ -194,6 +194,7 @@ exports[`ActivityHistoryItem renders correctly with an image reference and mediu
       allowDownscaling={true}
       cachePolicy="memory-disk"
       contentFit="cover"
+      onError={[Function]}
       priority="normal"
       recyclingKey="e1-0-medium"
       source={
@@ -357,6 +358,7 @@ exports[`ActivityHistoryItem renders correctly with an image reference and small
       allowDownscaling={true}
       cachePolicy="memory-disk"
       contentFit="cover"
+      onError={[Function]}
       priority="normal"
       recyclingKey="e1-0-small"
       source={

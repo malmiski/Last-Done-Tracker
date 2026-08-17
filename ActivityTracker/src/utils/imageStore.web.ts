@@ -340,18 +340,39 @@ const newId = (): string => {
  * Resolve to an object URL and report the pool key alongside it, so the caller
  * can retain and release. Returns null when there is no blob for this variant.
  */
+/**
+ * `retain` must be set by callers that will display the result.
+ *
+ * It exists because taking the hold *after* this resolves is too late. There is
+ * an `await` between creating the pool entry and any caller-side retain, and in
+ * that gap another image resolving can run `trimPool()`, see this entry sitting
+ * at zero references, evict it and revoke its URL. The caller then receives a
+ * URL that is already dead and renders blank — permanently, because nothing
+ * about its inputs has changed to trigger a re-resolve.
+ *
+ * Retaining here closes the window: the entry is never observable at zero
+ * references between creation and the caller taking ownership.
+ */
 export const acquireUrl = async (
   id: string,
   variant: ImageVariant = 'full',
+  retain = false,
 ): Promise<{ uri: string; key: string } | null> => {
   const key = blobKey(id, variant);
 
   const cached = urlCache.get(key);
-  if (cached) return { uri: rememberUrl(key, cached.url).url, key };
+  if (cached) {
+    const entry = rememberUrl(key, cached.url);
+    if (retain) entry.refs += 1;
+    return { uri: entry.url, key };
+  }
 
   const blob = await getBlob(id, variant);
   if (!blob) return null;
-  return { uri: rememberUrl(key, URL.createObjectURL(blob)).url, key };
+
+  const entry = rememberUrl(key, URL.createObjectURL(blob));
+  if (retain) entry.refs += 1;
+  return { uri: entry.url, key };
 };
 
 export const fileUriFor = async (
@@ -374,12 +395,11 @@ export const acquireImageUri = async (
 
   if (isFileRef(value)) {
     const id = refId(value);
-    // A missing thumbnail is not fatal — fall back to the full image.
-    const resolved = (await acquireUrl(id, variant)) ??
-      (variant === 'thumb' ? await acquireUrl(id, 'full') : null);
-    if (!resolved) return null;
-    retainUrl(resolved.key);
-    return resolved;
+    // Retained inside acquireUrl, not after it — see the note there.
+    // A missing thumbnail is not fatal: fall back to the full image.
+    const resolved = (await acquireUrl(id, variant, true)) ??
+      (variant === 'thumb' ? await acquireUrl(id, 'full', true) : null);
+    return resolved ?? null;
   }
 
   if (isInlineBase64(value)) return { uri: toDataUri(value), key: null };

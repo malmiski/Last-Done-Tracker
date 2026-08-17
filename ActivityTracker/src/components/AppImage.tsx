@@ -12,7 +12,7 @@
  * Callers pass a stored reference, not a URI. Resolution happens here, is
  * cancelled on unmount, and never puts image bytes on the JS heap.
  */
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Platform, StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 import { Image, ImageContentFit } from 'expo-image';
 import { ImageVariant, isFailed, isLegacyPlaceholder, isRenderable } from '../utils/imageRef';
@@ -52,6 +52,8 @@ export interface AppImageProps {
 export const useImageUri = (
   imageRef?: string | null,
   variant: ImageVariant = 'full',
+  /** Bump to force a fresh resolve after a load failure. */
+  attempt = 0,
 ): string | null => {
   const [uri, setUri] = useState<string | null>(null);
   // Re-resolve when the store invalidates cached URLs, so this component can
@@ -89,7 +91,7 @@ export const useImageUri = (
       releaseImageUri(heldKey);
       heldKey = null;
     };
-  }, [imageRef, variant, epoch]);
+  }, [imageRef, variant, epoch, attempt]);
 
   return uri;
 };
@@ -105,37 +107,41 @@ export const useImageUri = (
  */
 const useInViewport = (enabled: boolean) => {
   const [inViewport, setInViewport] = useState(!enabled);
-  const nodeRef = useRef<any>(null);
+  // A callback ref, not useRef: the effect must re-run when the node actually
+  // arrives or is replaced. With a plain ref the observer attaches once to
+  // whatever node existed at mount, and if that node is later swapped the
+  // observer is left watching a detached element that can never intersect —
+  // the tile then stays blank no matter how far you scroll.
+  const [node, setNode] = useState<any>(null);
+  const nodeRef = useCallback((next: any) => setNode(next), []);
 
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || inViewport) return;
+
     if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
       setInViewport(true);
       return;
     }
 
-    const node = nodeRef.current;
-    if (!node) {
-      setInViewport(true);
-      return;
-    }
+    // Wait for the node rather than giving up; it arrives on the next commit.
+    if (!node) return;
 
     const observer = new IntersectionObserver(
-      ([entry]) => {
+      entries => {
         // One-way: once shown, stay shown. Unmounting a visible image on
-        // scroll-back causes flicker, and the object-URL LRU already bounds
-        // how many decoded blobs can be alive at once.
-        if (entry.isIntersecting) {
+        // scroll-back causes flicker, and the object-URL pool already bounds
+        // how many blobs can be alive at once.
+        if (entries.some(entry => entry.isIntersecting)) {
           setInViewport(true);
           observer.disconnect();
         }
       },
-      { rootMargin: '300px', threshold: 0.01 },
+      { rootMargin: '300px', threshold: 0 },
     );
 
     observer.observe(node);
     return () => observer.disconnect();
-  }, [enabled]);
+  }, [enabled, inViewport, node]);
 
   return { inViewport, nodeRef };
 };
@@ -153,9 +159,11 @@ const AppImageComponent: React.FC<AppImageProps> = ({
   priority,
 }) => {
   const { inViewport, nodeRef } = useInViewport(Platform.OS === 'web');
+  // Retried once if the resolved URL turns out not to load.
+  const [attempt, setAttempt] = useState(0);
   // Do not even resolve the blob until the tile is near the viewport: on web
   // resolving means creating an object URL, which pins the blob in memory.
-  const uri = useImageUri(inViewport ? imageRef : null, variant);
+  const uri = useImageUri(inViewport ? imageRef : null, variant, attempt);
 
   const source = useMemo(() => (uri ? { uri } : null), [uri]);
 
@@ -199,6 +207,10 @@ const AppImageComponent: React.FC<AppImageProps> = ({
               onLoad({ width: event?.source?.width ?? 0, height: event?.source?.height ?? 0 })
           : undefined
       }
+      // Last-resort recovery. The pool should never hand out a dead URL now
+      // that references are taken before it can be evicted, but a blank tile
+      // is invisible and unrecoverable, so one retry is cheap insurance.
+      onError={() => setAttempt(previous => (previous === 0 ? 1 : previous))}
     />
   );
 };

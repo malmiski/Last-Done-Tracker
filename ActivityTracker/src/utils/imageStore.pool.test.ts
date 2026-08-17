@@ -196,4 +196,58 @@ describe('object URL pool', () => {
     // No pool key means releasing is a no-op rather than an error.
     expect(() => store.releaseImageUri(null)).not.toThrow();
   });
+
+  it('retains before returning, so a concurrent resolve cannot evict it', async () => {
+    /*
+     * The blank-thumbnail bug. acquireUrl used to create the pool entry at zero
+     * references and return; the caller retained only after the await. In that
+     * gap another image resolving ran trimPool(), saw an idle entry, evicted it
+     * and revoked the URL. The first caller then held a dead URL and rendered
+     * blank forever, because nothing about its inputs changed to re-resolve.
+     */
+    const store = await loadStore();
+
+    const held = await store.acquireImageUri('img:abc', 'thumb');
+    expect(held).not.toBeNull();
+
+    // Anything that walks the pool must now leave this entry alone.
+    store.clearMemoryCache();
+
+    expect(revoked).not.toContain(held!.uri);
+    // And the URL still resolves to the same live entry.
+    const again = await store.acquireImageUri('img:abc', 'thumb');
+    expect(again!.uri).toBe(held!.uri);
+  });
+
+  it('balances references across many concurrent resolves', async () => {
+    const store = await loadStore();
+
+    // All in flight at once, which is what a list of thumbnails does.
+    const held = await Promise.all([
+      store.acquireImageUri('img:abc', 'thumb'),
+      store.acquireImageUri('img:abc', 'thumb'),
+      store.acquireImageUri('img:abc', 'full'),
+    ]);
+    expect(held.every(Boolean)).toBe(true);
+
+    store.clearMemoryCache();
+    held.forEach(entry => expect(revoked).not.toContain(entry!.uri));
+
+    // Released the same number of times as acquired -> now collectable.
+    held.forEach(entry => store.releaseImageUri(entry!.key));
+    store.clearMemoryCache();
+    held.forEach(entry => expect(revoked).toContain(entry!.uri));
+  });
+
+  it('does not retain for a plain resolve, which nothing displays', async () => {
+    // resolveImageUri is used to test availability, not to render, so it must
+    // not leave a permanent hold behind.
+    const store = await loadStore();
+
+    const uri = await store.resolveImageUri('img:abc', 'thumb');
+    expect(uri).toBeTruthy();
+
+    store.clearMemoryCache();
+    expect(revoked).toContain(uri);
+  });
 });
