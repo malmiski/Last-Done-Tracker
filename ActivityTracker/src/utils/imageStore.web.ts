@@ -232,12 +232,25 @@ const trimPool = (now = Date.now()) => {
 const rememberUrl = (key: string, url: string): PooledUrl => {
   const existing = urlCache.get(key);
   if (existing) {
+    if (existing.url !== url) {
+      // Another concurrent resolve beat us to caching this key. The URL we created
+      // is redundant and would leak if we drop it here.
+      try {
+        URL.revokeObjectURL(url);
+      } catch {
+        /* best effort */
+      }
+    }
     // Re-inserting moves the key to the most-recent position in the LRU.
     urlCache.delete(key);
     urlCache.set(key, existing);
     return existing;
   }
-  const entry: PooledUrl = { url, refs: 0 };
+  // Initialize idleSince to Date.now() so that a newly added URL gets the
+  // IDLE_GRACE_MS protection. Otherwise, the trimPool() call below might instantly
+  // evict it if all other pooled URLs are protected by their own grace periods,
+  // before the caller gets a chance to retain it.
+  const entry: PooledUrl = { url, refs: 0, idleSince: Date.now() };
   urlCache.set(key, entry);
   trimPool();
   return entry;
