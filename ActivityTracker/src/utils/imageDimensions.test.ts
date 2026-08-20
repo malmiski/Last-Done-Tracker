@@ -15,10 +15,19 @@ import {
 } from './imageDimensions';
 
 beforeEach(() => {
+  // Notifications are batched on a timer, so the tests drive the clock.
+  jest.useFakeTimers();
   resetDimensionCache();
   mockGet.mockReset().mockResolvedValue({});
   mockPut.mockReset().mockResolvedValue(undefined);
 });
+
+afterEach(() => {
+  jest.useRealTimers();
+});
+
+/** Past the notification batching window. */
+const flushNotifications = () => jest.advanceTimersByTime(500);
 
 describe('imageDimensions', () => {
   it('reads sizes synchronously once they have been loaded', async () => {
@@ -59,16 +68,40 @@ describe('imageDimensions', () => {
 
     mockGet.mockResolvedValue({ 'img:1': { width: 10, height: 20 } });
     await loadDimensionsFor(['img:1']);
+    flushNotifications();
     expect(listener).toHaveBeenCalledTimes(1);
 
     // Nothing new: a row that is already placed must not be rebuilt.
     mockGet.mockResolvedValue({});
     await loadDimensionsFor(['img:2']);
+    flushNotifications();
     expect(listener).toHaveBeenCalledTimes(1);
 
     unsubscribe();
     rememberDimensions('img:3', { width: 1, height: 2 });
+    flushNotifications();
     expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('collapses a burst of measurements into one notification', () => {
+    // A screen of galleries measures dozens of images in a second. Telling the
+    // list to rebuild its offset table for each one meant hundreds of rebuilds
+    // landing mid-scroll.
+    const listener = jest.fn();
+    subscribeToDimensions(listener);
+
+    for (let i = 0; i < 20; i++) {
+      rememberDimensions(`img:${i}`, { width: 100, height: 100 + i });
+    }
+    expect(listener).not.toHaveBeenCalled();
+
+    flushNotifications();
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    // And a later measurement still gets through.
+    rememberDimensions('img:99', { width: 10, height: 10 });
+    flushNotifications();
+    expect(listener).toHaveBeenCalledTimes(2);
   });
 
   it('caches and persists a size measured elsewhere', () => {

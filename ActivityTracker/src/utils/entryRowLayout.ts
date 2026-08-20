@@ -104,26 +104,49 @@ export interface RowShape {
 }
 
 /**
+ * Height reserved for a gallery whose photos have never been measured.
+ *
+ * Matches the gallery's own fallback, so an unmeasured row is drawn at exactly
+ * the height the list reserved for it.
+ */
+export const FALLBACK_GALLERY_HEIGHT = 200;
+
+/**
  * How tall the large-mode gallery will be.
  *
  * Each image fills the width, scaled down to fit but never up, and the gallery
  * takes the height of the tallest so that paging between them does not make
  * the card jump. This mirrors `fitToWidth`, which is what the gallery uses.
+ *
+ * Always returns a number. An earlier version returned null for "not known
+ * yet", which propagated up and made the whole offset table null — so the list
+ * lost its offsets the moment one row's photos were unmeasured, regained them
+ * when they arrived, and lost them again on the next page. Switching a
+ * virtualised list between table-based and measured layout mid-scroll leaves
+ * it with frames it cannot reconcile; it ends up rendering a couple of rows
+ * with collapsed spacers, which looks like the list emptying itself.
+ *
+ * A guess that is applied consistently is far better than no table: the row
+ * imposes whatever height is returned here, so the guess is never *wrong* in
+ * the sense that matters — it only makes that row taller or shorter than ideal
+ * until its photos are measured.
  */
 export const galleryHeightFor = (
-  imageSizes: { width: number; height: number }[],
+  imageSizes: { width: number; height: number }[] | null | undefined,
   contentWidth: number,
-): number | null => {
-  if (contentWidth <= 0 || imageSizes.length === 0) return null;
+): number => {
+  if (contentWidth <= 0 || !imageSizes || imageSizes.length === 0) {
+    return FALLBACK_GALLERY_HEIGHT;
+  }
 
   let tallest = 0;
   for (const size of imageSizes) {
-    if (!size || size.width <= 0 || size.height <= 0) return null;
+    if (!size || size.width <= 0 || size.height <= 0) return FALLBACK_GALLERY_HEIGHT;
     const scale = size.width > contentWidth ? contentWidth / size.width : 1;
     tallest = Math.max(tallest, Math.round(size.height * scale));
   }
 
-  return tallest > 0 ? tallest : null;
+  return tallest > 0 ? tallest : FALLBACK_GALLERY_HEIGHT;
 };
 
 const textBlockHeight = (shape: RowShape): number => {
@@ -140,17 +163,15 @@ const textBlockHeight = (shape: RowShape): number => {
 };
 
 /**
- * The row's height, or null when it cannot be known ahead of time.
+ * The row's height. Always answerable, never a guess the row disagrees with:
+ * the row sets its height from this same function.
  *
- * The null case is a large-mode row whose image sizes have not been learned
- * yet. Such a row is measured the old way and reports what it found, so it is
- * only unknown the first time it is seen.
+ * A large-mode row whose photos have not been measured yet gets the fallback
+ * gallery height. It will be re-measured and this will change once, the first
+ * time the row is seen — but it is a number from the outset, so the list never
+ * has to fall back to measuring rows itself.
  */
-export const entryRowHeight = (
-  shape: RowShape,
-  mode: ImageMode,
-  contentWidth = 0,
-): number | null => {
+export const entryRowHeight = (shape: RowShape, mode: ImageMode, contentWidth = 0): number => {
   const {
     padding,
     buttonsHeight,
@@ -163,9 +184,7 @@ export const entryRowHeight = (
   const text = Math.max(textBlockHeight(shape), buttonsHeight);
 
   if (mode === 'large' && shape.imageCount > 0) {
-    if (!shape.imageSizes) return null;
     const gallery = galleryHeightFor(shape.imageSizes, contentWidth);
-    if (gallery === null) return null;
     return padding * 2 + gallery + galleryMarginBottom + text;
   }
 
@@ -192,33 +211,44 @@ export interface SizedRow {
 /**
  * Cumulative offsets for FlatList's getItemLayout.
  *
- * Returns null when any row in the list cannot be sized ahead of time, because
- * a partly-correct layout is worse than none: the list would place some rows
- * from the table and others from measurement, and they would not line up.
+ * Always returns a table. Handing the list a table for some renders and
+ * nothing for others is what produced the worst failure of all: the list would
+ * place rows from offsets, lose them, place the next ones from its own
+ * measurements, and end up rendering a two-row window with collapsed spacers
+ * at the top of an otherwise empty screen.
+ *
+ * An index past the end can be asked for during the render in which a page is
+ * appended. It answers with the last row's height rather than zero, because a
+ * zero-length cell collapses the spacer that positions everything after it.
  */
 export const buildItemLayout = (
   rows: SizedRow[],
   mode: ImageMode,
   contentWidth = 0,
-): ((data: unknown, index: number) => { length: number; offset: number; index: number }) | null => {
+): ((data: unknown, index: number) => { length: number; offset: number; index: number }) => {
   const lengths: number[] = [];
   const offsets: number[] = [];
   let cursor = ROW_METRICS.listPaddingTop;
 
   for (const row of rows) {
-    const height = entryRowHeight(row.shape, mode, contentWidth);
-    if (height === null) return null;
-
     // The cell the list measures includes the row's bottom margin.
-    const length = height + ROW_METRICS.marginBottom;
+    const length = entryRowHeight(row.shape, mode, contentWidth) + ROW_METRICS.marginBottom;
     offsets.push(cursor);
     lengths.push(length);
     cursor += length;
   }
 
-  return (_data: unknown, index: number) => ({
-    length: lengths[index] ?? 0,
-    offset: offsets[index] ?? cursor,
-    index,
-  });
+  const trailingLength = lengths.length > 0 ? lengths[lengths.length - 1] : 0;
+
+  return (_data: unknown, index: number) => {
+    if (index < lengths.length) {
+      return { length: lengths[index], offset: offsets[index], index };
+    }
+    const beyond = index - lengths.length;
+    return {
+      length: trailingLength,
+      offset: cursor + beyond * trailingLength,
+      index,
+    };
+  };
 };

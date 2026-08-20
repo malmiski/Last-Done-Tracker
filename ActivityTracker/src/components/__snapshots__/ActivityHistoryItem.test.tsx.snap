@@ -18,7 +18,9 @@ exports[`ActivityHistoryItem renders correctly with an image reference and large
         "alignItems": "stretch",
         "flexDirection": "column",
       },
-      false,
+      {
+        "height": 269,
+      },
     ]
   }
 >

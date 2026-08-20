@@ -27,8 +27,23 @@ const queried = new Set<string>();
 
 const listeners = new Set<() => void>();
 
+/**
+ * Sizes are learned one image at a time, and a screen of galleries can learn
+ * dozens in a second. Each one told the list to rebuild its offset table, so a
+ * fast scroll through unmeasured rows meant hundreds of rebuilds — every one of
+ * them landing mid-scroll. Collecting them into one notification per tick
+ * costs a fraction of a second's delay and removes the storm.
+ */
+const NOTIFY_BATCH_MS = 200;
+
+let pendingNotify: ReturnType<typeof setTimeout> | null = null;
+
 const notify = () => {
-  listeners.forEach(listener => listener());
+  if (pendingNotify !== null) return;
+  pendingNotify = setTimeout(() => {
+    pendingNotify = null;
+    listeners.forEach(listener => listener());
+  }, NOTIFY_BATCH_MS);
 };
 
 /**
@@ -99,4 +114,8 @@ export const rememberDimensions = (ref: string, size: ImageSize): void => {
 export const resetDimensionCache = (): void => {
   sizes.clear();
   queried.clear();
+  if (pendingNotify !== null) {
+    clearTimeout(pendingNotify);
+    pendingNotify = null;
+  }
 };

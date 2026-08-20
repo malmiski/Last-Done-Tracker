@@ -2,6 +2,7 @@ import {
   ROW_METRICS,
   RowShape,
   TAG_ROW_HEIGHT,
+  FALLBACK_GALLERY_HEIGHT,
   buildItemLayout,
   entryRowHeight,
   galleryHeightFor,
@@ -104,10 +105,19 @@ describe('entryRowHeight', () => {
     expect(entryRowHeight({ ...bare, imageCount: 9 }, 'hidden')).toBe(entryRowHeight(bare, 'hidden'));
   });
 
-  it('declines to size a large-image row whose photos have not been measured', () => {
-    expect(entryRowHeight({ ...bare, imageCount: 3 }, 'large', 300)).toBeNull();
-    // With no images there is no gallery, so it is knowable again.
-    expect(entryRowHeight(bare, 'large', 300)).not.toBeNull();
+  it('reserves a fallback gallery height when the photos are not measured yet', () => {
+    // Never null. A null propagated up and made the entire offset table null,
+    // so the list flipped between placing rows from a table and measuring them
+    // itself, and ended up unable to reconcile its frames at all.
+    expect(entryRowHeight({ ...bare, imageCount: 3 }, 'large', 300)).toBe(
+      ROW_METRICS.padding * 2 +
+        FALLBACK_GALLERY_HEIGHT +
+        ROW_METRICS.galleryMarginBottom +
+        BARE_TEXT,
+    );
+
+    // With no images there is no gallery at all.
+    expect(entryRowHeight(bare, 'large', 300)).toBe(ROW_METRICS.padding * 2 + BARE_TEXT);
   });
 
   it('sizes a large-image row once the photos are known', () => {
@@ -128,9 +138,14 @@ describe('entryRowHeight', () => {
     );
   });
 
-  it('cannot size a large-image row before the width is known', () => {
+  it('falls back rather than returning nothing before the width is known', () => {
     const shape = { ...bare, imageCount: 1, imageSizes: [{ width: 100, height: 100 }] };
-    expect(entryRowHeight(shape, 'large', 0)).toBeNull();
+    expect(entryRowHeight(shape, 'large', 0)).toBe(
+      ROW_METRICS.padding * 2 +
+        FALLBACK_GALLERY_HEIGHT +
+        ROW_METRICS.galleryMarginBottom +
+        BARE_TEXT,
+    );
   });
 });
 
@@ -156,10 +171,11 @@ describe('galleryHeightFor', () => {
     ).toBe(300);
   });
 
-  it('refuses nonsense rather than returning a wrong height', () => {
-    expect(galleryHeightFor([], 400)).toBeNull();
-    expect(galleryHeightFor([{ width: 100, height: 100 }], 0)).toBeNull();
-    expect(galleryHeightFor([{ width: 0, height: 100 }], 400)).toBeNull();
+  it('falls back for anything it cannot compute, and never returns nothing', () => {
+    expect(galleryHeightFor([], 400)).toBe(FALLBACK_GALLERY_HEIGHT);
+    expect(galleryHeightFor(null, 400)).toBe(FALLBACK_GALLERY_HEIGHT);
+    expect(galleryHeightFor([{ width: 100, height: 100 }], 0)).toBe(FALLBACK_GALLERY_HEIGHT);
+    expect(galleryHeightFor([{ width: 0, height: 100 }], 400)).toBe(FALLBACK_GALLERY_HEIGHT);
   });
 });
 
@@ -199,11 +215,28 @@ describe('buildItemLayout', () => {
     expect(rowContentWidth(0)).toBe(0);
   });
 
-  it('refuses to size a list it cannot size completely', () => {
-    // One unmeasurable row makes the whole table unusable: the list would
-    // place some rows from it and others from measurement, and they would not
-    // line up.
-    expect(buildItemLayout(rows, 'large')).toBeNull();
+  it('still produces a table when some rows have unmeasured photos', () => {
+    // This is the regression that emptied the list. Returning nothing here
+    // made the list flip between table-based and measured layout mid-scroll,
+    // and it ended up drawing a two-row window with collapsed spacers at the
+    // top of an otherwise blank screen.
+    const layout = buildItemLayout(rows, 'large', 400);
+    expect(layout).not.toBeNull();
+    expect(layout(null, 0).offset).toBe(ROW_METRICS.listPaddingTop);
+    for (let i = 1; i < rows.length; i++) {
+      expect(layout(null, i).offset).toBe(layout(null, i - 1).offset + layout(null, i - 1).length);
+    }
+  });
+
+  it('answers for an index past the end without collapsing the spacer', () => {
+    // Asked for during the render in which a page is appended. A zero length
+    // here collapses the spacer that positions everything after it.
+    const layout = buildItemLayout(rows, 'small')!;
+    const last = layout(null, rows.length - 1);
+    const beyond = layout(null, rows.length);
+
+    expect(beyond.length).toBe(last.length);
+    expect(beyond.offset).toBe(last.offset + last.length);
   });
 
   it('handles an empty list', () => {

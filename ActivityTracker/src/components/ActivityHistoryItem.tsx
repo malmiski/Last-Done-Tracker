@@ -189,9 +189,10 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
     return sizes;
   }, [fullRefs, imageMode]);
 
-  const galleryHeight = galleryImageSizes
-    ? galleryHeightFor(galleryImageSizes, contentWidth)
-    : null;
+  // Always a number, including for photos nothing has measured yet — the list
+  // reserved space using this same function, and the gallery must fill exactly
+  // that space or the two disagree.
+  const galleryHeight = galleryHeightFor(galleryImageSizes, contentWidth);
 
   const renderImages = () => {
     if (imageMode === 'hidden') return null;
@@ -249,7 +250,7 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
           // measuring itself and resizing a frame later, which changed this
           // row's height and moved everything below it in the list.
           width={contentWidth > 0 ? contentWidth : undefined}
-          height={galleryHeight ?? undefined}
+          height={galleryHeight}
           imageSizes={galleryImageSizes}
           onMeasured={rememberDimensions}
         />
@@ -290,7 +291,7 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
       style={[
         styles.container,
         (isLarge || hasMultipleInRow) && styles.containerLarge,
-        fixedHeight !== null && { height: fixedHeight },
+        { height: fixedHeight },
       ]}
     >
       {(isLarge || hasMultipleInRow) ? renderImages() : null}

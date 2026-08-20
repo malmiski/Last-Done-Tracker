@@ -150,11 +150,12 @@ const ActivityDetailScreen: React.FC = () => {
   );
 
   /*
-   * Bumped when an image's size is learned for the first time. A large-mode
-   * row whose photos had never been measured cannot be placed in advance; once
-   * the gallery measures them and reports back, the row becomes sizeable and
-   * the offset table is rebuilt. That is the single shift a row is allowed --
-   * the first time it is ever seen.
+   * Bumped when image sizes are learned. A large-mode row whose photos have
+   * never been measured is laid out at the fallback height; once the gallery
+   * measures them and reports back, the row is rebuilt at its true height.
+   * That is the single shift a row is allowed — the first time it is ever
+   * seen. The notification is batched in imageDimensions, so a fast scroll
+   * through unmeasured rows rebuilds the table a few times, not hundreds.
    */
   const [dimensionsVersion, setDimensionsVersion] = useState(0);
   useEffect(
@@ -179,9 +180,11 @@ const ActivityDetailScreen: React.FC = () => {
    * changed which rows were inside the render window it could settle into a
    * loop — the screen shaking until a scroll broke the cycle.
    *
-   * Null only while some large-mode row's photos have never been measured.
-   * The gallery measures those the old way and reports back, so a row is
-   * unplaceable at most once — the first time it is ever seen.
+   * There is always a table. A large-mode row whose photos have never been
+   * measured is reserved the fallback gallery height and drawn at exactly that
+   * height, then corrected once when the measurement arrives. Handing the list
+   * a table on some renders and nothing on others was far worse than a rough
+   * number: it left the list unable to reconcile its frames at all.
    */
   const getItemLayout = useMemo(
     () => buildItemLayout(rows, imageMode, contentWidth),
@@ -275,7 +278,7 @@ const ActivityDetailScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         // Pagination: the next page is fetched as the user approaches the end
         // rather than loading the whole history up front.
-        getItemLayout={getItemLayout ?? undefined}
+        getItemLayout={getItemLayout}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         // Windowing. These are the numbers that bound how many images can be
