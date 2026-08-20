@@ -6,7 +6,17 @@ import { Tag } from '../data/activity-details';
 import LargeImageGallery from './LargeImageGallery';
 import AppImage from './AppImage';
 
-export type ImageMode = 'small' | 'medium' | 'large' | 'hidden';
+import {
+  ImageMode,
+  ROW_METRICS,
+  TAG_ROW_HEIGHT,
+  entryRowHeight,
+  hasDurationFor,
+  hasSinceLastFor,
+  notesFirstLine,
+} from '../utils/entryRowLayout';
+
+export type { ImageMode };
 
 interface ActivityHistoryItemProps {
   /** Stable id, used to key bitmap recycling. */
@@ -130,10 +140,14 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
   lastEntryEndDate,
   index,
 }) => {
-  const firstLine = notes ? notes.split('\n')[0] : '';
-  const duration = formatDuration(startDate, endDate);
+  // Each of these is gated on the same predicate the height calculation uses,
+  // so what is rendered and what was measured can never disagree.
+  const firstLine = notesFirstLine(notes);
+  const showsDuration = hasDurationFor(startDate, endDate);
+  const showsSinceLast = hasSinceLastFor(startDate, lastEntryEndDate);
+  const duration = showsDuration ? formatDuration(startDate, endDate) : null;
+  const timeSinceLast = showsSinceLast ? formatSinceLastTime(lastEntryEndDate!, startDate) : null;
   const isDifferentDate = startDate.getTime() !== endDate.getTime();
-  const timeSinceLast = lastEntryEndDate ? formatSinceLastTime(lastEntryEndDate, startDate) : null;
 
   // A single reference addresses both variants, so thumbnails and images are
   // usually the same array; fall back either way for older rows.
@@ -169,7 +183,7 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
             // being claimed by this scroller, which reads as the page getting
             // stuck at that row.
             directionalLockEnabled
-            style={{ marginBottom: 15, width: '100%' }}
+            style={{ marginBottom: ROW_METRICS.thumbnailStripMargin, width: '100%' }}
             /*
              * No removeClippedSubviews here. It detaches off-screen tiles, and
              * a detached view reports a zero-height layout, which changes the
@@ -199,8 +213,33 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
   const hasMultipleInRow =
     (imageMode === 'small' || imageMode === 'medium') && (thumbRefs?.length ?? 0) > 1 && hasAnyImage;
 
+  /*
+   * The row takes the height the list was told it would take, rather than
+   * whatever its content works out to. Imposing it is the point: the list uses
+   * the same function to place rows, and a placement that disagrees with the
+   * rendered height leaves gaps or overlaps. Null means "not knowable" — the
+   * large-image mode, where the gallery sizes itself from the photos.
+   */
+  const fixedHeight = entryRowHeight(
+    {
+      showsIndex: typeof index === 'number',
+      hasDuration: showsDuration,
+      hasSinceLast: showsSinceLast,
+      hasNotes: !!firstLine,
+      hasTags: (tags?.length ?? 0) > 0,
+      imageCount: thumbRefs?.length ?? 0,
+    },
+    imageMode,
+  );
+
   return (
-    <View style={[styles.container, (isLarge || hasMultipleInRow) && styles.containerLarge]}>
+    <View
+      style={[
+        styles.container,
+        (isLarge || hasMultipleInRow) && styles.containerLarge,
+        fixedHeight !== null && { height: fixedHeight },
+      ]}
+    >
       {(isLarge || hasMultipleInRow) ? renderImages() : null}
       <View style={[styles.contentWrapper, hasMultipleInRow && { marginTop: 0 }]}>
         {!(isLarge || hasMultipleInRow) ? renderImages() : null}
@@ -214,22 +253,42 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
           {typeof index === 'number' ? (
             <Text style={styles.indexText}>#{index}</Text>
           ) : null}
-          <Text style={styles.dateText}>
+          {/*
+            One line, always. A start-and-end range is long enough to wrap on a
+            narrow screen, and a row that is two lines at one width and three at
+            another cannot be placed by the list without measuring it first.
+          */}
+          <Text style={styles.dateText} numberOfLines={1} ellipsizeMode="tail">
             {formatDate(startDate)}
             {isDifferentDate ? ` - ${formatDate(endDate)}` : ''}
           </Text>
-          {duration ? <Text style={styles.durationText}>{duration}</Text> : null}
-          {timeSinceLast ? <Text style={styles.sinceLastText}>{timeSinceLast}</Text> : null}
+          {duration ? (
+            <Text style={styles.durationText} numberOfLines={1}>
+              {duration}
+            </Text>
+          ) : null}
+          {timeSinceLast ? (
+            <Text style={styles.sinceLastText} numberOfLines={1}>
+              {timeSinceLast}
+            </Text>
+          ) : null}
           {firstLine ? (
             <Text style={styles.notesPreview} numberOfLines={1} ellipsizeMode="tail">
               {firstLine}
             </Text>
           ) : null}
+          {/*
+            A single line that clips rather than wrapping. Wrapping made the
+            row's height depend on its width, which is the one thing the list
+            cannot account for in advance.
+          */}
           {tags && tags.length > 0 && (
             <View style={styles.tagContainer}>
               {tags.map(tag => (
                 <View key={tag.id} style={[styles.tag, { backgroundColor: tag.color }]}>
-                  <Text style={styles.tagText}>{tag.name}</Text>
+                  <Text style={styles.tagText} numberOfLines={1}>
+                    {tag.name}
+                  </Text>
                 </View>
               ))}
             </View>
@@ -255,8 +314,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: theme.colors.card,
     borderRadius: 15,
-    padding: 15,
-    marginBottom: 15,
+    padding: ROW_METRICS.padding,
+    marginBottom: ROW_METRICS.marginBottom,
+    // Content is sized to fit the imposed height; clip rather than spill if a
+    // platform's metrics ever round a line up.
+    overflow: 'hidden',
   },
   containerLarge: {
     flexDirection: 'column',
@@ -269,14 +331,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   thumbnailSmall: {
-    width: 50,
-    height: 50,
+    width: ROW_METRICS.thumbnailSmall,
+    height: ROW_METRICS.thumbnailSmall,
     borderRadius: 5,
     marginRight: 15,
   },
   thumbnailMedium: {
-    width: 100,
-    height: 100,
+    width: ROW_METRICS.thumbnailMedium,
+    height: ROW_METRICS.thumbnailMedium,
     borderRadius: 10,
     marginRight: 15,
   },
@@ -286,27 +348,38 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginBottom: 15,
   },
+  /*
+   * Every line below declares an explicit lineHeight, and every value here is
+   * mirrored in ROW_METRICS. Without a declared lineHeight the line box comes
+   * from the platform's font metrics, so the same row would be a different
+   * height on iOS, Android and web — and the height table would be wrong on at
+   * least two of them.
+   */
   indexText: {
     color: theme.colors.subtext,
-    fontSize: 11,
+    fontSize: ROW_METRICS.index.fontSize,
+    lineHeight: ROW_METRICS.index.lineHeight,
     fontWeight: '700',
     letterSpacing: 0.5,
-    marginBottom: 2,
+    marginBottom: ROW_METRICS.index.marginBottom,
   },
   dateText: {
     color: theme.colors.text,
-    fontSize: 14,
+    fontSize: ROW_METRICS.date.fontSize,
+    lineHeight: ROW_METRICS.date.lineHeight,
   },
   durationText: {
     color: theme.colors.primary,
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: ROW_METRICS.duration.fontSize,
+    lineHeight: ROW_METRICS.duration.lineHeight,
+    marginTop: ROW_METRICS.duration.marginTop,
     fontWeight: '600',
   },
   sinceLastText: {
     color: '#007AFF',
-    fontSize: 12,
-    marginTop: 2,
+    fontSize: ROW_METRICS.sinceLast.fontSize,
+    lineHeight: ROW_METRICS.sinceLast.lineHeight,
+    marginTop: ROW_METRICS.sinceLast.marginTop,
     fontWeight: '600',
   },
   textContainer: {
@@ -314,23 +387,29 @@ const styles = StyleSheet.create({
   },
   notesPreview: {
     color: theme.colors.subtext,
-    fontSize: 14,
-    marginTop: 5,
+    fontSize: ROW_METRICS.notes.fontSize,
+    lineHeight: ROW_METRICS.notes.lineHeight,
+    marginTop: ROW_METRICS.notes.marginTop,
   },
   tagContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    marginTop: 5,
+    // No flexWrap: the strip is one line and clips at the edge of the row.
+    marginTop: ROW_METRICS.tags.marginTop,
+    height: TAG_ROW_HEIGHT,
+    overflow: 'hidden',
     gap: 5,
   },
   tag: {
     paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingVertical: ROW_METRICS.tags.paddingVertical,
     borderRadius: 5,
+    // Keeps a long tag name from pushing the strip wider than the row.
+    flexShrink: 1,
   },
   tagText: {
     color: '#FFFFFF',
     fontSize: 10,
+    lineHeight: ROW_METRICS.tags.lineHeight,
     fontWeight: 'bold',
   },
   buttons: {

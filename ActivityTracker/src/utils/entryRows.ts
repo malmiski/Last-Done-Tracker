@@ -9,6 +9,12 @@
  * re-render every mounted cell mid-scroll.
  */
 import { ListEntry } from '../hooks/useEntries';
+import {
+  RowShape,
+  hasDurationFor,
+  hasSinceLastFor,
+  notesFirstLine,
+} from './entryRowLayout';
 
 export interface EntryRow {
   entry: ListEntry;
@@ -16,6 +22,8 @@ export interface EntryRow {
   displayIndex: number;
   /** The chronologically previous entry's end, for "since last time". */
   previousEndDate?: Date;
+  /** What the row will contain, which is what decides how tall it is. */
+  shape: RowShape;
 }
 
 /**
@@ -35,9 +43,24 @@ export interface EntryRow {
 export const buildEntryRows = (entries: ListEntry[], total: number): EntryRow[] => {
   const highest = Math.max(total, entries.length);
 
-  return entries.map((entry, index) => ({
-    entry,
-    displayIndex: highest - index,
-    previousEndDate: entries[index + 1]?.endDate,
-  }));
+  return entries.map((entry, index) => {
+    const previousEndDate = entries[index + 1]?.endDate;
+
+    return {
+      entry,
+      displayIndex: highest - index,
+      previousEndDate,
+      shape: {
+        // Every row in this list is numbered.
+        showsIndex: true,
+        hasDuration: hasDurationFor(entry.startDate, entry.endDate),
+        hasSinceLast: hasSinceLastFor(entry.startDate, previousEndDate),
+        hasNotes: !!notesFirstLine(entry.notes),
+        hasTags: (entry.tags?.length ?? 0) > 0,
+        // Thumbnails and full images address the same photos; either list
+        // gives the count, and older rows may only have one of them.
+        imageCount: entry.thumbnails?.length || entry.images?.length || 0,
+      },
+    };
+  });
 };

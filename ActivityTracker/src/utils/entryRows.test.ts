@@ -65,6 +65,40 @@ describe('buildEntryRows', () => {
     expect(rows[2].previousEndDate).toBeUndefined();
   });
 
+  it('describes each row so the list can size it without rendering it', () => {
+    const entries = [
+      {
+        ...entry('b', '2026-02-01T10:00:00Z'),
+        endDate: new Date('2026-02-01T10:30:00Z'),
+        notes: 'a note\nsecond line',
+        tags: [{ id: 't1', name: 'gym', color: '#fff' }],
+        thumbnails: ['img:1', 'img:2'],
+      },
+      entry('a', '2026-01-01T10:00:00Z'),
+    ];
+
+    const [newest, oldest] = buildEntryRows(entries as any, 2);
+
+    expect(newest.shape).toEqual({
+      showsIndex: true,
+      hasDuration: true,
+      hasSinceLast: true,
+      hasNotes: true,
+      hasTags: true,
+      imageCount: 2,
+    });
+
+    // The oldest loaded row has no earlier entry to measure a gap from.
+    expect(oldest.shape.hasSinceLast).toBe(false);
+    expect(oldest.shape.hasDuration).toBe(false);
+    expect(oldest.shape.imageCount).toBe(0);
+  });
+
+  it('counts images from whichever list an older row happens to carry', () => {
+    const withOnlyFullImages = { ...entry('a', '2026-01-01T10:00:00Z'), images: ['img:1'] };
+    expect(buildEntryRows([withOnlyFullImages] as any, 1)[0].shape.imageCount).toBe(1);
+  });
+
   it('returns nothing for an empty list', () => {
     expect(buildEntryRows([], 0)).toEqual([]);
     expect(buildEntryRows([], 12)).toEqual([]);

@@ -9,6 +9,7 @@ import { clearImageMemoryCache } from '../src/components/AppImage';
 import { useActivityData } from '../src/hooks/useActivityData';
 import { useEntries } from '../src/hooks/useEntries';
 import { EntryRow, buildEntryRows } from '../src/utils/entryRows';
+import { ROW_METRICS, buildItemLayout } from '../src/utils/entryRowLayout';
 
 /**
  * How many rows are kept mounted around the viewport. Deliberately tight:
@@ -141,6 +142,19 @@ const ActivityDetailScreen: React.FC = () => {
   const rows = useMemo<EntryRow[]>(() => buildEntryRows(entries, total), [entries, total]);
 
   /*
+   * Tells the list exactly where every row sits, so it never has to render a
+   * row to find out how tall it is and then correct itself afterwards. Those
+   * corrections are what moved the content mid-scroll, and when a correction
+   * changed which rows were inside the render window it could settle into a
+   * loop — the screen shaking until a scroll broke the cycle.
+   *
+   * Null in the large-image mode, where a row's height depends on photo aspect
+   * ratios that have not been read yet. That mode shows a row or two per
+   * screen, so measuring it costs little.
+   */
+  const getItemLayout = useMemo(() => buildItemLayout(rows, imageMode), [rows, imageMode]);
+
+  /*
    * Depends only on things that change when the user acts, not on `entries`.
    * When it depended on the array, every loaded page gave the callback a new
    * identity and made the list re-render every mounted cell — work that lands
@@ -227,6 +241,7 @@ const ActivityDetailScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         // Pagination: the next page is fetched as the user approaches the end
         // rather than loading the whole history up front.
+        getItemLayout={getItemLayout ?? undefined}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         // Windowing. These are the numbers that bound how many images can be
@@ -252,10 +267,17 @@ const ActivityDetailScreen: React.FC = () => {
          * windowSize above already bounds how many rows stay mounted, which is
          * the memory guarantee this was reached for in the first place.
          */
+        /*
+         * A constant-height footer whether or not a page is loading. When the
+         * spinner appeared and disappeared, the content height changed by its
+         * height each time — right at the bottom of the list, which is exactly
+         * where the end-reached threshold lives, so one load could nudge the
+         * list into triggering the next.
+         */
         ListFooterComponent={
-          loadingMore ? (
-            <ActivityIndicator style={styles.footerSpinner} color={theme.colors.primary} />
-          ) : null
+          <View style={styles.footer}>
+            {loadingMore ? <ActivityIndicator color={theme.colors.primary} /> : null}
+          </View>
         }
         ListEmptyComponent={
           loading ? (
@@ -327,8 +349,14 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingTop: 10,
+    // Mirrored in ROW_METRICS.listPaddingTop, which getItemLayout adds to the
+    // first row's offset.
+    paddingTop: ROW_METRICS.listPaddingTop,
     paddingBottom: 100,
+  },
+  footer: {
+    height: 60,
+    justifyContent: 'center',
   },
   footerSpinner: {
     marginVertical: 20,

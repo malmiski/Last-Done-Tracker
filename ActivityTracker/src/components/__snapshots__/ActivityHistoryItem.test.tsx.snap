@@ -11,12 +11,14 @@ exports[`ActivityHistoryItem renders correctly with an image reference and large
         "flexDirection": "row",
         "justifyContent": "space-between",
         "marginBottom": 15,
+        "overflow": "hidden",
         "padding": 15,
       },
       {
         "alignItems": "stretch",
         "flexDirection": "column",
       },
+      false,
     ]
   }
 >
@@ -56,10 +58,13 @@ exports[`ActivityHistoryItem renders correctly with an image reference and large
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
             "fontSize": 14,
+            "lineHeight": 18,
           }
         }
       >
@@ -171,9 +176,13 @@ exports[`ActivityHistoryItem renders correctly with an image reference and mediu
         "flexDirection": "row",
         "justifyContent": "space-between",
         "marginBottom": 15,
+        "overflow": "hidden",
         "padding": 15,
       },
       false,
+      {
+        "height": 130,
+      },
     ]
   }
 >
@@ -220,10 +229,13 @@ exports[`ActivityHistoryItem renders correctly with an image reference and mediu
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
             "fontSize": 14,
+            "lineHeight": 18,
           }
         }
       >
@@ -335,9 +347,13 @@ exports[`ActivityHistoryItem renders correctly with an image reference and small
         "flexDirection": "row",
         "justifyContent": "space-between",
         "marginBottom": 15,
+        "overflow": "hidden",
         "padding": 15,
       },
       false,
+      {
+        "height": 80,
+      },
     ]
   }
 >
@@ -384,10 +400,13 @@ exports[`ActivityHistoryItem renders correctly with an image reference and small
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
             "fontSize": 14,
+            "lineHeight": 18,
           }
         }
       >
@@ -499,9 +518,13 @@ exports[`ActivityHistoryItem renders correctly with lastEntryEndDate prop (blue 
         "flexDirection": "row",
         "justifyContent": "space-between",
         "marginBottom": 15,
+        "overflow": "hidden",
         "padding": 15,
       },
       false,
+      {
+        "height": 65,
+      },
     ]
   }
 >
@@ -526,21 +549,26 @@ exports[`ActivityHistoryItem renders correctly with lastEntryEndDate prop (blue 
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
             "fontSize": 14,
+            "lineHeight": 18,
           }
         }
       >
         January 1, 2023 at 12:05:00 PM
       </Text>
       <Text
+        numberOfLines={1}
         style={
           {
             "color": "#007AFF",
             "fontSize": 12,
             "fontWeight": "600",
+            "lineHeight": 15,
             "marginTop": 2,
           }
         }
@@ -653,9 +681,13 @@ exports[`ActivityHistoryItem renders correctly with notes preview 1`] = `
         "flexDirection": "row",
         "justifyContent": "space-between",
         "marginBottom": 15,
+        "overflow": "hidden",
         "padding": 15,
       },
       false,
+      {
+        "height": 71,
+      },
     ]
   }
 >
@@ -680,10 +712,13 @@ exports[`ActivityHistoryItem renders correctly with notes preview 1`] = `
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
             "fontSize": 14,
+            "lineHeight": 18,
           }
         }
       >
@@ -696,6 +731,7 @@ exports[`ActivityHistoryItem renders correctly with notes preview 1`] = `
           {
             "color": "#666666",
             "fontSize": 14,
+            "lineHeight": 18,
             "marginTop": 5,
           }
         }
@@ -808,9 +844,13 @@ exports[`ActivityHistoryItem renders correctly without notes 1`] = `
         "flexDirection": "row",
         "justifyContent": "space-between",
         "marginBottom": 15,
+        "overflow": "hidden",
         "padding": 15,
       },
       false,
+      {
+        "height": 54,
+      },
     ]
   }
 >
@@ -835,10 +875,13 @@ exports[`ActivityHistoryItem renders correctly without notes 1`] = `
       }
     >
       <Text
+        ellipsizeMode="tail"
+        numberOfLines={1}
         style={
           {
             "color": "#000000",
             "fontSize": 14,
+            "lineHeight": 18,
           }
         }
       >
