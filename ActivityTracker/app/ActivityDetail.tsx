@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
@@ -7,19 +7,26 @@ import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import ActivityHistoryItem, { ImageMode } from '../src/components/ActivityHistoryItem';
 import { clearImageMemoryCache } from '../src/components/AppImage';
 import { useActivityData } from '../src/hooks/useActivityData';
-import { useEntries, ListEntry } from '../src/hooks/useEntries';
+import { useEntries } from '../src/hooks/useEntries';
+import { EntryRow, buildEntryRows } from '../src/utils/entryRows';
 
 /**
  * How many rows are kept mounted around the viewport. Deliberately tight:
  * every mounted row in "large" mode holds a decoded full-size bitmap, so this
  * number multiplied by the image size is the memory ceiling for the screen.
+ *
+ * "hidden" used to be 21 — ten screens either side. Rows without images are
+ * cheap individually, but on web each one is still a handful of DOM nodes, and
+ * several hundred of them make every layout pass more expensive. Five screens
+ * either side is enough buffer to scroll into without blank space.
  */
 const WINDOW_SIZE_BY_MODE: Record<ImageMode, number> = {
-  hidden: 21,
-  small: 11,
+  hidden: 11,
+  small: 9,
   medium: 7,
   large: 3,
 };
+
 
 const ActivityDetailScreen: React.FC = () => {
   const router = useRouter();
@@ -39,11 +46,13 @@ const ActivityDetailScreen: React.FC = () => {
     removeEntry,
   } = useEntries(activityId, { search: searchQuery });
 
-  const flatListRef = useRef<FlatList<ListEntry>>(null);
+  const flatListRef = useRef<FlatList<EntryRow>>(null);
   const pendingRandomIndex = useRef<number | null>(null);
 
   useFocusEffect(
     useCallback(() => {
+      // Re-reads the rows already loaded rather than collapsing to page one —
+      // see the note on `refresh` in useEntries.
       void refresh();
       return () => {
         // Leaving the screen is the natural moment to hand decoded bitmaps
@@ -129,28 +138,44 @@ const ActivityDetailScreen: React.FC = () => {
     [activityId, deleteActivityEntry, removeEntry],
   );
 
+  const rows = useMemo<EntryRow[]>(() => buildEntryRows(entries, total), [entries, total]);
+
+  /*
+   * Depends only on things that change when the user acts, not on `entries`.
+   * When it depended on the array, every loaded page gave the callback a new
+   * identity and made the list re-render every mounted cell — work that lands
+   * in the middle of a scroll, which is when it is least affordable.
+   */
   const renderItem = useCallback(
-    ({ item, index }: { item: ListEntry; index: number }) => {
-      const chronologicalNextItem = entries[index + 1];
-      const lastEntryEndDate = chronologicalNextItem ? chronologicalNextItem.endDate : undefined;
-      return (
-        <ActivityHistoryItem
-          entryId={item.id}
-          startDate={item.startDate}
-          endDate={item.endDate}
-          notes={item.notes}
-          images={item.images}
-          thumbnails={item.thumbnails}
-          imageMode={imageMode}
-          tags={item.tags}
-          lastEntryEndDate={lastEntryEndDate}
-          onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.id}`)}
-          onDelete={() => handleDelete(item.id)}
-        />
-      );
-    },
-    [activityId, entries, handleDelete, imageMode, router],
+    ({ item }: { item: EntryRow }) => (
+      <ActivityHistoryItem
+        entryId={item.entry.id}
+        index={item.displayIndex}
+        startDate={item.entry.startDate}
+        endDate={item.entry.endDate}
+        notes={item.entry.notes}
+        images={item.entry.images}
+        thumbnails={item.entry.thumbnails}
+        imageMode={imageMode}
+        tags={item.entry.tags}
+        lastEntryEndDate={item.previousEndDate}
+        onEdit={() => router.push(`/EditEntry?activityId=${activityId}&entryId=${item.entry.id}`)}
+        onDelete={() => handleDelete(item.entry.id)}
+      />
+    ),
+    [activityId, handleDelete, imageMode, router],
   );
+
+  /*
+   * onEndReached fires on every scroll event once the threshold is crossed,
+   * and the list keeps firing it while a page is still in flight. Each page
+   * that lands grows the content, which moves the threshold, which fires it
+   * again — a feedback loop that appends pages faster than the user scrolls.
+   */
+  const handleEndReached = useCallback(() => {
+    if (!hasMore || loading || loadingMore) return;
+    loadMore();
+  }, [hasMore, loading, loadingMore, loadMore]);
 
   if (!activity) {
     return (
@@ -196,21 +221,37 @@ const ActivityDetailScreen: React.FC = () => {
       </View>
       <FlatList
         ref={flatListRef}
-        data={entries}
+        data={rows}
         renderItem={renderItem}
-        keyExtractor={item => item.id}
+        keyExtractor={row => row.entry.id}
         contentContainerStyle={styles.listContent}
         // Pagination: the next page is fetched as the user approaches the end
         // rather than loading the whole history up front.
-        onEndReached={loadMore}
-        onEndReachedThreshold={0.6}
+        onEndReached={handleEndReached}
+        onEndReachedThreshold={0.5}
         // Windowing. These are the numbers that bound how many images can be
         // decoded at once, so they tighten as the image mode gets heavier.
         windowSize={WINDOW_SIZE_BY_MODE[imageMode]}
-        initialNumToRender={imageMode === 'large' ? 2 : 8}
-        maxToRenderPerBatch={imageMode === 'large' ? 2 : 8}
+        initialNumToRender={imageMode === 'large' ? 3 : 10}
+        // Smaller batches, same cadence: the work of laying out new rows is
+        // spread across more frames instead of landing in one long one.
+        maxToRenderPerBatch={imageMode === 'large' ? 2 : 4}
         updateCellsBatchingPeriod={50}
-        removeClippedSubviews
+        scrollEventThrottle={16}
+        /*
+         * removeClippedSubviews is deliberately off.
+         *
+         * It detaches off-screen cells from the view hierarchy, and a detached
+         * cell reports a zero-height layout. VirtualizedList records that as
+         * the row's real height, so the total content height shrinks while you
+         * are scrolling; the scroll position then gets clamped to the new,
+         * shorter content and you are thrown back up the page. That is the
+         * "scrolling down jumps me up" symptom, and it happens in every image
+         * mode because it has nothing to do with images.
+         *
+         * windowSize above already bounds how many rows stay mounted, which is
+         * the memory guarantee this was reached for in the first place.
+         */
         ListFooterComponent={
           loadingMore ? (
             <ActivityIndicator style={styles.footerSpinner} color={theme.colors.primary} />

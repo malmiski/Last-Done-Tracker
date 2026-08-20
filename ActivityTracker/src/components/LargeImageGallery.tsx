@@ -180,6 +180,10 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({
           data={imageRefs}
           horizontal
           showsHorizontalScrollIndicator={false}
+          // A gallery sits inside the vertical entry list. Without the lock, a
+          // drag that is mostly vertical but slightly sideways is claimed by
+          // this scroller, and the page under the finger refuses to move.
+          directionalLockEnabled
           snapToInterval={containerWidth}
           snapToAlignment="start"
           decelerationRate="fast"

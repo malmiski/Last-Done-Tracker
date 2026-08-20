@@ -23,6 +23,12 @@ interface ActivityHistoryItemProps {
   imageMode?: ImageMode;
   tags?: Tag[];
   lastEntryEndDate?: Date;
+  /**
+   * Position in the activity's history, oldest being 1. Purely a label — it is
+   * derived from where the row sits in the list and is never stored, so it
+   * renumbers by itself when entries are added or removed.
+   */
+  index?: number;
 }
 
 const formatDate = (date: Date) => {
@@ -88,6 +94,7 @@ const sameRefs = (a?: string[], b?: string[]) => {
  * string comparison over megabytes of data.
  */
 const areEqual = (prevProps: ActivityHistoryItemProps, nextProps: ActivityHistoryItemProps) => {
+  if (prevProps.index !== nextProps.index) return false;
   if (prevProps.imageMode !== nextProps.imageMode) return false;
   if (prevProps.notes !== nextProps.notes) return false;
   if (prevProps.entryId !== nextProps.entryId) return false;
@@ -121,6 +128,7 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
   imageMode = 'small',
   tags = [],
   lastEntryEndDate,
+  index,
 }) => {
   const firstLine = notes ? notes.split('\n')[0] : '';
   const duration = formatDuration(startDate, endDate);
@@ -157,9 +165,19 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            // Stops a mostly-vertical drag that starts on a thumbnail from
+            // being claimed by this scroller, which reads as the page getting
+            // stuck at that row.
+            directionalLockEnabled
             style={{ marginBottom: 15, width: '100%' }}
-            // Keeps offscreen tiles from rendering until scrolled to.
-            removeClippedSubviews
+            /*
+             * No removeClippedSubviews here. It detaches off-screen tiles, and
+             * a detached view reports a zero-height layout, which changes the
+             * measured height of the row that contains it. In a virtualised
+             * list that means the total content height moves while you are
+             * scrolling. It bought nothing either: the tiles are 50-100pt
+             * thumbnails whose cost is bounded by the image store already.
+             */
           >
             {elements}
           </ScrollView>
@@ -187,6 +205,15 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
       <View style={[styles.contentWrapper, hasMultipleInRow && { marginTop: 0 }]}>
         {!(isLarge || hasMultipleInRow) ? renderImages() : null}
         <View style={styles.textContainer}>
+          {/*
+            Its own line rather than sharing one with the date: the date string
+            is long, and prefixing it would wrap to two lines on a narrow
+            screen for some rows and not others — variable row heights are
+            exactly what makes a virtualised list scroll badly.
+          */}
+          {typeof index === 'number' ? (
+            <Text style={styles.indexText}>#{index}</Text>
+          ) : null}
           <Text style={styles.dateText}>
             {formatDate(startDate)}
             {isDifferentDate ? ` - ${formatDate(endDate)}` : ''}
@@ -258,6 +285,13 @@ const styles = StyleSheet.create({
     height: 200,
     borderRadius: 10,
     marginBottom: 15,
+  },
+  indexText: {
+    color: theme.colors.subtext,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginBottom: 2,
   },
   dateText: {
     color: theme.colors.text,

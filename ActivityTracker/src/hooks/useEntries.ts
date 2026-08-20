@@ -47,39 +47,59 @@ export const useEntries = (
     return () => clearTimeout(timer);
   }, [search]);
 
-  const loadFirstPage = useCallback(async () => {
-    if (!activityId) {
-      setEntries([]);
-      setTotal(0);
-      setLoading(false);
-      return;
-    }
-
-    const token = ++requestId.current;
-    setLoading(true);
-    try {
-      const [page, count] = await Promise.all([
-        database.getEntriesPage(activityId, { limit: pageSize, offset: 0, search: debouncedSearch }),
-        database.countEntries(activityId, debouncedSearch),
-      ]);
-      if (requestId.current !== token) return;
-      offsetRef.current = page.length;
-      setEntries(page);
-      setTotal(count);
-    } catch (error) {
-      console.error('Failed to load entries', error);
-      if (requestId.current === token) {
+  /** Re-read the list from the top, keeping `limit` rows. */
+  const loadWindow = useCallback(
+    async (limit: number) => {
+      if (!activityId) {
         setEntries([]);
         setTotal(0);
+        setLoading(false);
+        return;
       }
-    } finally {
-      if (requestId.current === token) setLoading(false);
-    }
-  }, [activityId, debouncedSearch, pageSize]);
+
+      const token = ++requestId.current;
+      setLoading(true);
+      try {
+        const [page, count] = await Promise.all([
+          database.getEntriesPage(activityId, { limit, offset: 0, search: debouncedSearch }),
+          database.countEntries(activityId, debouncedSearch),
+        ]);
+        if (requestId.current !== token) return;
+        offsetRef.current = page.length;
+        setEntries(page);
+        setTotal(count);
+      } catch (error) {
+        console.error('Failed to load entries', error);
+        if (requestId.current === token) {
+          setEntries([]);
+          setTotal(0);
+        }
+      } finally {
+        if (requestId.current === token) setLoading(false);
+      }
+    },
+    [activityId, debouncedSearch],
+  );
+
+  const loadFirstPage = useCallback(() => loadWindow(pageSize), [loadWindow, pageSize]);
 
   useEffect(() => {
     void loadFirstPage();
   }, [loadFirstPage]);
+
+  /**
+   * Re-read what is currently on screen, rather than collapsing back to the
+   * first page.
+   *
+   * This runs whenever the list regains focus. Reloading a single page after
+   * the user had scrolled through several thousand rows discarded them all:
+   * the content became a fraction of its height, the scroll position was
+   * clamped to fit, and the user was dumped near the top with no idea why.
+   */
+  const refresh = useCallback(
+    () => loadWindow(Math.max(pageSize, offsetRef.current)),
+    [loadWindow, pageSize],
+  );
 
   const loadMore = useCallback(() => {
     if (!activityId || loading || loadingMore) return;
@@ -129,7 +149,7 @@ export const useEntries = (
     loadingMore,
     hasMore: entries.length < total,
     loadMore,
-    refresh: loadFirstPage,
+    refresh,
     removeEntry,
   };
 };

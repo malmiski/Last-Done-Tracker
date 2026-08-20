@@ -67,6 +67,19 @@ const render = async (props: any) => {
   return tree;
 };
 
+/** Every string the tree renders, in order, joined. */
+const renderedText = (tree: any): string => {
+  const out: string[] = [];
+  const walk = (node: any) => {
+    if (node == null) return;
+    if (typeof node === 'string') return void out.push(node);
+    if (Array.isArray(node)) return void node.forEach(walk);
+    (node.children ?? []).forEach(walk);
+  };
+  walk(tree.toJSON());
+  return out.join('');
+};
+
 describe('ActivityHistoryItem', () => {
   it('renders correctly with notes preview', async () => {
     const tree = await render({ notes: 'Test Note\nSecond Line' });
@@ -117,6 +130,16 @@ describe('ActivityHistoryItem', () => {
     const tree = await render({ notes: 'Line 1\nLine 2\nLine 3' });
     expect(JSON.stringify(tree.toJSON())).toContain('Line 1');
     expect(JSON.stringify(tree.toJSON())).not.toContain('Line 2');
+  });
+
+  it('shows the entry number when one is supplied', async () => {
+    // Reads the rendered text rather than the serialised tree: style values
+    // are colour literals, so a raw string search for "#" matches those too.
+    expect(renderedText(await render({ index: 42 }))).toContain('#42');
+  });
+
+  it('shows no number when none is supplied', async () => {
+    expect(renderedText(await render({}))).not.toMatch(/#\d/);
   });
 
   it('renders duration when startDate and endDate differ', async () => {
