@@ -19,24 +19,42 @@ import ActivityHistoryItem, { ImageMode } from '../src/components/ActivityHistor
 import { clearImageMemoryCache } from '../src/components/AppImage';
 
 /**
- * The tag block is a fixed number of rows tall and scrolls within itself.
+ * The tag block is a fixed number of rows tall and overflows sideways.
  *
- * Letting it grow with the number of tags would push the results off the
- * screen on any account with a decent tag list — and the results are the point
- * of the page. Capping it means the entries below always start in the same
- * place, however many tags exist.
+ * The pills are laid out in columns — top to bottom, then wrapping into the
+ * next column — inside a horizontal scroller. That is the only arrangement
+ * that keeps the block's height fixed while letting every tag show its full
+ * name: wrapping into rows instead would make the height depend on how many
+ * tags there are and how long their names run, and the results below would
+ * move every time the tag list changed.
  *
- * The height is computed rather than guessed so the cap lands on a row
- * boundary plus a sliver of the next one, which is what makes it obvious the
- * block scrolls.
+ * Heights are computed from the pill's own metrics rather than guessed, and
+ * the pill text declares an explicit lineHeight, so a row is exactly one line
+ * tall on every platform.
  */
 const TAG_PILL_PADDING_VERTICAL = 8;
 const TAG_PILL_LINE_HEIGHT = 18;
 const TAG_PILL_HEIGHT = TAG_PILL_LINE_HEIGHT + TAG_PILL_PADDING_VERTICAL * 2;
 const TAG_GAP = 10;
-const TAG_VISIBLE_ROWS = 5;
-const TAG_BLOCK_MAX_HEIGHT =
-  TAG_PILL_HEIGHT * TAG_VISIBLE_ROWS + TAG_GAP * (TAG_VISIBLE_ROWS - 1);
+const TAG_MAX_ROWS = 5;
+
+/**
+ * Roughly how many columns to aim for before adding another row.
+ *
+ * Without this the block would always be its full height, and an account with
+ * three tags would show them stacked in a single tall column rather than side
+ * by side. Choosing the row count from the number of tags keeps a short list
+ * looking like a strip and only builds upward once there is enough to fill it.
+ */
+const TAG_COLUMNS_TARGET = 4;
+
+const tagRowCount = (tagCount: number): number =>
+  Math.min(TAG_MAX_ROWS, Math.max(1, Math.ceil(tagCount / TAG_COLUMNS_TARGET)));
+
+const tagBlockHeight = (tagCount: number): number => {
+  const rows = tagRowCount(tagCount);
+  return TAG_PILL_HEIGHT * rows + TAG_GAP * (rows - 1);
+};
 
 /** Matches the entry list: rows get lighter as the image mode gets heavier. */
 const WINDOW_SIZE_BY_MODE: Record<ImageMode, number> = {
@@ -232,15 +250,15 @@ const SearchByTagScreen: React.FC = () => {
       </View>
 
       {/*
-        Wraps across the full width rather than running off the side. Capped at
-        a few rows so the results below keep their place; the block scrolls
-        within that cap when there are more tags than fit.
+        A fixed-height grid that scrolls sideways: every tag shows its full
+        name, and the height never changes, so the results below always start
+        in the same place.
       */}
       <View style={styles.tagSelector}>
         <ScrollView
-          style={{ maxHeight: TAG_BLOCK_MAX_HEIGHT }}
-          contentContainerStyle={styles.tagScroll}
-          showsVerticalScrollIndicator
+          horizontal
+          showsHorizontalScrollIndicator
+          contentContainerStyle={[styles.tagScroll, { height: tagBlockHeight(tags.length) }]}
         >
           {tags.map(tag => {
             const isSelected = selectedTagIds.includes(tag.id);
@@ -254,7 +272,7 @@ const SearchByTagScreen: React.FC = () => {
                 ]}
                 onPress={() => toggleTag(tag.id)}
               >
-                <Text style={styles.tagButtonText} numberOfLines={1}>{tag.name}</Text>
+                <Text style={styles.tagButtonText}>{tag.name}</Text>
                 {isSelected && <Icon name="check" size={14} color="#FFFFFF" style={{ marginLeft: 5 }} />}
               </TouchableOpacity>
             );
@@ -374,8 +392,13 @@ const styles = StyleSheet.create({
   },
   tagScroll: {
     paddingHorizontal: 20,
-    flexDirection: 'row',
+    // Column direction plus wrap is what fills downward and then spills into
+    // the next column, which is what makes the height fixed and the overflow
+    // horizontal. alignContent keeps the columns packed to the left instead of
+    // spreading across whatever width the scroller reports.
+    flexDirection: 'column',
     flexWrap: 'wrap',
+    alignContent: 'flex-start',
     gap: TAG_GAP,
   },
   tagButton: {
@@ -385,8 +408,8 @@ const styles = StyleSheet.create({
     opacity: 0.6,
     flexDirection: 'row',
     alignItems: 'center',
-    // Keeps a long tag name from stretching a row taller than the rest.
-    maxWidth: '100%',
+    // No width cap: a tag shows its whole name and the block scrolls instead.
+    alignSelf: 'flex-start',
   },
   selectedTagButton: {
     opacity: 1,
@@ -397,10 +420,9 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 14,
-    // Explicit, so every pill is exactly one row tall and the cap above lands
-    // where it is meant to.
+    // Explicit, so every pill is exactly one row tall and the block height
+    // computed above is the height actually drawn.
     lineHeight: TAG_PILL_LINE_HEIGHT,
-    flexShrink: 1,
   },
   noTagsText: {
     color: theme.colors.subtext,
