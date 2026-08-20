@@ -149,6 +149,21 @@ describe('ActivityHistoryItem', () => {
     expect(renderedText(await render({}))).not.toMatch(/#\d/);
   });
 
+  it('renders every tag in full, however many there are', async () => {
+    // The strip used to let pills shrink to fit the row, which squeezed each
+    // one down to a letter or two. It scrolls sideways instead now, so a long
+    // tag name survives intact.
+    const tags = [
+      { id: 't1', name: 'Gardening', color: '#4CAF50' },
+      { id: 't2', name: 'Cleaning', color: '#4CAF50' },
+      { id: 't3', name: 'Food', color: '#9C27B0' },
+      { id: 't4', name: 'Deliberately Quite A Long Tag Name', color: '#F44336' },
+    ];
+
+    const text = renderedText(await render({ tags }));
+    tags.forEach(tag => expect(text).toContain(tag.name));
+  });
+
   it('renders duration when startDate and endDate differ', async () => {
     const tree = await render({
       startDate: new Date('2023-01-01T12:00:00Z'),

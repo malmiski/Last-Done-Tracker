@@ -332,12 +332,21 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
             </Text>
           ) : null}
           {/*
-            A single line that clips rather than wrapping. Wrapping made the
-            row's height depend on its width, which is the one thing the list
-            cannot account for in advance.
+            One line that scrolls sideways rather than wrapping. Wrapping made
+            the row's height depend on its width, which is the one thing the
+            list cannot account for in advance; letting the pills shrink to fit
+            instead squeezed them down to a single letter each. Overflowing
+            horizontally keeps the height fixed and every tag readable.
           */}
           {tags && tags.length > 0 && (
-            <View style={styles.tagContainer}>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              // Leaves a mostly-vertical drag that starts on a tag to the list.
+              directionalLockEnabled
+              style={styles.tagContainer}
+              contentContainerStyle={styles.tagContent}
+            >
               {tags.map(tag => (
                 <View key={tag.id} style={[styles.tag, { backgroundColor: tag.color }]}>
                   <Text style={styles.tagText} numberOfLines={1}>
@@ -345,7 +354,7 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
                   </Text>
                 </View>
               ))}
-            </View>
+            </ScrollView>
           )}
         </View>
         <View style={styles.buttons}>
@@ -446,19 +455,22 @@ const styles = StyleSheet.create({
     marginTop: ROW_METRICS.notes.marginTop,
   },
   tagContainer: {
-    flexDirection: 'row',
-    // No flexWrap: the strip is one line and clips at the edge of the row.
     marginTop: ROW_METRICS.tags.marginTop,
     height: TAG_ROW_HEIGHT,
-    overflow: 'hidden',
+    // Exactly one row tall, never taller: the list reserved this much space.
+    flexGrow: 0,
+  },
+  tagContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 5,
   },
   tag: {
     paddingHorizontal: 8,
     paddingVertical: ROW_METRICS.tags.paddingVertical,
     borderRadius: 5,
-    // Keeps a long tag name from pushing the strip wider than the row.
-    flexShrink: 1,
+    // Natural width. Shrinking to fit is what turned tags into single letters.
+    flexShrink: 0,
   },
   tagText: {
     color: '#FFFFFF',
