@@ -1,5 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import {
+  ActivityIndicator,
+  FlatList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+  useWindowDimensions,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
@@ -9,7 +18,8 @@ import { clearImageMemoryCache } from '../src/components/AppImage';
 import { useActivityData } from '../src/hooks/useActivityData';
 import { useEntries } from '../src/hooks/useEntries';
 import { EntryRow, buildEntryRows } from '../src/utils/entryRows';
-import { ROW_METRICS, buildItemLayout } from '../src/utils/entryRowLayout';
+import { ROW_METRICS, buildItemLayout, rowContentWidth } from '../src/utils/entryRowLayout';
+import { subscribeToDimensions } from '../src/utils/imageDimensions';
 
 /**
  * How many rows are kept mounted around the viewport. Deliberately tight:
@@ -139,7 +149,28 @@ const ActivityDetailScreen: React.FC = () => {
     [activityId, deleteActivityEntry, removeEntry],
   );
 
-  const rows = useMemo<EntryRow[]>(() => buildEntryRows(entries, total), [entries, total]);
+  /*
+   * Bumped when an image's size is learned for the first time. A large-mode
+   * row whose photos had never been measured cannot be placed in advance; once
+   * the gallery measures them and reports back, the row becomes sizeable and
+   * the offset table is rebuilt. That is the single shift a row is allowed --
+   * the first time it is ever seen.
+   */
+  const [dimensionsVersion, setDimensionsVersion] = useState(0);
+  useEffect(
+    () => subscribeToDimensions(() => setDimensionsVersion(version => version + 1)),
+    [],
+  );
+
+  const contentWidth = rowContentWidth(useWindowDimensions().width);
+
+  const rows = useMemo<EntryRow[]>(
+    () => buildEntryRows(entries, total),
+    // dimensionsVersion is not read here: it is a signal that the sizes the
+    // builder looks up have changed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [entries, total, dimensionsVersion],
+  );
 
   /*
    * Tells the list exactly where every row sits, so it never has to render a
@@ -148,11 +179,14 @@ const ActivityDetailScreen: React.FC = () => {
    * changed which rows were inside the render window it could settle into a
    * loop — the screen shaking until a scroll broke the cycle.
    *
-   * Null in the large-image mode, where a row's height depends on photo aspect
-   * ratios that have not been read yet. That mode shows a row or two per
-   * screen, so measuring it costs little.
+   * Null only while some large-mode row's photos have never been measured.
+   * The gallery measures those the old way and reports back, so a row is
+   * unplaceable at most once — the first time it is ever seen.
    */
-  const getItemLayout = useMemo(() => buildItemLayout(rows, imageMode), [rows, imageMode]);
+  const getItemLayout = useMemo(
+    () => buildItemLayout(rows, imageMode, contentWidth),
+    [rows, imageMode, contentWidth],
+  );
 
   /*
    * Depends only on things that change when the user acts, not on `entries`.

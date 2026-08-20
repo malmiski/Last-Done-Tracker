@@ -14,6 +14,13 @@ jest.mock('../theme/theme', () => ({
 
 jest.mock('@expo/vector-icons/MaterialCommunityIcons', () => 'Icon');
 
+// Sizes are covered in imageDimensions.test and entryRowLayout.test; here the
+// point is only that a row renders, so nothing should reach the database.
+jest.mock('../utils/imageDimensions', () => ({
+  knownDimensions: () => null,
+  rememberDimensions: jest.fn(),
+}));
+
 // `virtual` so the suite runs whether or not expo-image has been installed
 // yet; the component only needs a renderable stand-in.
 jest.mock(

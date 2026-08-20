@@ -67,6 +67,23 @@ export const getDb = async () => {
             key TEXT PRIMARY KEY NOT NULL,
             value TEXT
         );
+        /*
+         * Natural pixel size of a stored image, keyed by its reference.
+         *
+         * Derived data: every value here can be read back out of the file's
+         * own header. It is cached because the entry list needs to know how
+         * tall a row will be *before* it renders it, and a header read is
+         * asynchronous. Keyed by reference rather than stored on the entry
+         * because two entries can share an image after a copy and paste.
+         *
+         * Because it is rebuildable, a missing row is not an error and
+         * backups do not carry it.
+         */
+        CREATE TABLE IF NOT EXISTS image_dimensions (
+            ref TEXT PRIMARY KEY NOT NULL,
+            width INTEGER NOT NULL,
+            height INTEGER NOT NULL
+        );
         `);
 
         await migrateDatabase(db);
@@ -919,5 +936,69 @@ export const importDatabase = async () => {
   } catch (error) {
     console.error('Error importing database:', error);
     alert('Failed to import database.');
+  }
+};
+
+/* ------------------------------------------------------------------ *
+ * Image dimensions
+ *
+ * A cache of what is already in each file's header, so the entry list can
+ * work out a row's height without waiting on a read. See the table comment
+ * in the schema above.
+ * ------------------------------------------------------------------ */
+
+export interface ImageDimensionRecord {
+  ref: string;
+  width: number;
+  height: number;
+}
+
+/** Look up several at once; refs with no stored size are simply absent. */
+export const getImageDimensions = async (
+  refs: string[],
+): Promise<Record<string, { width: number; height: number }>> => {
+  const found: Record<string, { width: number; height: number }> = {};
+  const db = await getDb();
+  if (!db || refs.length === 0) return found;
+
+  // SQLite caps how many parameters one statement may bind.
+  const CHUNK = 200;
+  try {
+    for (let start = 0; start < refs.length; start += CHUNK) {
+      const chunk = refs.slice(start, start + CHUNK);
+      const placeholders = chunk.map(() => '?').join(',');
+      const rows = await db.getAllAsync<any>(
+        `SELECT ref, width, height FROM image_dimensions WHERE ref IN (${placeholders})`,
+        chunk,
+      );
+      rows.forEach(row => {
+        found[row.ref] = { width: row.width, height: row.height };
+      });
+    }
+  } catch (error) {
+    // Derived data: failing to read it costs a measurement, not correctness.
+    console.warn('Could not read image dimensions', error);
+  }
+
+  return found;
+};
+
+export const putImageDimensions = async (records: ImageDimensionRecord[]): Promise<void> => {
+  const db = await getDb();
+  if (!db || records.length === 0) return;
+
+  try {
+    await db.withTransactionAsync(async () => {
+      for (const record of records) {
+        await db.runAsync(
+          'INSERT OR REPLACE INTO image_dimensions (ref, width, height) VALUES (?, ?, ?)',
+          record.ref,
+          record.width,
+          record.height,
+        );
+      }
+    });
+  } catch (error) {
+    console.warn('Could not store image dimensions', error);
   }
 };

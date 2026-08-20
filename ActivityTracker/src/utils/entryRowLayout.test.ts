@@ -4,6 +4,8 @@ import {
   TAG_ROW_HEIGHT,
   buildItemLayout,
   entryRowHeight,
+  galleryHeightFor,
+  rowContentWidth,
   hasDurationFor,
   hasSinceLastFor,
   notesFirstLine,
@@ -102,10 +104,62 @@ describe('entryRowHeight', () => {
     expect(entryRowHeight({ ...bare, imageCount: 9 }, 'hidden')).toBe(entryRowHeight(bare, 'hidden'));
   });
 
-  it('declines to size a large-image row, whose height depends on the photos', () => {
-    expect(entryRowHeight({ ...bare, imageCount: 3 }, 'large')).toBeNull();
+  it('declines to size a large-image row whose photos have not been measured', () => {
+    expect(entryRowHeight({ ...bare, imageCount: 3 }, 'large', 300)).toBeNull();
     // With no images there is no gallery, so it is knowable again.
-    expect(entryRowHeight(bare, 'large')).not.toBeNull();
+    expect(entryRowHeight(bare, 'large', 300)).not.toBeNull();
+  });
+
+  it('sizes a large-image row once the photos are known', () => {
+    const shape = {
+      ...bare,
+      imageCount: 2,
+      imageSizes: [
+        { width: 400, height: 300 },
+        { width: 200, height: 400 },
+      ],
+    };
+
+    // At 400 wide: the first fills the width at 300 tall, the second is
+    // narrower than the container so it stays 400 tall. The gallery takes the
+    // taller of the two so paging does not make the card jump.
+    expect(entryRowHeight(shape, 'large', 400)).toBe(
+      ROW_METRICS.padding * 2 + 400 + ROW_METRICS.galleryMarginBottom + BARE_TEXT,
+    );
+  });
+
+  it('cannot size a large-image row before the width is known', () => {
+    const shape = { ...bare, imageCount: 1, imageSizes: [{ width: 100, height: 100 }] };
+    expect(entryRowHeight(shape, 'large', 0)).toBeNull();
+  });
+});
+
+describe('galleryHeightFor', () => {
+  it('scales an oversized image down to the width', () => {
+    expect(galleryHeightFor([{ width: 1000, height: 500 }], 400)).toBe(200);
+  });
+
+  it('leaves a small image at its natural size rather than blowing it up', () => {
+    // Matches fitToWidth, which only ever scales down.
+    expect(galleryHeightFor([{ width: 100, height: 80 }], 400)).toBe(80);
+  });
+
+  it('takes the tallest, since that is what the gallery reserves', () => {
+    expect(
+      galleryHeightFor(
+        [
+          { width: 400, height: 100 },
+          { width: 400, height: 300 },
+        ],
+        400,
+      ),
+    ).toBe(300);
+  });
+
+  it('refuses nonsense rather than returning a wrong height', () => {
+    expect(galleryHeightFor([], 400)).toBeNull();
+    expect(galleryHeightFor([{ width: 100, height: 100 }], 0)).toBeNull();
+    expect(galleryHeightFor([{ width: 0, height: 100 }], 400)).toBeNull();
   });
 });
 
@@ -134,6 +188,15 @@ describe('buildItemLayout', () => {
   it('reports the index it was asked about', () => {
     const layout = buildItemLayout(rows, 'small')!;
     expect(layout(null, 2).index).toBe(2);
+  });
+
+  it('measures the row content width the same way the row does', () => {
+    // The row and the height table must agree, or the gallery is drawn at a
+    // different width than the height was reserved for.
+    expect(rowContentWidth(400)).toBe(
+      400 - ROW_METRICS.listPaddingHorizontal * 2 - ROW_METRICS.padding * 2,
+    );
+    expect(rowContentWidth(0)).toBe(0);
   });
 
   it('refuses to size a list it cannot size completely', () => {

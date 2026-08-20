@@ -1,3 +1,7 @@
+// The default lookup reads the dimension cache, which reaches the database.
+// These tests inject their own lookup; the mock keeps the module graph small.
+jest.mock('./imageDimensions', () => ({ knownDimensions: () => null }));
+
 import { buildEntryRows } from './entryRows';
 
 const entry = (id: string, iso: string) =>
@@ -79,7 +83,7 @@ describe('buildEntryRows', () => {
 
     const [newest, oldest] = buildEntryRows(entries as any, 2);
 
-    expect(newest.shape).toEqual({
+    expect(newest.shape).toMatchObject({
       showsIndex: true,
       hasDuration: true,
       hasSinceLast: true,
@@ -102,5 +106,44 @@ describe('buildEntryRows', () => {
   it('returns nothing for an empty list', () => {
     expect(buildEntryRows([], 0)).toEqual([]);
     expect(buildEntryRows([], 12)).toEqual([]);
+  });
+});
+
+describe('image sizes on a row', () => {
+  const withImages = (refs: string[]) => ({
+    ...entry('a', '2026-01-01T10:00:00Z'),
+    images: refs,
+  });
+
+  it('collects the sizes when every image is known', () => {
+    const sizes: Record<string, { width: number; height: number }> = {
+      'img:1': { width: 100, height: 200 },
+      'img:2': { width: 300, height: 150 },
+    };
+
+    const [row] = buildEntryRows([withImages(['img:1', 'img:2'])] as any, 1, ref => sizes[ref] ?? null);
+    expect(row.shape.imageSizes).toEqual([sizes['img:1'], sizes['img:2']]);
+  });
+
+  it('reports nothing when even one image is unknown', () => {
+    // All or nothing: the gallery is as tall as its tallest image, and the
+    // unmeasured one could be that image.
+    const known = { 'img:1': { width: 100, height: 200 } } as Record<string, any>;
+    const [row] = buildEntryRows([withImages(['img:1', 'img:2'])] as any, 1, ref => known[ref] ?? null);
+    expect(row.shape.imageSizes).toBeNull();
+  });
+
+  it('reports nothing for a row with no images at all', () => {
+    const [row] = buildEntryRows([entry('a', '2026-01-01T10:00:00Z')] as any, 1, () => null);
+    expect(row.shape.imageSizes).toBeNull();
+  });
+
+  it('falls back to thumbnail refs when a row carries only those', () => {
+    const row = {
+      ...entry('a', '2026-01-01T10:00:00Z'),
+      thumbnails: ['img:9'],
+    };
+    const built = buildEntryRows([row] as any, 1, () => ({ width: 10, height: 20 }));
+    expect(built[0].shape.imageSizes).toEqual([{ width: 10, height: 20 }]);
   });
 });

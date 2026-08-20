@@ -9,6 +9,15 @@ const ENTRIES_STORE = 'entries';
 const TAGS_STORE = 'tags';
 const ENTRY_TAGS_STORE = 'entry_tags';
 const META_STORE = 'app_meta';
+/**
+ * Natural pixel size of a stored image, keyed by its reference.
+ *
+ * Derived data — every value can be read back out of the file's own header.
+ * It is cached because the entry list needs a row's height *before* it renders
+ * it, and a header read is asynchronous. Keyed by reference rather than held
+ * on the entry, because two entries can share an image after a copy and paste.
+ */
+const IMAGE_DIMENSIONS_STORE = 'image_dimensions';
 const ACTIVITIES_KEY = '@activities';
 const ACTIVITY_DETAILS_KEY = '@activityDetails';
 
@@ -21,7 +30,7 @@ let db: IDBDatabase | null = null;
 
 const openDB = (): Promise<IDBDatabase> => {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DB_NAME, 4); // v4 adds app_meta + startDate index
+    const request = indexedDB.open(DB_NAME, 5); // v5 adds image_dimensions
     request.onupgradeneeded = (event: any) => {
       const upgradeDb = event.target.result as IDBDatabase;
       const transaction = event.target.transaction;
@@ -58,6 +67,9 @@ const openDB = (): Promise<IDBDatabase> => {
       }
       if (!upgradeDb.objectStoreNames.contains(META_STORE)) {
         upgradeDb.createObjectStore(META_STORE);
+      }
+      if (!upgradeDb.objectStoreNames.contains(IMAGE_DIMENSIONS_STORE)) {
+        upgradeDb.createObjectStore(IMAGE_DIMENSIONS_STORE, { keyPath: 'ref' });
       }
     };
     request.onsuccess = (event: any) => resolve(event.target.result);
@@ -1004,4 +1016,71 @@ export const exportDatabase = async () => {
 
 export const importDatabase = async () => {
     alert('Use "Import backup" to restore from a .zip.');
+};
+
+/* ------------------------------------------------------------------ *
+ * Image dimensions
+ *
+ * A cache of what is already in each file's header, so the entry list can
+ * work out a row's height without waiting on a read. See the note on
+ * IMAGE_DIMENSIONS_STORE above.
+ * ------------------------------------------------------------------ */
+
+export interface ImageDimensionRecord {
+  ref: string;
+  width: number;
+  height: number;
+}
+
+/** Look up several at once; refs with no stored size are simply absent. */
+export const getImageDimensions = async (
+  refs: string[],
+): Promise<Record<string, { width: number; height: number }>> => {
+  const found: Record<string, { width: number; height: number }> = {};
+  if (refs.length === 0) return found;
+
+  try {
+    const database = await getDb();
+    await new Promise<void>((resolve, reject) => {
+      // One transaction for the whole batch: a transaction per ref is what
+      // browsers start aborting under load.
+      const tx = database.transaction(IMAGE_DIMENSIONS_STORE, 'readonly');
+      const store = tx.objectStore(IMAGE_DIMENSIONS_STORE);
+
+      refs.forEach(ref => {
+        const request = store.get(ref);
+        request.onsuccess = () => {
+          const record = request.result;
+          if (record) found[ref] = { width: record.width, height: record.height };
+        };
+      });
+
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+    });
+  } catch (error) {
+    // Derived data: failing to read it costs a measurement, not correctness.
+    console.warn('Could not read image dimensions', error);
+  }
+
+  return found;
+};
+
+export const putImageDimensions = async (records: ImageDimensionRecord[]): Promise<void> => {
+  if (records.length === 0) return;
+
+  try {
+    const database = await getDb();
+    await new Promise<void>((resolve, reject) => {
+      const tx = database.transaction(IMAGE_DIMENSIONS_STORE, 'readwrite');
+      const store = tx.objectStore(IMAGE_DIMENSIONS_STORE);
+      records.forEach(record => store.put(record));
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+      tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+    });
+  } catch (error) {
+    console.warn('Could not store image dimensions', error);
+  }
 };

@@ -1,16 +1,27 @@
-import React, { memo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { memo, useMemo } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  useWindowDimensions,
+} from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
 import { Tag } from '../data/activity-details';
 import LargeImageGallery from './LargeImageGallery';
 import AppImage from './AppImage';
 
+import { knownDimensions, rememberDimensions } from '../utils/imageDimensions';
+import { ImageSize } from '../utils/jpegSize';
 import {
   ImageMode,
   ROW_METRICS,
   TAG_ROW_HEIGHT,
   entryRowHeight,
+  galleryHeightFor,
+  rowContentWidth,
   hasDurationFor,
   hasSinceLastFor,
   notesFirstLine,
@@ -154,6 +165,34 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
   const thumbRefs = thumbnails && thumbnails.length > 0 ? thumbnails : images;
   const fullRefs = images && images.length > 0 ? images : thumbnails;
 
+  // The width this row's content is laid out at, worked out the same way the
+  // list works it out — the two must agree, or the height the list reserved
+  // will not be the height the gallery draws.
+  const contentWidth = rowContentWidth(useWindowDimensions().width);
+
+  /**
+   * Sizes for the gallery, all or nothing.
+   *
+   * All of them, because the gallery is as tall as its tallest image and one
+   * unmeasured image could be that one. When any is missing the gallery falls
+   * back to measuring, reports what it finds, and this row is sizeable from
+   * then on.
+   */
+  const galleryImageSizes = useMemo(() => {
+    if (imageMode !== 'large' || !fullRefs?.length) return null;
+    const sizes: ImageSize[] = [];
+    for (const ref of fullRefs) {
+      const size = knownDimensions(ref);
+      if (!size) return null;
+      sizes.push(size);
+    }
+    return sizes;
+  }, [fullRefs, imageMode]);
+
+  const galleryHeight = galleryImageSizes
+    ? galleryHeightFor(galleryImageSizes, contentWidth)
+    : null;
+
   const renderImages = () => {
     if (imageMode === 'hidden') return null;
 
@@ -202,7 +241,19 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
 
     if (imageMode === 'large') {
       if (!fullRefs || fullRefs.length === 0) return null;
-      return <LargeImageGallery imageRefs={fullRefs} entryId={entryId} />;
+      return (
+        <LargeImageGallery
+          imageRefs={fullRefs}
+          entryId={entryId}
+          // Handing over the width and the sizes is what stops the gallery
+          // measuring itself and resizing a frame later, which changed this
+          // row's height and moved everything below it in the list.
+          width={contentWidth > 0 ? contentWidth : undefined}
+          height={galleryHeight ?? undefined}
+          imageSizes={galleryImageSizes}
+          onMeasured={rememberDimensions}
+        />
+      );
     }
 
     return null;
@@ -228,8 +279,10 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
       hasNotes: !!firstLine,
       hasTags: (tags?.length ?? 0) > 0,
       imageCount: thumbRefs?.length ?? 0,
+      imageSizes: galleryImageSizes,
     },
     imageMode,
+    contentWidth,
   );
 
   return (

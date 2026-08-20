@@ -47,10 +47,24 @@ export const ROW_METRICS = {
   thumbnailMedium: 100,
   /** gap under the horizontal thumbnail strip */
   thumbnailStripMargin: 15,
+  /** gap under the large-mode gallery */
+  galleryMarginBottom: 15,
 
   /** contentContainerStyle paddingTop on the list itself */
   listPaddingTop: 10,
+  /** contentContainerStyle paddingHorizontal on the list itself */
+  listPaddingHorizontal: 20,
 } as const;
+
+/**
+ * How wide a row's content is, given the screen width.
+ *
+ * The list pads its sides, and the card pads its own. Both the row and the
+ * height table work from this, so the gallery is laid out at the width its
+ * height was calculated for.
+ */
+export const rowContentWidth = (screenWidth: number): number =>
+  Math.max(0, screenWidth - ROW_METRICS.listPaddingHorizontal * 2 - ROW_METRICS.padding * 2);
 
 export const TAG_ROW_HEIGHT = ROW_METRICS.tags.lineHeight + ROW_METRICS.tags.paddingVertical * 2;
 
@@ -80,7 +94,37 @@ export interface RowShape {
   hasTags: boolean;
   /** Thumbnails available for the small and medium modes. */
   imageCount: number;
+  /**
+   * Natural sizes of the row's images, in order, for the large mode.
+   *
+   * Null when any of them is still unknown, because the gallery takes the
+   * height of its tallest image and one unmeasured image can be the tallest.
+   */
+  imageSizes?: { width: number; height: number }[] | null;
 }
+
+/**
+ * How tall the large-mode gallery will be.
+ *
+ * Each image fills the width, scaled down to fit but never up, and the gallery
+ * takes the height of the tallest so that paging between them does not make
+ * the card jump. This mirrors `fitToWidth`, which is what the gallery uses.
+ */
+export const galleryHeightFor = (
+  imageSizes: { width: number; height: number }[],
+  contentWidth: number,
+): number | null => {
+  if (contentWidth <= 0 || imageSizes.length === 0) return null;
+
+  let tallest = 0;
+  for (const size of imageSizes) {
+    if (!size || size.width <= 0 || size.height <= 0) return null;
+    const scale = size.width > contentWidth ? contentWidth / size.width : 1;
+    tallest = Math.max(tallest, Math.round(size.height * scale));
+  }
+
+  return tallest > 0 ? tallest : null;
+};
 
 const textBlockHeight = (shape: RowShape): number => {
   const { index, date, duration, sinceLast, notes, tags } = ROW_METRICS;
@@ -98,17 +142,33 @@ const textBlockHeight = (shape: RowShape): number => {
 /**
  * The row's height, or null when it cannot be known ahead of time.
  *
- * "large" mode is the null case: the gallery sizes itself from the aspect
- * ratios of images that have not been read yet. That mode shows one or two
- * rows per screen, so leaving it to measurement costs little.
+ * The null case is a large-mode row whose image sizes have not been learned
+ * yet. Such a row is measured the old way and reports what it found, so it is
+ * only unknown the first time it is seen.
  */
-export const entryRowHeight = (shape: RowShape, mode: ImageMode): number | null => {
-  if (mode === 'large' && shape.imageCount > 0) return null;
-
-  const { padding, buttonsHeight, thumbnailSmall, thumbnailMedium, thumbnailStripMargin } =
-    ROW_METRICS;
+export const entryRowHeight = (
+  shape: RowShape,
+  mode: ImageMode,
+  contentWidth = 0,
+): number | null => {
+  const {
+    padding,
+    buttonsHeight,
+    thumbnailSmall,
+    thumbnailMedium,
+    thumbnailStripMargin,
+    galleryMarginBottom,
+  } = ROW_METRICS;
 
   const text = Math.max(textBlockHeight(shape), buttonsHeight);
+
+  if (mode === 'large' && shape.imageCount > 0) {
+    if (!shape.imageSizes) return null;
+    const gallery = galleryHeightFor(shape.imageSizes, contentWidth);
+    if (gallery === null) return null;
+    return padding * 2 + gallery + galleryMarginBottom + text;
+  }
+
   const thumbnail = mode === 'medium' ? thumbnailMedium : thumbnailSmall;
   const showsThumbnails = (mode === 'small' || mode === 'medium') && shape.imageCount > 0;
 
@@ -139,13 +199,14 @@ export interface SizedRow {
 export const buildItemLayout = (
   rows: SizedRow[],
   mode: ImageMode,
+  contentWidth = 0,
 ): ((data: unknown, index: number) => { length: number; offset: number; index: number }) | null => {
   const lengths: number[] = [];
   const offsets: number[] = [];
   let cursor = ROW_METRICS.listPaddingTop;
 
   for (const row of rows) {
-    const height = entryRowHeight(row.shape, mode);
+    const height = entryRowHeight(row.shape, mode, contentWidth);
     if (height === null) return null;
 
     // The cell the list measures includes the row's bottom margin.

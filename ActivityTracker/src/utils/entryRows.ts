@@ -15,6 +15,29 @@ import {
   hasSinceLastFor,
   notesFirstLine,
 } from './entryRowLayout';
+import { knownDimensions } from './imageDimensions';
+import { ImageSize } from './jpegSize';
+
+/** Looks up an image's natural size, or null if it is not known yet. */
+export type DimensionLookup = (ref: string) => ImageSize | null;
+
+/**
+ * Sizes for a row's full-size images, or null if any of them is unknown.
+ *
+ * All or nothing: the gallery is as tall as its tallest image, so one
+ * unmeasured image could be the one that decides the height.
+ */
+const imageSizesFor = (refs: string[] | undefined, lookup: DimensionLookup) => {
+  if (!refs || refs.length === 0) return null;
+
+  const sizes: ImageSize[] = [];
+  for (const ref of refs) {
+    const size = lookup(ref);
+    if (!size) return null;
+    sizes.push(size);
+  }
+  return sizes;
+};
 
 export interface EntryRow {
   entry: ListEntry;
@@ -40,11 +63,18 @@ export interface EntryRow {
  * run over the matching entries rather than the whole history — working out a
  * row's true position under a filter would need a separate query per row.
  */
-export const buildEntryRows = (entries: ListEntry[], total: number): EntryRow[] => {
+export const buildEntryRows = (
+  entries: ListEntry[],
+  total: number,
+  lookup: DimensionLookup = knownDimensions,
+): EntryRow[] => {
   const highest = Math.max(total, entries.length);
 
   return entries.map((entry, index) => {
     const previousEndDate = entries[index + 1]?.endDate;
+    // The gallery shows the full-size images, falling back to thumbnails for
+    // older rows that only carry those.
+    const galleryRefs = entry.images?.length ? entry.images : entry.thumbnails;
 
     return {
       entry,
@@ -60,6 +90,7 @@ export const buildEntryRows = (entries: ListEntry[], total: number): EntryRow[] 
         // Thumbnails and full images address the same photos; either list
         // gives the count, and older rows may only have one of them.
         imageCount: entry.thumbnails?.length || entry.images?.length || 0,
+        imageSizes: imageSizesFor(galleryRefs, lookup),
       },
     };
   });

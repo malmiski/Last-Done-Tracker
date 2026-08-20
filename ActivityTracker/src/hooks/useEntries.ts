@@ -9,8 +9,24 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityEntry, Tag } from '../data/activity-details';
 import * as database from '../utils/database';
+import { loadDimensionsFor } from '../utils/imageDimensions';
 
 export const PAGE_SIZE = 30;
+
+/**
+ * Pull in whatever is known about a page's images.
+ *
+ * Done once per page rather than per row, so the list can work out how tall
+ * each row will be before it renders any of them. Deliberately not awaited by
+ * the caller: entries should appear as soon as they load, and the sizes arrive
+ * a moment later to refine the layout.
+ */
+const prefetchDimensions = (entries: ListEntry[]) => {
+  const refs = entries.flatMap(entry =>
+    entry.images?.length ? entry.images : (entry.thumbnails ?? []),
+  );
+  if (refs.length > 0) void loadDimensionsFor(refs);
+};
 
 /** Debounce search so typing does not fire a query per keystroke. */
 const SEARCH_DEBOUNCE_MS = 250;
@@ -68,6 +84,7 @@ export const useEntries = (
         offsetRef.current = page.length;
         setEntries(page);
         setTotal(count);
+        prefetchDimensions(page);
       } catch (error) {
         console.error('Failed to load entries', error);
         if (requestId.current === token) {
@@ -117,6 +134,7 @@ export const useEntries = (
         // A search or refresh started while this page was in flight.
         if (requestId.current !== token) return;
         offsetRef.current += page.length;
+        prefetchDimensions(page);
         setEntries(previous => {
           // Defend against duplicates if rows shifted between pages.
           const seen = new Set(previous.map(entry => entry.id));

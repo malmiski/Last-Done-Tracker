@@ -36,6 +36,24 @@ interface LargeImageGalleryProps {
   entryId?: string;
   /** Fixed height override. Omit to size to the tallest image. */
   height?: number;
+  /**
+   * Width to lay out at, when the caller already knows it.
+   *
+   * Supplying it skips the measure-then-resize that onLayout would otherwise
+   * cause. In the entry list the caller has to know this anyway, because it
+   * computed the row's height from it.
+   */
+  width?: number;
+  /**
+   * Natural sizes of the images, in order, when they are already known.
+   *
+   * With these the gallery never reads a header and never changes size after
+   * mounting. Without them it measures as before and reports what it found
+   * through `onMeasured`, so the next time this row is laid out its height is
+   * known in advance.
+   */
+  imageSizes?: ImageSize[] | null;
+  onMeasured?: (ref: string, size: ImageSize) => void;
   /** Page to open on first render. */
   initialIndex?: number;
 }
@@ -47,18 +65,40 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({
   imageRefs,
   entryId,
   height: fixedHeight,
+  width: fixedWidth,
+  imageSizes,
+  onMeasured,
   initialIndex = 0,
 }) => {
   const { width: screenWidth } = useWindowDimensions();
-  const initialWidth = Platform.OS === 'web' ? Math.max(0, screenWidth - 40) : 0;
-  const [containerWidth, setContainerWidth] = useState<number>(initialWidth);
+  const initialWidth = fixedWidth ?? (Platform.OS === 'web' ? Math.max(0, screenWidth - 40) : 0);
+  const [measuredWidth, setMeasuredWidth] = useState<number>(initialWidth);
+  const containerWidth = fixedWidth ?? measuredWidth;
   const [sizes, setSizes] = useState<Record<number, ImageSize>>({});
   const [currentIndex, setCurrentIndex] = useState(initialIndex);
   const listRef = useRef<FlatList<string>>(null);
 
+  /**
+   * Sizes supplied by the caller, scaled to the width we are laying out at.
+   *
+   * When these are present the measuring effect below never runs, so the
+   * gallery is the right height on its very first frame. That is the whole
+   * point: a gallery that resizes after mounting changes the height of the
+   * list row containing it, and the list then has to move everything below.
+   */
+  const providedSizes = useMemo(() => {
+    if (!imageSizes || imageSizes.length !== imageRefs.length || containerWidth <= 0) return null;
+    const scaled: Record<number, ImageSize> = {};
+    imageSizes.forEach((size, index) => {
+      scaled[index] = fitToWidth(size, containerWidth);
+    });
+    return scaled;
+  }, [imageSizes, imageRefs.length, containerWidth]);
+
   // Measure every image once the container width is known. Each measurement is
   // a bounded header read, so this stays cheap even for long galleries.
   useEffect(() => {
+    if (providedSizes) return;
     if (containerWidth <= 0 || imageRefs.length === 0) return;
 
     let cancelled = false;
@@ -75,6 +115,9 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({
 
         let scaled: ImageSize | null = null;
         if (natural) {
+          // Hand the natural size back so nothing has to read this header
+          // again — not this session, and not on the next launch.
+          onMeasured?.(ref, natural);
           scaled = fitToWidth(natural, containerWidth);
         } else {
           // No full-size file (an unusual, partially restored entry). The
@@ -98,15 +141,17 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [imageRefs, containerWidth]);
+  }, [imageRefs, containerWidth, providedSizes, onMeasured]);
+
+  const effectiveSizes = providedSizes ?? sizes;
 
   // The gallery is as tall as its tallest image, which is what keeps pages a
   // consistent height while swiping.
   const measuredHeight = useMemo(() => {
-    const values = Object.values(sizes);
+    const values = Object.values(effectiveSizes);
     if (values.length === 0) return FALLBACK_HEIGHT;
     return Math.max(...values.map(size => size.height));
-  }, [sizes]);
+  }, [effectiveSizes]);
 
   const galleryHeight = fixedHeight ?? measuredHeight;
 
@@ -133,7 +178,7 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({
   const renderItem = useCallback(
     ({ item, index }: ListRenderItemInfo<string>) => {
       // Fall back to filling the page when a file could not be measured.
-      const size = sizes[index] ?? { width: containerWidth, height: galleryHeight };
+      const size = effectiveSizes[index] ?? { width: containerWidth, height: galleryHeight };
       return (
         <View
           style={{
@@ -155,7 +200,7 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({
         </View>
       );
     },
-    [containerWidth, currentIndex, entryId, galleryHeight, sizes],
+    [containerWidth, currentIndex, entryId, galleryHeight, effectiveSizes],
   );
 
   // Every page is exactly containerWidth wide, so the list can position items
@@ -172,7 +217,17 @@ const LargeImageGallery: React.FC<LargeImageGalleryProps> = ({
   return (
     <View
       style={[styles.container, { height: galleryHeight }]}
-      onLayout={event => setContainerWidth(event.nativeEvent.layout.width)}
+      // Only measures when the caller has not already told us the width.
+      // Rounding stops a sub-pixel layout report from setting state, which
+      // would re-render, re-measure and set it again.
+      onLayout={
+        fixedWidth !== undefined
+          ? undefined
+          : event => {
+              const next = Math.round(event.nativeEvent.layout.width);
+              setMeasuredWidth(previous => (previous === next ? previous : next));
+            }
+      }
     >
       {containerWidth > 0 && (
         <FlatList
