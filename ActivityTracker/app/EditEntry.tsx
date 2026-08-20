@@ -13,6 +13,8 @@ import { importImage, importBase64Image } from '../src/utils/imageUtils';
 import * as imageStore from '../src/utils/imageStore';
 import { deleteUnreferencedRefs } from '../src/utils/imageOwnership';
 import { trimmedRows } from '../src/utils/blackBorders';
+import { CaptureRange, captureRange, exifDateFromTags, readExifDate } from '../src/utils/exifDate';
+import { readSourceHeader } from '../src/utils/sourceBytes';
 import {
   copyEntryToClipboard,
   mergeImageRefs,
@@ -23,6 +25,18 @@ import {
 import AppImage, { clearImageMemoryCache } from '../src/components/AppImage';
 import LargeImageGallery from '../src/components/LargeImageGallery';
 import Toast, { useToast } from '../src/components/Toast';
+
+/** Matches how timestamps read in the activity history. */
+const formatStamp = (date: Date) =>
+  date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  });
 
 /** A photo row in the editor. Holds a reference, never image data. */
 interface PhotoDraft {
@@ -98,6 +112,13 @@ const EditEntryScreen: React.FC = () => {
   const [notes, setNotes] = useState('');
   const [photos, setPhotos] = useState<PhotoDraft[]>([]);
   const [importing, setImporting] = useState(false);
+  /**
+   * Capture dates found in the last batch of picked photos, offered but not
+   * applied. Nothing is changed until the banner's button is pressed: guessing
+   * a user's start and end times from file metadata is a suggestion, not a
+   * correction.
+   */
+  const [captureDates, setCaptureDates] = useState<CaptureRange | null>(null);
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
   // Copy and paste change nothing visible on their own, so they confirm
   // themselves with a brief pill under the header buttons.
@@ -348,6 +369,28 @@ const EditEntryScreen: React.FC = () => {
     }
   };
 
+  /**
+   * When was this photo taken?
+   *
+   * Two sources because the platforms differ: native pickers parse the EXIF
+   * for us when asked, while the web picker hands back a blob URL and no
+   * metadata at all, so there we read the file's own header. Either way only
+   * the header is touched — the photo is never pulled onto the heap for this.
+   *
+   * Returns null for the common case of an image with no capture date, which
+   * is most screenshots and anything that has been through a re-encode.
+   */
+  const captureDateOf = async (asset: ImagePicker.ImagePickerAsset): Promise<Date | null> => {
+    try {
+      const fromTags = exifDateFromTags((asset as any).exif);
+      if (fromTags) return fromTags;
+      return readExifDate(await readSourceHeader(asset.uri));
+    } catch {
+      // Metadata is a convenience; never let it break an import.
+      return null;
+    }
+  };
+
   const pickImage = async (replaceIndex: number = -1) => {
     const isMultiple = replaceIndex === -1;
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -355,22 +398,27 @@ const EditEntryScreen: React.FC = () => {
       allowsEditing: !isMultiple,
       allowsMultipleSelection: isMultiple,
       quality: 1,
+      // Asks the native picker to parse the capture date for us.
+      exif: true,
     });
 
     if (!result.canceled && result.assets && result.assets.length > 0) {
       setImporting(true);
       try {
-        if (isMultiple) {
-          // Sequential, not Promise.all: parallel decodes of several 12MP
-          // photos is exactly the spike we are trying to avoid.
-          for (const asset of result.assets) {
-            if (asset.uri) {
-              await handleImageInput(asset.uri, -1);
-            }
-          }
-        } else {
-          await handleImageInput(result.assets[0].uri, replaceIndex);
+        const assets = isMultiple ? result.assets : result.assets.slice(0, 1);
+        const taken: (Date | null)[] = [];
+
+        // Sequential, not Promise.all: parallel decodes of several 12MP
+        // photos is exactly the spike we are trying to avoid.
+        for (const asset of assets) {
+          if (!asset.uri) continue;
+          await handleImageInput(asset.uri, isMultiple ? -1 : replaceIndex);
+          taken.push(await captureDateOf(asset));
         }
+
+        // Replaces any earlier suggestion, and clears it when this batch has
+        // no dates — an offer about photos you no longer have is just noise.
+        setCaptureDates(captureRange(taken));
       } finally {
         setImporting(false);
       }
@@ -443,6 +491,15 @@ const EditEntryScreen: React.FC = () => {
     setEndMinute(date.getMinutes().toString().padStart(2, '0'));
     setEndSecond(date.getSeconds().toString().padStart(2, '0'));
     setEndAmpm(endAmpmVal);
+  };
+
+  /** Take the suggestion: earliest photo becomes the start, latest the end. */
+  const applyCaptureDates = () => {
+    if (!captureDates) return;
+    updateStartStates(captureDates.start);
+    updateEndStates(captureDates.end);
+    setCaptureDates(null);
+    showToast('Times updated', 'Start and end taken from the photo metadata.', 'success');
   };
 
   const adjustStartTime = (minutes: number) => {
@@ -712,6 +769,50 @@ const EditEntryScreen: React.FC = () => {
       <Toast toast={toast} onHide={hideToast} />
 
       <ScrollView style={styles.content}>
+        {/*
+          Sits directly above the fields it would change, so the suggestion and
+          its effect are visible at the same time. Nothing happens until "Use
+          these" is pressed.
+        */}
+        {captureDates && (
+          <View style={styles.captureBanner}>
+            <Icon name="camera-outline" size={20} color={theme.colors.primary} />
+            <View style={styles.captureBannerBody}>
+              <Text style={styles.captureBannerTitle}>
+                {captureDates.start.getTime() === captureDates.end.getTime()
+                  ? 'Photo taken'
+                  : 'Photos taken'}
+              </Text>
+              {captureDates.start.getTime() === captureDates.end.getTime() ? (
+                <Text style={styles.captureBannerLine}>{formatStamp(captureDates.start)}</Text>
+              ) : (
+                <>
+                  <Text style={styles.captureBannerLine}>
+                    Start: {formatStamp(captureDates.start)}
+                  </Text>
+                  <Text style={styles.captureBannerLine}>
+                    End: {formatStamp(captureDates.end)}
+                  </Text>
+                </>
+              )}
+            </View>
+            <TouchableOpacity
+              onPress={applyCaptureDates}
+              style={styles.captureApplyButton}
+              accessibilityLabel="Use the photo capture times for start and end"
+            >
+              <Text style={styles.captureApplyText}>Use these</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setCaptureDates(null)}
+              style={styles.captureDismissButton}
+              accessibilityLabel="Dismiss photo capture times"
+            >
+              <Icon name="close" size={20} color={theme.colors.subtext} />
+            </TouchableOpacity>
+          </View>
+        )}
+
         <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionLabel}>Start Date & Time</Text>
             <View style={styles.quickActions}>
@@ -1222,6 +1323,45 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  captureBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: theme.colors.card,
+    borderWidth: 1,
+    borderColor: theme.colors.primary,
+    borderRadius: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 12,
+  },
+  captureBannerBody: {
+    flex: 1,
+  },
+  captureBannerTitle: {
+    color: theme.colors.text,
+    fontSize: 15,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  captureBannerLine: {
+    color: theme.colors.subtext,
+    fontSize: 13,
+  },
+  captureApplyButton: {
+    backgroundColor: theme.colors.primary,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  captureApplyText: {
+    color: theme.colors.background,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  captureDismissButton: {
+    padding: 4,
   },
   sectionLabel: {
     color: theme.colors.primary,
