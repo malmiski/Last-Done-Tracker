@@ -45,8 +45,35 @@ const timestamp = () => new Date().toISOString().slice(0, 10);
  * ------------------------------------------------------------------ */
 
 export const exportBundle = async (onProgress?: ProgressCallback): Promise<string | null> => {
+  let fileHandle: FileSystemFileHandle | null = null;
+  let writable: FileSystemWritableFileStream | null = null;
+
+  try {
+    if (navigator.storage && navigator.storage.getDirectory) {
+      const root = await navigator.storage.getDirectory();
+
+      // Clean up previous drafts
+      try {
+        // @ts-expect-error values() iterator is not fully typed in DOM lib
+        for await (const [name, handle] of root.entries()) {
+          if (name.startsWith('draft-') && name.endsWith('.zip')) {
+            await root.removeEntry(name);
+          }
+        }
+      } catch (cleanupError) {
+        console.warn('Failed to clean up old OPFS drafts', cleanupError);
+      }
+
+      fileHandle = await root.getFileHandle(`draft-${Date.now()}.zip`, { create: true });
+      writable = await fileHandle.createWritable();
+    }
+  } catch (error) {
+    console.warn('OPFS not available, falling back to memory chunks', error);
+  }
+
   const chunks: Uint8Array[] = [];
   let failed: Error | null = null;
+  let pendingWrite = Promise.resolve();
 
   // The Zip callback fires as output is produced; `finished` resolves when
   // fflate signals the final chunk, which is when the Blob can be assembled.
@@ -63,8 +90,26 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
       signalError(error);
       return;
     }
-    if (chunk && chunk.length > 0) chunks.push(chunk);
-    if (final) signalDone();
+    if (chunk && chunk.length > 0) {
+      if (writable) {
+        pendingWrite = pendingWrite.then(() => writable!.write(chunk)).catch(e => {
+          signalError(e);
+          throw e;
+        });
+      } else {
+        chunks.push(chunk);
+      }
+    }
+    if (final) {
+      if (writable) {
+        pendingWrite = pendingWrite.then(() => writable!.close()).then(signalDone).catch(e => {
+          signalError(e);
+          throw e;
+        });
+      } else {
+        signalDone();
+      }
+    }
   });
 
   try {
@@ -145,14 +190,20 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
     zip.end();
     await finished;
 
-    // Each chunk is its own Blob part: the constructor never needs one
-    // contiguous allocation, so a large archive does not have to fit in a
-    // single buffer.
-    const blob = new Blob(chunks.map(chunk => chunk.slice().buffer), { type: 'application/zip' });
-    // Release the chunk references now that the Blob owns the data.
-    chunks.length = 0;
+    let url: string;
+    if (fileHandle) {
+      const file = await fileHandle.getFile();
+      url = URL.createObjectURL(file);
+    } else {
+      // Each chunk is its own Blob part: the constructor never needs one
+      // contiguous allocation, so a large archive does not have to fit in a
+      // single buffer.
+      const blob = new Blob(chunks.map(chunk => chunk.slice().buffer), { type: 'application/zip' });
+      // Release the chunk references now that the Blob owns the data.
+      chunks.length = 0;
+      url = URL.createObjectURL(blob);
+    }
 
-    const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = `LastDoneTracker-${timestamp()}.zip`;
