@@ -46,7 +46,7 @@ interface UseEntriesResult {
 
 export const useEntries = (
   activityId: string | undefined,
-  { search = '', pageSize = PAGE_SIZE, filterStartDate, filterEndDate, filterTagIds }: { search?: string; pageSize?: number; filterStartDate?: number; filterEndDate?: number; filterTagIds?: string[] } = {},
+  { search = '', pageSize = PAGE_SIZE, filterStartDate, filterEndDate, filterTagIds, filterTagMode = 'OR' }: { search?: string; pageSize?: number; filterStartDate?: number; filterEndDate?: number; filterTagIds?: string[]; filterTagMode?: 'AND' | 'OR' } = {},
 ): UseEntriesResult => {
   const [entries, setEntries] = useState<ListEntry[]>([]);
   const [total, setTotal] = useState(0);
@@ -77,8 +77,8 @@ export const useEntries = (
       setLoading(true);
       try {
         const [page, count] = await Promise.all([
-          database.getEntriesPage(activityId, { limit, offset: 0, search: debouncedSearch, filterStartDate, filterEndDate, filterTagIds }),
-          database.countEntries(activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds),
+          database.getEntriesPage(activityId, { limit, offset: 0, search: debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode }),
+          database.countEntries(activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode),
         ]);
         if (requestId.current !== token) return;
         offsetRef.current = page.length;
@@ -95,7 +95,7 @@ export const useEntries = (
         if (requestId.current === token) setLoading(false);
       }
     },
-    [activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds],
+    [activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode],
   );
 
   const loadFirstPage = useCallback(() => loadWindow(pageSize), [loadWindow, pageSize]);
@@ -133,6 +133,7 @@ export const useEntries = (
           filterStartDate,
           filterEndDate,
           filterTagIds,
+          filterTagMode,
         });
         // A search or refresh started while this page was in flight.
         if (requestId.current !== token) return;
@@ -149,7 +150,7 @@ export const useEntries = (
         if (requestId.current === token) setLoadingMore(false);
       }
     })();
-  }, [activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds, loading, loadingMore, pageSize, total]);
+  }, [activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode, loading, loadingMore, pageSize, total]);
 
   /** Drop a row locally without refetching the whole list. */
   const removeEntry = useCallback((entryId: string) => {

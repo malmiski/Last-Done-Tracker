@@ -53,6 +53,7 @@ const ActivityDetailScreen: React.FC = () => {
   const [filterStartDate, setFilterStartDate] = useState<number | undefined>();
   const [filterEndDate, setFilterEndDate] = useState<number | undefined>();
   const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
+  const [filterTagMode, setFilterTagMode] = useState<'AND' | 'OR'>('OR');
 
   // Filter UI states
   const [fYear, setFYear] = useState('');
@@ -70,6 +71,7 @@ const ActivityDetailScreen: React.FC = () => {
   const [fEndAmpm, setFEndAmpm] = useState('PM');
 
   const [fSelectedTagIds, setFSelectedTagIds] = useState<string[]>([]);
+  const [fTagMode, setFTagMode] = useState<'AND' | 'OR'>('OR');
 
   // Sync applied filters to UI state when modal opens
   const openFilterModal = () => {
@@ -104,15 +106,23 @@ const ActivityDetailScreen: React.FC = () => {
     }
 
     setFSelectedTagIds(filterTagIds);
+    setFTagMode(filterTagMode);
     setIsFilterModalVisible(true);
   };
 
   const getFullDate = (y: string, m: string, d: string, h: string, min: string, ampmVal: string) => {
-    if (!y || !m || !d || !h || !min) return undefined;
-    let hours = parseInt(h, 10);
-    if (ampmVal.toUpperCase() === 'PM' && hours < 12) hours += 12;
+    if (!y && !m && !d && !h && !min) return undefined;
+
+    let hours = h ? parseInt(h, 10) : 0;
+    if (ampmVal.toUpperCase() === 'PM' && hours > 0 && hours < 12) hours += 12;
     if (ampmVal.toUpperCase() === 'AM' && hours === 12) hours = 0;
-    return new Date(parseInt(y, 10), parseInt(m, 10) - 1, parseInt(d, 10), hours, parseInt(min, 10), 0).getTime();
+
+    const parsedY = y ? parseInt(y, 10) : 0;
+    const parsedM = m ? parseInt(m, 10) - 1 : 0; // JS months are 0-indexed
+    const parsedD = d ? parseInt(d, 10) : 1;
+    const parsedMin = min ? parseInt(min, 10) : 0;
+
+    return new Date(parsedY, parsedM, parsedD, hours, parsedMin, 0).getTime();
   };
 
   const applyFilters = () => {
@@ -122,6 +132,7 @@ const ActivityDetailScreen: React.FC = () => {
     setFilterStartDate(start);
     setFilterEndDate(end);
     setFilterTagIds(fSelectedTagIds);
+    setFilterTagMode(fTagMode);
     setIsFilterModalVisible(false);
   };
 
@@ -129,6 +140,7 @@ const ActivityDetailScreen: React.FC = () => {
     setFilterStartDate(undefined);
     setFilterEndDate(undefined);
     setFilterTagIds([]);
+    setFilterTagMode('OR');
     setIsFilterModalVisible(false);
   };
 
@@ -145,7 +157,7 @@ const ActivityDetailScreen: React.FC = () => {
     loadMore,
     refresh,
     removeEntry,
-  } = useEntries(activityId, { search: searchQuery, filterStartDate, filterEndDate, filterTagIds });
+  } = useEntries(activityId, { search: searchQuery, filterStartDate, filterEndDate, filterTagIds, filterTagMode });
 
   const flatListRef = useRef<FlatList<EntryRow>>(null);
   const pendingRandomIndex = useRef<number | null>(null);
@@ -414,9 +426,19 @@ const ActivityDetailScreen: React.FC = () => {
                 </View>
               </View>
 
-              <Text style={[styles.sectionLabel, { marginTop: 20 }]}>Filter Tags</Text>
+              <View style={[styles.sectionHeaderRow, { marginTop: 20, marginBottom: 10 }]}>
+                <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>Filter Tags</Text>
+                <View style={styles.tagModeToggle}>
+                  <TouchableOpacity style={[styles.tagModeButton, fTagMode === 'OR' && styles.tagModeButtonActive]} onPress={() => setFTagMode('OR')}>
+                    <Text style={[styles.tagModeText, fTagMode === 'OR' && styles.tagModeTextActive]}>Match ANY</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.tagModeButton, fTagMode === 'AND' && styles.tagModeButtonActive]} onPress={() => setFTagMode('AND')}>
+                    <Text style={[styles.tagModeText, fTagMode === 'AND' && styles.tagModeTextActive]}>Match ALL</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
               <View style={styles.tagGrid}>
-                {allTags.map(tag => {
+                {(allTags || []).map(tag => {
                   const isSelected = fSelectedTagIds.includes(tag.id);
                   return (
                     <TouchableOpacity
@@ -632,6 +654,32 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   ampmTextActive: {
+    color: theme.colors.background,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  tagModeToggle: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.card,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  tagModeButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  tagModeButtonActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  tagModeText: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  tagModeTextActive: {
     color: theme.colors.background,
   },
   tagGrid: {

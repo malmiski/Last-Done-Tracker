@@ -295,6 +295,7 @@ const collectEntries = async (
     filterStartDate,
     filterEndDate,
     filterTagIds,
+    filterTagMode = 'OR',
   }: {
     activityId?: string;
     limit: number;
@@ -304,6 +305,7 @@ const collectEntries = async (
     filterStartDate?: number;
     filterEndDate?: number;
     filterTagIds?: string[];
+    filterTagMode?: 'AND' | 'OR';
   },
 ): Promise<(ActivityEntry & { activityId: string })[]> => {
   const term = search?.trim().toLowerCase();
@@ -311,11 +313,28 @@ const collectEntries = async (
   let skipped = 0;
   let finalEntryIds = entryIds;
   if (filterTagIds && filterTagIds.length > 0) {
-    const idsFromTags = await entryIdsForTags(database, filterTagIds);
-    if (!finalEntryIds) {
-      finalEntryIds = idsFromTags;
+    if (filterTagMode === 'AND') {
+      let currentIntersection: Set<string> | undefined;
+      for (const tagId of filterTagIds) {
+        const idsForThisTag = await entryIdsForTags(database, [tagId]);
+        if (!currentIntersection) {
+          currentIntersection = idsForThisTag;
+        } else {
+          currentIntersection = new Set([...currentIntersection].filter((x: string) => idsForThisTag.has(x)));
+        }
+      }
+      if (!finalEntryIds) {
+        finalEntryIds = currentIntersection;
+      } else if (currentIntersection) {
+        finalEntryIds = new Set([...finalEntryIds].filter((x: string) => currentIntersection!.has(x)));
+      }
     } else {
-      finalEntryIds = new Set([...finalEntryIds].filter(x => idsFromTags.has(x)));
+      const idsFromTags = await entryIdsForTags(database, filterTagIds);
+      if (!finalEntryIds) {
+        finalEntryIds = idsFromTags;
+      } else {
+        finalEntryIds = new Set([...finalEntryIds].filter((x: string) => idsFromTags.has(x)));
+      }
     }
   }
 
@@ -470,24 +489,36 @@ export interface EntryPageOptions {
   filterStartDate?: number;
   filterEndDate?: number;
   filterTagIds?: string[];
+  filterTagMode?: 'AND' | 'OR';
 }
 
 export const getEntriesPage = async (
   activityId: string,
-  { limit = DEFAULT_PAGE_SIZE, offset = 0, search, filterStartDate, filterEndDate, filterTagIds }: EntryPageOptions = {},
+  { limit = DEFAULT_PAGE_SIZE, offset = 0, search, filterStartDate, filterEndDate, filterTagIds, filterTagMode = 'OR' }: EntryPageOptions = {},
 ): Promise<(ActivityEntry & { activityId: string })[]> => {
   const database = await getDb();
-  const entries = await collectEntries(database, { activityId, limit, offset, search, filterStartDate, filterEndDate, filterTagIds });
+  const entries = await collectEntries(database, { activityId, limit, offset, search, filterStartDate, filterEndDate, filterTagIds, filterTagMode });
   await attachTags(database, entries);
   return entries;
 };
 
-export const countEntries = async (activityId: string, search?: string, filterStartDate?: number, filterEndDate?: number, filterTagIds?: string[]): Promise<number> => {
+export const countEntries = async (activityId: string, search?: string, filterStartDate?: number, filterEndDate?: number, filterTagIds?: string[], filterTagMode: 'AND' | 'OR' = 'OR'): Promise<number> => {
   const database = await getDb();
   const term = search?.trim().toLowerCase();
   let finalEntryIds: Set<string> | undefined = undefined;
   if (filterTagIds && filterTagIds.length > 0) {
-    finalEntryIds = await entryIdsForTags(database, filterTagIds);
+    if (filterTagMode === 'AND') {
+      for (const tagId of filterTagIds) {
+        const idsForThisTag = await entryIdsForTags(database, [tagId]);
+        if (!finalEntryIds) {
+          finalEntryIds = idsForThisTag;
+        } else {
+          finalEntryIds = new Set([...finalEntryIds].filter((x: string) => idsForThisTag.has(x)));
+        }
+      }
+    } else {
+      finalEntryIds = await entryIdsForTags(database, filterTagIds);
+    }
   }
 
   return new Promise((resolve, reject) => {
