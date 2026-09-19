@@ -292,17 +292,32 @@ const collectEntries = async (
     offset,
     search,
     entryIds,
+    filterStartDate,
+    filterEndDate,
+    filterTagIds,
   }: {
     activityId?: string;
     limit: number;
     offset: number;
     search?: string;
     entryIds?: Set<string>;
+    filterStartDate?: number;
+    filterEndDate?: number;
+    filterTagIds?: string[];
   },
 ): Promise<(ActivityEntry & { activityId: string })[]> => {
   const term = search?.trim().toLowerCase();
   const results: (ActivityEntry & { activityId: string })[] = [];
   let skipped = 0;
+  let finalEntryIds = entryIds;
+  if (filterTagIds && filterTagIds.length > 0) {
+    const idsFromTags = await entryIdsForTags(database, filterTagIds);
+    if (!finalEntryIds) {
+      finalEntryIds = idsFromTags;
+    } else {
+      finalEntryIds = new Set([...finalEntryIds].filter(x => idsFromTags.has(x)));
+    }
+  }
 
   await new Promise<void>((resolve, reject) => {
     const tx = database.transaction(ENTRIES_STORE, 'readonly');
@@ -323,10 +338,13 @@ const collectEntries = async (
       if (!cursor || results.length >= limit) return resolve();
 
       const raw = cursor.value;
-      const matchesId = !entryIds || entryIds.has(raw.id);
+      const matchesId = !finalEntryIds || finalEntryIds.has(raw.id);
       const matchesTerm = !term || String(raw.notes ?? '').toLowerCase().includes(term);
+      const rawStartDate = new Date(raw.startDate ?? raw.date).getTime();
+      const matchesStartDate = !filterStartDate || rawStartDate >= filterStartDate;
+      const matchesEndDate = !filterEndDate || rawStartDate <= filterEndDate;
 
-      if (matchesId && matchesTerm) {
+      if (matchesId && matchesTerm && matchesStartDate && matchesEndDate) {
         if (skipped < offset) {
           skipped += 1;
         } else {
@@ -449,26 +467,34 @@ export interface EntryPageOptions {
   limit?: number;
   offset?: number;
   search?: string;
+  filterStartDate?: number;
+  filterEndDate?: number;
+  filterTagIds?: string[];
 }
 
 export const getEntriesPage = async (
   activityId: string,
-  { limit = DEFAULT_PAGE_SIZE, offset = 0, search }: EntryPageOptions = {},
+  { limit = DEFAULT_PAGE_SIZE, offset = 0, search, filterStartDate, filterEndDate, filterTagIds }: EntryPageOptions = {},
 ): Promise<(ActivityEntry & { activityId: string })[]> => {
   const database = await getDb();
-  const entries = await collectEntries(database, { activityId, limit, offset, search });
+  const entries = await collectEntries(database, { activityId, limit, offset, search, filterStartDate, filterEndDate, filterTagIds });
   await attachTags(database, entries);
   return entries;
 };
 
-export const countEntries = async (activityId: string, search?: string): Promise<number> => {
+export const countEntries = async (activityId: string, search?: string, filterStartDate?: number, filterEndDate?: number, filterTagIds?: string[]): Promise<number> => {
   const database = await getDb();
   const term = search?.trim().toLowerCase();
+  let finalEntryIds: Set<string> | undefined = undefined;
+  if (filterTagIds && filterTagIds.length > 0) {
+    finalEntryIds = await entryIdsForTags(database, filterTagIds);
+  }
+
   return new Promise((resolve, reject) => {
     const tx = database.transaction(ENTRIES_STORE, 'readonly');
     const index = tx.objectStore(ENTRIES_STORE).index('activityId');
 
-    if (!term) {
+    if (!term && !filterStartDate && !filterEndDate && (!filterTagIds || filterTagIds.length === 0)) {
       const request = index.count(activityId);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
@@ -480,7 +506,14 @@ export const countEntries = async (activityId: string, search?: string): Promise
     request.onsuccess = (event: any) => {
       const cursor = event.target.result as IDBCursorWithValue | null;
       if (!cursor) return resolve(count);
-      if (String(cursor.value.notes ?? '').toLowerCase().includes(term)) count += 1;
+      const raw = cursor.value;
+      const matchesId = !finalEntryIds || finalEntryIds.has(raw.id);
+      const matchesTerm = !term || String(raw.notes ?? '').toLowerCase().includes(term);
+      const rawStartDate = new Date(raw.startDate ?? raw.date).getTime();
+      const matchesStartDate = !filterStartDate || rawStartDate >= filterStartDate;
+      const matchesEndDate = !filterEndDate || rawStartDate <= filterEndDate;
+
+      if (matchesId && matchesTerm && matchesStartDate && matchesEndDate) count += 1;
       cursor.continue();
     };
     request.onerror = () => reject(request.error);
