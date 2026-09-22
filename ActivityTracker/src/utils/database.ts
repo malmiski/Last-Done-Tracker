@@ -362,6 +362,10 @@ export interface EntryPageOptions {
   limit?: number;
   offset?: number;
   search?: string;
+  filterStartDate?: number;
+  filterEndDate?: number;
+  filterTagIds?: string[];
+  filterTagMode?: 'AND' | 'OR';
 }
 
 /**
@@ -370,18 +374,39 @@ export interface EntryPageOptions {
  */
 export const getEntriesPage = async (
   activityId: string,
-  { limit = DEFAULT_PAGE_SIZE, offset = 0, search }: EntryPageOptions = {},
+  { limit = DEFAULT_PAGE_SIZE, offset = 0, search, filterStartDate, filterEndDate, filterTagIds, filterTagMode = 'OR' }: EntryPageOptions = {},
 ): Promise<(ActivityEntry & { activityId: string })[]> => {
   const db = await getDb();
   if (!db) return [];
 
   const term = search?.trim();
-  const where = term
-    ? 'WHERE entries.activityId = ? AND entries.notes LIKE ? ESCAPE \'\\\''
-    : 'WHERE entries.activityId = ?';
-  const params: any[] = term
-    ? [activityId, `%${escapeLike(term)}%`, limit, offset]
-    : [activityId, limit, offset];
+  let where = 'WHERE entries.activityId = ?';
+  const params: any[] = [activityId];
+
+  if (term) {
+    where += ' AND entries.notes LIKE ? ESCAPE \'\\\'';
+    params.push(`%${escapeLike(term)}%`);
+  }
+  if (filterStartDate) {
+    where += ' AND entries.startDate >= ?';
+    params.push(new Date(filterStartDate).toISOString());
+  }
+  if (filterEndDate) {
+    where += ' AND entries.startDate <= ?';
+    params.push(new Date(filterEndDate).toISOString());
+  }
+  if (filterTagIds && filterTagIds.length > 0) {
+    const placeholders = filterTagIds.map(() => '?').join(',');
+    if (filterTagMode === 'AND') {
+      where += ` AND entries.id IN (SELECT entryId FROM entry_tags WHERE tagId IN (${placeholders}) GROUP BY entryId HAVING COUNT(DISTINCT tagId) = ?)`;
+      params.push(...filterTagIds, filterTagIds.length);
+    } else {
+      where += ` AND entries.id IN (SELECT DISTINCT entryId FROM entry_tags WHERE tagId IN (${placeholders}))`;
+      params.push(...filterTagIds);
+    }
+  }
+
+  params.push(limit, offset);
 
   const rows = await db.getAllAsync<any>(
     `SELECT ${ENTRY_LIST_PROJECTION}
@@ -399,19 +424,40 @@ export const getEntriesPage = async (
 
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, match => `\\${match}`);
 
-export const countEntries = async (activityId: string, search?: string): Promise<number> => {
+export const countEntries = async (activityId: string, search?: string, filterStartDate?: number, filterEndDate?: number, filterTagIds?: string[], filterTagMode: 'AND' | 'OR' = 'OR'): Promise<number> => {
   const db = await getDb();
   if (!db) return 0;
   const term = search?.trim();
-  const result = term
-    ? await db.getFirstAsync<{ count: number }>(
-        'SELECT COUNT(*) as count FROM entries WHERE activityId = ? AND notes LIKE ? ESCAPE \'\\\'',
-        [activityId, `%${escapeLike(term)}%`],
-      )
-    : await db.getFirstAsync<{ count: number }>(
-        'SELECT COUNT(*) as count FROM entries WHERE activityId = ?',
-        [activityId],
-      );
+  let where = 'WHERE entries.activityId = ?';
+  const params: any[] = [activityId];
+
+  if (term) {
+    where += ' AND entries.notes LIKE ? ESCAPE \'\\\'';
+    params.push(`%${escapeLike(term)}%`);
+  }
+  if (filterStartDate) {
+    where += ' AND entries.startDate >= ?';
+    params.push(new Date(filterStartDate).toISOString());
+  }
+  if (filterEndDate) {
+    where += ' AND entries.startDate <= ?';
+    params.push(new Date(filterEndDate).toISOString());
+  }
+  if (filterTagIds && filterTagIds.length > 0) {
+    const placeholders = filterTagIds.map(() => '?').join(',');
+    if (filterTagMode === 'AND') {
+      where += ` AND entries.id IN (SELECT entryId FROM entry_tags WHERE tagId IN (${placeholders}) GROUP BY entryId HAVING COUNT(DISTINCT tagId) = ?)`;
+      params.push(...filterTagIds, filterTagIds.length);
+    } else {
+      where += ` AND entries.id IN (SELECT DISTINCT entryId FROM entry_tags WHERE tagId IN (${placeholders}))`;
+      params.push(...filterTagIds);
+    }
+  }
+
+  const result = await db.getFirstAsync<{ count: number }>(
+    `SELECT COUNT(*) as count FROM entries ${where}`,
+    params,
+  );
   return result?.count ?? 0;
 };
 

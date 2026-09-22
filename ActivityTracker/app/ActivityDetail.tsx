@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   View,
   useWindowDimensions,
+  Modal,
+  ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
@@ -42,9 +44,109 @@ const WINDOW_SIZE_BY_MODE: Record<ImageMode, number> = {
 const ActivityDetailScreen: React.FC = () => {
   const router = useRouter();
   const { activityId } = useLocalSearchParams<{ activityId: string }>();
-  const { getActivityById, addActivityEntry, deleteActivityEntry } = useActivityData();
+  const { getActivityById, addActivityEntry, deleteActivityEntry, tags: allTags } = useActivityData();
   const [imageMode, setImageMode] = useState<ImageMode>('small');
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Filter states
+  const [isFilterModalVisible, setIsFilterModalVisible] = useState(false);
+  const [filterStartDate, setFilterStartDate] = useState<number | undefined>();
+  const [filterEndDate, setFilterEndDate] = useState<number | undefined>();
+  const [filterTagIds, setFilterTagIds] = useState<string[]>([]);
+  const [filterTagMode, setFilterTagMode] = useState<'AND' | 'OR'>('OR');
+
+  // Filter UI states
+  const [fYear, setFYear] = useState('');
+  const [fMonth, setFMonth] = useState('');
+  const [fDay, setFDay] = useState('');
+  const [fHour, setFHour] = useState('');
+  const [fMinute, setFMinute] = useState('');
+  const [fAmpm, setFAmpm] = useState('AM');
+
+  const [fEndYear, setFEndYear] = useState('');
+  const [fEndMonth, setFEndMonth] = useState('');
+  const [fEndDay, setFEndDay] = useState('');
+  const [fEndHour, setFEndHour] = useState('');
+  const [fEndMinute, setFEndMinute] = useState('');
+  const [fEndAmpm, setFEndAmpm] = useState('PM');
+
+  const [fSelectedTagIds, setFSelectedTagIds] = useState<string[]>([]);
+  const [fTagMode, setFTagMode] = useState<'AND' | 'OR'>('OR');
+
+  // Sync applied filters to UI state when modal opens
+  const openFilterModal = () => {
+    if (filterStartDate) {
+      const start = new Date(filterStartDate);
+      setFYear(start.getFullYear().toString());
+      setFMonth((start.getMonth() + 1).toString());
+      setFDay(start.getDate().toString());
+      let hours = start.getHours();
+      setFAmpm(hours >= 12 ? 'PM' : 'AM');
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      setFHour(hours.toString());
+      setFMinute(start.getMinutes().toString().padStart(2, '0'));
+    } else {
+      setFYear(''); setFMonth(''); setFDay(''); setFHour(''); setFMinute(''); setFAmpm('AM');
+    }
+
+    if (filterEndDate) {
+      const end = new Date(filterEndDate);
+      setFEndYear(end.getFullYear().toString());
+      setFEndMonth((end.getMonth() + 1).toString());
+      setFEndDay(end.getDate().toString());
+      let hours = end.getHours();
+      setFEndAmpm(hours >= 12 ? 'PM' : 'AM');
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      setFEndHour(hours.toString());
+      setFEndMinute(end.getMinutes().toString().padStart(2, '0'));
+    } else {
+      setFEndYear(''); setFEndMonth(''); setFEndDay(''); setFEndHour(''); setFEndMinute(''); setFEndAmpm('PM');
+    }
+
+    setFSelectedTagIds(filterTagIds);
+    setFTagMode(filterTagMode);
+    setIsFilterModalVisible(true);
+  };
+
+  const getFullDate = (y: string, m: string, d: string, h: string, min: string, ampmVal: string) => {
+    if (!y && !m && !d && !h && !min) return undefined;
+
+    let hours = h ? parseInt(h, 10) : 0;
+    if (ampmVal.toUpperCase() === 'PM' && hours > 0 && hours < 12) hours += 12;
+    if (ampmVal.toUpperCase() === 'AM' && hours === 12) hours = 0;
+
+    const parsedY = y ? parseInt(y, 10) : 0;
+    const parsedM = m ? parseInt(m, 10) - 1 : 0; // JS months are 0-indexed
+    const parsedD = d ? parseInt(d, 10) : 1;
+    const parsedMin = min ? parseInt(min, 10) : 0;
+
+    return new Date(parsedY, parsedM, parsedD, hours, parsedMin, 0).getTime();
+  };
+
+  const applyFilters = () => {
+    const start = getFullDate(fYear, fMonth, fDay, fHour, fMinute, fAmpm);
+    const end = getFullDate(fEndYear, fEndMonth, fEndDay, fEndHour, fEndMinute, fEndAmpm);
+
+    setFilterStartDate(start);
+    setFilterEndDate(end);
+    setFilterTagIds(fSelectedTagIds);
+    setFilterTagMode(fTagMode);
+    setIsFilterModalVisible(false);
+  };
+
+  const clearFilters = () => {
+    setFilterStartDate(undefined);
+    setFilterEndDate(undefined);
+    setFilterTagIds([]);
+    setFilterTagMode('OR');
+    setIsFilterModalVisible(false);
+  };
+
+  const toggleTag = (tagId: string) => {
+    setFSelectedTagIds(prev => prev.includes(tagId) ? prev.filter(t => t !== tagId) : [...prev, tagId]);
+  };
 
   const {
     entries,
@@ -55,7 +157,7 @@ const ActivityDetailScreen: React.FC = () => {
     loadMore,
     refresh,
     removeEntry,
-  } = useEntries(activityId, { search: searchQuery });
+  } = useEntries(activityId, { search: searchQuery, filterStartDate, filterEndDate, filterTagIds, filterTagMode });
 
   const flatListRef = useRef<FlatList<EntryRow>>(null);
   const pendingRandomIndex = useRef<number | null>(null);
@@ -269,7 +371,105 @@ const ActivityDetailScreen: React.FC = () => {
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
+        <TouchableOpacity onPress={openFilterModal} style={styles.filterIcon} testID="filter-button">
+          <Icon name="filter-variant" size={24} color={theme.colors.text} />
+        </TouchableOpacity>
       </View>
+
+      <Modal visible={isFilterModalVisible} animationType="slide" transparent={true} onRequestClose={() => setIsFilterModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <ScrollView contentContainerStyle={styles.modalScroll}>
+              <Text style={styles.modalTitle}>Filter Entries</Text>
+
+              <Text style={styles.sectionLabel}>Start After</Text>
+              <View style={styles.inputRow}>
+                <TextInput style={styles.input} placeholder="MM" value={fMonth} onChangeText={setFMonth} keyboardType="number-pad" maxLength={2} />
+                <Text style={styles.separator}>/</Text>
+                <TextInput style={styles.input} placeholder="DD" value={fDay} onChangeText={setFDay} keyboardType="number-pad" maxLength={2} />
+                <Text style={styles.separator}>/</Text>
+                <TextInput style={[styles.input, {width: 80}]} placeholder="YYYY" value={fYear} onChangeText={setFYear} keyboardType="number-pad" maxLength={4} />
+              </View>
+              <View style={[styles.inputRow, { zIndex: 100 }]}>
+                <TextInput style={styles.input} placeholder="HH" value={fHour} onChangeText={setFHour} keyboardType="number-pad" maxLength={2} />
+                <Text style={styles.separator}>:</Text>
+                <TextInput style={styles.input} placeholder="MM" value={fMinute} onChangeText={setFMinute} keyboardType="number-pad" maxLength={2} />
+                <View style={styles.ampmContainer}>
+                    <TouchableOpacity style={[styles.ampmButton, fAmpm === 'AM' && styles.ampmButtonActive]} onPress={() => setFAmpm('AM')}>
+                        <Text style={[styles.ampmText, fAmpm === 'AM' && styles.ampmTextActive]}>AM</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.ampmButton, fAmpm === 'PM' && styles.ampmButtonActive]} onPress={() => setFAmpm('PM')}>
+                        <Text style={[styles.ampmText, fAmpm === 'PM' && styles.ampmTextActive]}>PM</Text>
+                    </TouchableOpacity>
+                </View>
+              </View>
+
+              <Text style={[styles.sectionLabel, { marginTop: 20 }]}>End Before</Text>
+              <View style={styles.inputRow}>
+                <TextInput style={styles.input} placeholder="MM" value={fEndMonth} onChangeText={setFEndMonth} keyboardType="number-pad" maxLength={2} />
+                <Text style={styles.separator}>/</Text>
+                <TextInput style={styles.input} placeholder="DD" value={fEndDay} onChangeText={setFEndDay} keyboardType="number-pad" maxLength={2} />
+                <Text style={styles.separator}>/</Text>
+                <TextInput style={[styles.input, {width: 80}]} placeholder="YYYY" value={fEndYear} onChangeText={setFEndYear} keyboardType="number-pad" maxLength={4} />
+              </View>
+              <View style={[styles.inputRow, { zIndex: 50 }]}>
+                <TextInput style={styles.input} placeholder="HH" value={fEndHour} onChangeText={setFEndHour} keyboardType="number-pad" maxLength={2} />
+                <Text style={styles.separator}>:</Text>
+                <TextInput style={styles.input} placeholder="MM" value={fEndMinute} onChangeText={setFEndMinute} keyboardType="number-pad" maxLength={2} />
+                <View style={styles.ampmContainer}>
+                    <TouchableOpacity style={[styles.ampmButton, fEndAmpm === 'AM' && styles.ampmButtonActive]} onPress={() => setFEndAmpm('AM')}>
+                        <Text style={[styles.ampmText, fEndAmpm === 'AM' && styles.ampmTextActive]}>AM</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.ampmButton, fEndAmpm === 'PM' && styles.ampmButtonActive]} onPress={() => setFEndAmpm('PM')}>
+                        <Text style={[styles.ampmText, fEndAmpm === 'PM' && styles.ampmTextActive]}>PM</Text>
+                    </TouchableOpacity>
+                </View>
+              </View>
+
+              <View style={[styles.sectionHeaderRow, { marginTop: 20, marginBottom: 10 }]}>
+                <Text style={[styles.sectionLabel, { marginBottom: 0 }]}>Filter Tags</Text>
+                <View style={styles.tagModeToggle}>
+                  <TouchableOpacity style={[styles.tagModeButton, fTagMode === 'OR' && styles.tagModeButtonActive]} onPress={() => setFTagMode('OR')}>
+                    <Text style={[styles.tagModeText, fTagMode === 'OR' && styles.tagModeTextActive]}>Match ANY</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.tagModeButton, fTagMode === 'AND' && styles.tagModeButtonActive]} onPress={() => setFTagMode('AND')}>
+                    <Text style={[styles.tagModeText, fTagMode === 'AND' && styles.tagModeTextActive]}>Match ALL</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+              <View style={styles.tagGrid}>
+                {(allTags || []).map(tag => {
+                  const isSelected = fSelectedTagIds.includes(tag.id);
+                  return (
+                    <TouchableOpacity
+                      key={tag.id}
+                      style={[
+                        styles.tagPill,
+                        { backgroundColor: tag.color },
+                        isSelected && styles.tagPillSelected
+                      ]}
+                      onPress={() => toggleTag(tag.id)}
+                    >
+                      <Text style={styles.tagPillText}>{tag.name}</Text>
+                      {isSelected && <Icon name="check" size={14} color="#FFFFFF" style={{ marginLeft: 5 }} />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ScrollView>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, styles.modalButtonCancel]} onPress={clearFilters}>
+                <Text style={styles.modalButtonCancelText}>Clear All</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalButton} onPress={applyFilters}>
+                <Text style={styles.modalButtonText}>Apply Filters</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       <FlatList
         ref={flatListRef}
         data={rows}
@@ -383,6 +583,156 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: 17,
     paddingVertical: 12,
+  },
+  filterIcon: {
+    marginLeft: 10,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: theme.colors.background,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    padding: 20,
+  },
+  modalScroll: {
+    paddingBottom: 20,
+  },
+  modalTitle: {
+    color: theme.colors.text,
+    fontSize: 22,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  sectionLabel: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 10,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  input: {
+    backgroundColor: theme.colors.card,
+    color: theme.colors.text,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    width: 60,
+    textAlign: 'center',
+  },
+  separator: {
+    color: theme.colors.subtext,
+    fontSize: 20,
+    marginHorizontal: 5,
+  },
+  ampmContainer: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.card,
+    borderRadius: 8,
+    overflow: 'hidden',
+    marginLeft: 10,
+  },
+  ampmButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+  },
+  ampmButtonActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  ampmText: {
+    color: theme.colors.subtext,
+    fontSize: 14,
+    fontWeight: 'bold',
+  },
+  ampmTextActive: {
+    color: theme.colors.background,
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  tagModeToggle: {
+    flexDirection: 'row',
+    backgroundColor: theme.colors.card,
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  tagModeButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  tagModeButtonActive: {
+    backgroundColor: theme.colors.primary,
+  },
+  tagModeText: {
+    color: theme.colors.subtext,
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  tagModeTextActive: {
+    color: theme.colors.background,
+  },
+  tagGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  tagPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    opacity: 0.6,
+  },
+  tagPillSelected: {
+    opacity: 1,
+    borderWidth: 2,
+    borderColor: theme.colors.text,
+  },
+  tagPillText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  modalButton: {
+    flex: 1,
+    backgroundColor: theme.colors.primary,
+    padding: 15,
+    borderRadius: 10,
+    alignItems: 'center',
+    marginLeft: 10,
+  },
+  modalButtonCancel: {
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    marginLeft: 0,
+    marginRight: 10,
+  },
+  modalButtonText: {
+    color: theme.colors.background,
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalButtonCancelText: {
+    color: theme.colors.text,
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   listContent: {
     paddingHorizontal: 20,
