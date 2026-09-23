@@ -22,6 +22,7 @@ import { useEntries } from '../src/hooks/useEntries';
 import { EntryRow, buildEntryRows } from '../src/utils/entryRows';
 import { ROW_METRICS, buildItemLayout, rowContentWidth } from '../src/utils/entryRowLayout';
 import { subscribeToDimensions } from '../src/utils/imageDimensions';
+import { getAvailableTagCounts } from '../src/utils/database';
 
 /**
  * How many rows are kept mounted around the viewport. Deliberately tight:
@@ -70,10 +71,14 @@ const ActivityDetailScreen: React.FC = () => {
   const [fEndMinute, setFEndMinute] = useState('');
   const [fEndAmpm, setFEndAmpm] = useState('PM');
 
+
   const [fSelectedTagIds, setFSelectedTagIds] = useState<string[]>([]);
   const [fTagMode, setFTagMode] = useState<'AND' | 'OR'>('OR');
+  const [dynamicTagCounts, setDynamicTagCounts] = useState<Record<string, number>>({});
+
 
   // Sync applied filters to UI state when modal opens
+
   const openFilterModal = () => {
     if (filterStartDate) {
       const start = new Date(filterStartDate);
@@ -124,6 +129,14 @@ const ActivityDetailScreen: React.FC = () => {
 
     return new Date(parsedY, parsedM, parsedD, hours, parsedMin, 0).getTime();
   };
+
+  useEffect(() => {
+    if (isFilterModalVisible && activityId) {
+      const start = getFullDate(fYear, fMonth, fDay, fHour, fMinute, fAmpm);
+      const end = getFullDate(fEndYear, fEndMonth, fEndDay, fEndHour, fEndMinute, fEndAmpm);
+      getAvailableTagCounts(activityId, searchQuery, start, end, fSelectedTagIds, fTagMode).then(setDynamicTagCounts);
+    }
+  }, [isFilterModalVisible, activityId, searchQuery, fYear, fMonth, fDay, fHour, fMinute, fAmpm, fEndYear, fEndMonth, fEndDay, fEndHour, fEndMinute, fEndAmpm, fSelectedTagIds, fTagMode]);
 
   const applyFilters = () => {
     const start = getFullDate(fYear, fMonth, fDay, fHour, fMinute, fAmpm);
@@ -218,14 +231,34 @@ const ActivityDetailScreen: React.FC = () => {
     }
   }, [entries.length, hasMore, loadingMore, loadMore]);
 
+
+
+  const viewableItemsRef = useRef<Array<any>>([]);
+  const viewabilityConfigRef = useRef({ itemVisiblePercentThreshold: 10 });
+  const onViewableItemsChanged = useCallback(({ viewableItems }: { viewableItems: Array<any> }) => {
+    viewableItemsRef.current = viewableItems;
+  }, []);
+
   const cycleImageMode = () => {
-    setImageMode(prev => {
-      if (prev === 'small') return 'medium';
-      if (prev === 'medium') return 'large';
-      if (prev === 'large') return 'hidden';
-      return 'small';
+    const topItem = viewableItemsRef.current.find(item => item.isViewable) || viewableItemsRef.current[0];
+    const topIndex = topItem ? topItem.index : 0;
+
+    let nextMode: ImageMode = 'small';
+    if (imageMode === 'small') nextMode = 'medium';
+    else if (imageMode === 'medium') nextMode = 'large';
+    else if (imageMode === 'large') nextMode = 'hidden';
+
+    setImageMode(nextMode);
+
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        if (flatListRef.current && topIndex != null) {
+          flatListRef.current.scrollToIndex({ index: topIndex, animated: false, viewPosition: 0 });
+        }
+      }, 50);
     });
   };
+
 
   const getImageModeIcon = () => {
     switch (imageMode) {
@@ -372,7 +405,7 @@ const ActivityDetailScreen: React.FC = () => {
           onChangeText={setSearchQuery}
         />
         <TouchableOpacity onPress={openFilterModal} style={styles.filterIcon} testID="filter-button">
-          <Icon name="filter-variant" size={24} color={theme.colors.text} />
+          <Icon name="filter-variant" size={24} color={(filterStartDate || filterEndDate || filterTagIds.length > 0) ? theme.colors.primary : theme.colors.text} />
         </TouchableOpacity>
       </View>
 
@@ -440,6 +473,7 @@ const ActivityDetailScreen: React.FC = () => {
               <View style={styles.tagGrid}>
                 {(allTags || []).map(tag => {
                   const isSelected = fSelectedTagIds.includes(tag.id);
+                  const count = dynamicTagCounts[tag.id] ?? 0;
                   return (
                     <TouchableOpacity
                       key={tag.id}
@@ -450,7 +484,7 @@ const ActivityDetailScreen: React.FC = () => {
                       ]}
                       onPress={() => toggleTag(tag.id)}
                     >
-                      <Text style={styles.tagPillText}>{tag.name}</Text>
+                      <Text style={styles.tagPillText}>{tag.name} ({count})</Text>
                       {isSelected && <Icon name="check" size={14} color="#FFFFFF" style={{ marginLeft: 5 }} />}
                     </TouchableOpacity>
                   );
@@ -479,6 +513,8 @@ const ActivityDetailScreen: React.FC = () => {
         // Pagination: the next page is fetched as the user approaches the end
         // rather than loading the whole history up front.
         getItemLayout={getItemLayout}
+        onViewableItemsChanged={onViewableItemsChanged}
+        viewabilityConfig={viewabilityConfigRef.current}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         // Windowing. These are the numbers that bound how many images can be

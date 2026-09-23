@@ -319,7 +319,7 @@ const ENTRY_LIST_PROJECTION = `
   CASE WHEN entries.image IS NULL OR entries.image = '' THEN 0 ELSE 1 END AS hasImages
 `;
 
-const mapEntryRow = (row: any): ActivityEntry & { activityId: string } => {
+const mapEntryRow = (row: any): ActivityEntry & { activityId: string; globalIndex?: number } => {
   const images = parseRefArray(row.image);
   const thumbnails = parseRefArray(row.thumbnail);
   return {
@@ -333,6 +333,7 @@ const mapEntryRow = (row: any): ActivityEntry & { activityId: string } => {
     hasImages: row.hasImages === 1,
     imagesMigrated: row.imagesMigrated === 1,
     tags: [],
+    globalIndex: row.globalIndex,
   };
 };
 
@@ -409,7 +410,8 @@ export const getEntriesPage = async (
   params.push(limit, offset);
 
   const rows = await db.getAllAsync<any>(
-    `SELECT ${ENTRY_LIST_PROJECTION}
+    `SELECT ${ENTRY_LIST_PROJECTION},
+      (SELECT COUNT(*) FROM entries e2 WHERE e2.activityId = entries.activityId AND (e2.startDate < entries.startDate OR (e2.startDate = entries.startDate AND e2.id <= entries.id))) as globalIndex
      FROM entries
      ${where}
      ORDER BY entries.startDate DESC
@@ -423,6 +425,54 @@ export const getEntriesPage = async (
 };
 
 const escapeLike = (value: string) => value.replace(/[\\%_]/g, match => `\\${match}`);
+
+
+export const getAvailableTagCounts = async (activityId: string, search?: string, filterStartDate?: number, filterEndDate?: number, filterTagIds?: string[], filterTagMode: 'AND' | 'OR' = 'OR'): Promise<Record<string, number>> => {
+  const db = await getDb();
+  if (!db) return {};
+
+  const term = search?.trim();
+  let where = 'WHERE entries.activityId = ?';
+  const params: any[] = [activityId];
+
+  if (term) {
+    where += ' AND entries.notes LIKE ? ESCAPE \'\\\'';
+    params.push(`%${escapeLike(term)}%`);
+  }
+  if (filterStartDate) {
+    where += ' AND entries.startDate >= ?';
+    params.push(new Date(filterStartDate).toISOString());
+  }
+  if (filterEndDate) {
+    where += ' AND entries.startDate <= ?';
+    params.push(new Date(filterEndDate).toISOString());
+  }
+  if (filterTagIds && filterTagIds.length > 0) {
+    const placeholders = filterTagIds.map(() => '?').join(',');
+    if (filterTagMode === 'AND') {
+      where += ` AND entries.id IN (SELECT entryId FROM entry_tags WHERE tagId IN (${placeholders}) GROUP BY entryId HAVING COUNT(DISTINCT tagId) = ?)`;
+      params.push(...filterTagIds, filterTagIds.length);
+    } else {
+      where += ` AND entries.id IN (SELECT DISTINCT entryId FROM entry_tags WHERE tagId IN (${placeholders}))`;
+      params.push(...filterTagIds);
+    }
+  }
+
+  const rows = await db.getAllAsync<{ tagId: string, count: number }>(
+    `SELECT entry_tags.tagId, COUNT(DISTINCT entry_tags.entryId) as count
+     FROM entry_tags
+     JOIN entries ON entry_tags.entryId = entries.id
+     ${where}
+     GROUP BY entry_tags.tagId`,
+    params,
+  );
+
+  const result: Record<string, number> = {};
+  for (const row of rows) {
+    result[row.tagId] = row.count;
+  }
+  return result;
+};
 
 export const countEntries = async (activityId: string, search?: string, filterStartDate?: number, filterEndDate?: number, filterTagIds?: string[], filterTagMode: 'AND' | 'OR' = 'OR'): Promise<number> => {
   const db = await getDb();
@@ -884,7 +934,8 @@ export const getEntriesByTags = async (
 
     const placeholders = tagIds.map(() => '?').join(',');
     const rows = await db.getAllAsync<any>(
-      `SELECT ${ENTRY_LIST_PROJECTION}
+      `SELECT ${ENTRY_LIST_PROJECTION},
+      (SELECT COUNT(*) FROM entries e2 WHERE e2.activityId = entries.activityId AND (e2.startDate < entries.startDate OR (e2.startDate = entries.startDate AND e2.id <= entries.id))) as globalIndex
        FROM entries
        WHERE entries.id IN (
          SELECT DISTINCT entryId FROM entry_tags WHERE tagId IN (${placeholders})

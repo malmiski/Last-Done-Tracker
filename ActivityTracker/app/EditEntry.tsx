@@ -178,7 +178,7 @@ const EditEntryScreen: React.FC = () => {
     if (!startValid || !endValid) return false;
 
     // Check that end date is not before start date
-    const getFullDate = (y, m, d, h, min, s, ampmVal) => {
+    const getFullDate = (y: any, m: any, d: any, h: any, min: any, s: any, ampmVal: any) => {
         let hours = parseInt(h, 10);
         if (ampmVal.toUpperCase() === 'PM' && hours < 12) hours += 12;
         if (ampmVal.toUpperCase() === 'AM' && hours === 12) hours = 0;
@@ -458,7 +458,7 @@ const EditEntryScreen: React.FC = () => {
     }
   };
 
-  const getFullDate = (y, m, d, h, min, s, ampmVal) => {
+  const getFullDate = (y: any, m: any, d: any, h: any, min: any, s: any, ampmVal: any) => {
     let hours = parseInt(h, 10);
     if (ampmVal.toUpperCase() === 'PM' && hours < 12) hours += 12;
     if (ampmVal.toUpperCase() === 'AM' && hours === 12) hours = 0;

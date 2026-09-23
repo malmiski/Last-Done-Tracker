@@ -78,7 +78,7 @@ export const buildEntryRows = (
 
     return {
       entry,
-      displayIndex: highest - index,
+      displayIndex: (entry as any).globalIndex ?? (highest - index),
       previousEndDate,
       shape: {
         // Every row in this list is numbered.
