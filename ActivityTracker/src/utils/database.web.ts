@@ -377,7 +377,21 @@ const collectEntries = async (
 
   // The compound index is unavailable on freshly upgraded databases in some
   // browsers until the next open; sort defensively.
+
   results.sort((a, b) => b.startDate.getTime() - a.startDate.getTime());
+
+  // Attach globalIndex before returning
+  const entriesStore = openStore(database, 'entries');
+  const allEntries = await getAll(entriesStore) as any[];
+
+  for (const entry of results) {
+    (entry as any).globalIndex = allEntries.filter(e2 =>
+      e2.activityId === entry.activityId &&
+      (new Date(e2.startDate).getTime() < new Date(entry.startDate).getTime() ||
+       (new Date(e2.startDate).getTime() === new Date(entry.startDate).getTime() && (e2.id ?? '') <= (entry.id ?? '')))
+    ).length;
+  }
+
   return results;
 };
 
@@ -500,6 +514,63 @@ export const getEntriesPage = async (
   const entries = await collectEntries(database, { activityId, limit, offset, search, filterStartDate, filterEndDate, filterTagIds, filterTagMode });
   await attachTags(database, entries);
   return entries;
+};
+
+
+
+const openStore = (db: IDBDatabase, storeName: string) => {
+  const tx = db.transaction(storeName, 'readonly');
+  return tx.objectStore(storeName);
+};
+const getAll = (store: IDBObjectStore) => {
+  return new Promise((resolve, reject) => {
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+};
+
+export const getAvailableTagCounts = async (activityId: string, search?: string, filterStartDate?: number, filterEndDate?: number, filterTagIds?: string[], filterTagMode: 'AND' | 'OR' = 'OR'): Promise<Record<string, number>> => {
+  const db = await getDb();
+  if (!db) return {};
+
+  const entriesStore = openStore(db, 'entries');
+  const allEntries = await getAll(entriesStore) as any[];
+
+  const tagsStore = openStore(db, 'entry_tags');
+  const allEntryTags = await getAll(tagsStore) as any[];
+
+  const term = search?.trim().toLowerCase();
+
+  // Base filter matching logic from countEntries
+  const matchingEntries = allEntries.filter(entry => {
+    if (entry.activityId !== activityId) return false;
+    if (term && !(entry.notes || '').toLowerCase().includes(term)) return false;
+    if (filterStartDate && new Date(entry.startDate).getTime() < filterStartDate) return false;
+    if (filterEndDate && new Date(entry.startDate).getTime() > filterEndDate) return false;
+
+    if (filterTagIds && filterTagIds.length > 0) {
+      const entryTags = allEntryTags.filter(et => et.entryId === entry.id).map(et => et.tagId);
+      if (filterTagMode === 'AND') {
+        if (!filterTagIds.every(id => entryTags.includes(id))) return false;
+      } else {
+        if (!filterTagIds.some(id => entryTags.includes(id))) return false;
+      }
+    }
+    return true;
+  });
+
+  const matchingEntryIds = new Set(matchingEntries.map(e => e.id));
+
+  // Count tags for matching entries
+  const counts: Record<string, number> = {};
+  for (const et of allEntryTags) {
+    if (matchingEntryIds.has(et.entryId)) {
+      counts[et.tagId] = (counts[et.tagId] || 0) + 1;
+    }
+  }
+
+  return counts;
 };
 
 export const countEntries = async (activityId: string, search?: string, filterStartDate?: number, filterEndDate?: number, filterTagIds?: string[], filterTagMode: 'AND' | 'OR' = 'OR'): Promise<number> => {
