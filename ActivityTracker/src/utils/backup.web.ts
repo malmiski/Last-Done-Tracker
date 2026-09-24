@@ -21,7 +21,7 @@
  *  - Import streams the file through `File.stream()` rather than calling
  *    `arrayBuffer()`, which would materialise the whole archive at once.
  */
-import { Unzip, UnzipInflate, Zip, ZipDeflate, ZipPassThrough, strToU8 } from 'fflate';
+import { Unzip, UnzipInflate, UnzipPassThrough, Zip, ZipDeflate, ZipPassThrough, strToU8 } from 'fflate';
 import * as database from './database';
 import * as imageStore from './imageStore';
 import {
@@ -273,6 +273,7 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
 
     const unzip = new Unzip();
     unzip.register(UnzipInflate);
+    unzip.register(UnzipPassThrough);
 
     unzip.onfile = archiveFile => {
       const name = archiveFile.name;
