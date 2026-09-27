@@ -291,7 +291,11 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
         return;
       }
 
-      const parsed = name.startsWith(`${IMAGES_FOLDER}/`) ? parseArchiveName(name) : null;
+      const normalizedName = name.replace(/\\/g, '/');
+      const parsed =
+        normalizedName.includes(`/${IMAGES_FOLDER}/`) || normalizedName.startsWith(`${IMAGES_FOLDER}/`)
+          ? parseArchiveName(normalizedName)
+          : null;
       if (!parsed) return; // activities.db and anything unrecognised.
 
       const parts: Uint8Array[] = [];
