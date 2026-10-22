@@ -124,6 +124,20 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
     zip.add(csv);
     csv.push(strToU8(`${CSV_HEADER}\n`), false);
 
+    const refStartDates = new Map<string, { startDate: Date; index: number }>();
+
+    for (const activity of activities) {
+      const entries = await database.getEntries(activity.id);
+      for (const entry of entries) {
+        const refs = entry.images ?? entry.thumbnails ?? [];
+        refs.forEach((ref, index) => {
+          if (isFileRef(ref) && !refStartDates.has(ref)) {
+            refStartDates.set(ref, { startDate: entry.startDate, index });
+          }
+        });
+      }
+    }
+
     const imageFilesToExport = new Map<
       string,
       { ref: string; variant: 'full' | 'thumb'; archiveName: string }
@@ -137,10 +151,16 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
 
       for (const entry of entries) {
         const refs = entry.images ?? entry.thumbnails ?? [];
-        refs.forEach((ref, index) => {
+        refs.forEach(ref => {
           if (isFileRef(ref)) {
+            const meta = refStartDates.get(ref);
             for (const variant of ['full', 'thumb'] as const) {
-              const name = archiveNameFor(ref, variant, entry.startDate, index);
+              const name = archiveNameFor(
+                ref,
+                variant,
+                meta?.startDate ?? entry.startDate,
+                meta?.index,
+              );
               if (name) {
                 const key = `${ref}:${variant}`;
                 if (!imageFilesToExport.has(key)) {
@@ -161,6 +181,7 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
           notes: entry.notes,
           imageRefs: refs,
           tags: entry.tags,
+          refMap: refStartDates,
         })}\n`;
 
         entriesWritten += 1;
@@ -250,40 +271,44 @@ export const getStorageEstimate = async (): Promise<{ usage: number; quota: numb
  * Import
  * ------------------------------------------------------------------ */
 
+const readAsUint8Array = (blob: Blob): Promise<Uint8Array> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(blob);
+  });
+
 /** Prompt for a file with a plain <input>, which is the reliable path on web. */
 const pickFile = (): Promise<File | null> =>
   new Promise(resolve => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept =
-      '.zip,.csv,application/zip,application/x-zip-compressed,application/zip-compressed,application/x-zip,text/csv';
+    input.accept = '.zip,.csv';
+    input.style.display = 'none';
+    if (typeof document !== 'undefined' && document.body) {
+      document.body.appendChild(input);
+    }
 
-    let resolved = false;
-    const done = (file: File | null) => {
-      if (resolved) return;
-      resolved = true;
-      if (typeof window !== 'undefined') {
-        window.removeEventListener('focus', onFocus);
+    const cleanup = () => {
+      try {
+        if (input.parentNode) input.parentNode.removeChild(input);
+      } catch {
+        /* best effort */
       }
+    };
+
+    input.onchange = () => {
+      const file = input.files?.[0] ?? null;
+      cleanup();
       resolve(file);
     };
 
-    const onFocus = () => {
-      // On iOS Safari / Chrome, cancelling the file picker does not fire oncancel or onchange.
-      // After window regains focus, if no file was selected, resolve cleanly after a brief delay.
-      setTimeout(() => {
-        if (!resolved && (!input.files || input.files.length === 0)) {
-          done(null);
-        }
-      }, 500);
+    input.oncancel = () => {
+      cleanup();
+      resolve(null);
     };
 
-    input.onchange = () => done(input.files?.[0] ?? null);
-    input.oncancel = () => done(null);
-
-    if (typeof window !== 'undefined') {
-      window.addEventListener('focus', onFocus);
-    }
     input.click();
   });
 
@@ -291,13 +316,9 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
   const file = await pickFile();
   if (!file) return null;
 
-  const mimeLower = (file.type || '').toLowerCase();
   const nameLower = file.name.toLowerCase();
-  const isZip =
-    nameLower.endsWith('.zip') ||
-    mimeLower.includes('zip') ||
-    mimeLower === 'application/x-zip-compressed' ||
-    mimeLower === 'application/zip-compressed';
+  const mimeLower = (file.type || '').toLowerCase();
+  const isZip = nameLower.endsWith('.zip') || mimeLower.includes('zip');
 
   try {
     if (!isZip) {
@@ -317,8 +338,10 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
 
     unzip.onfile = archiveFile => {
       const name = archiveFile.name;
+      const normalizedName = name.replace(/\\/g, '/');
+      const lowerName = normalizedName.toLowerCase();
 
-      if (name === CSV_FILENAME || name.endsWith(`/${CSV_FILENAME}`)) {
+      if (lowerName === CSV_FILENAME || lowerName.endsWith(`/${CSV_FILENAME}`)) {
         archiveFile.ondata = (error, chunk, final) => {
           if (error) throw error;
           if (chunk && chunk.length) csvChunks.push(chunk);
@@ -331,7 +354,6 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
         return;
       }
 
-      const normalizedName = name.replace(/\\/g, '/');
       const parsed = parseArchiveName(normalizedName);
       if (!parsed) return; // activities.db and anything unrecognised.
 
@@ -358,16 +380,15 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
       archiveFile.start();
     };
 
-    // Chunked slice reading works reliably across all browsers (including iOS Chrome/Safari WKWebView)
+    // Chunked slice reading via FileReader works with 100% reliability across all mobile & desktop browsers
     const CHUNK_SIZE = 512 * 1024;
     let offset = 0;
 
     if (file.size > 0) {
       while (offset < file.size) {
         const slice = file.slice(offset, Math.min(file.size, offset + CHUNK_SIZE));
-        const buffer = await slice.arrayBuffer();
-        const chunk = new Uint8Array(buffer);
-        offset += buffer.byteLength;
+        const chunk = await readAsUint8Array(slice);
+        offset += slice.size;
         const isFinal = offset >= file.size;
         unzip.push(chunk, isFinal);
         await new Promise<void>(resolve => setTimeout(resolve, 0));

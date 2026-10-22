@@ -113,6 +113,14 @@ describe('row building', () => {
     const row = buildCsvRow({ ...base, imageRefs: ['img:a', 'img:b'] });
     expect(row).toContain('20230101_120000_01_a.jpg|20230101_120000_02_b.jpg');
   });
+
+  it('uses first-seen metadata from refMap for shared images', () => {
+    const refMap = new Map([
+      ['img:a', { startDate: new Date('2022-05-10T08:00:00Z'), index: 0 }],
+    ]);
+    const row = buildCsvRow({ ...base, imageRefs: ['img:a'], refMap });
+    expect(row).toContain('20220510_080000_01_a.jpg');
+  });
 });
 
 describe('layout detection and row parsing', () => {

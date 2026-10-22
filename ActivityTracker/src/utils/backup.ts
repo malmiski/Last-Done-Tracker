@@ -83,6 +83,20 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
     zip.add(csv);
     csv.push(strToU8(`${CSV_HEADER}\n`), false);
 
+    const refStartDates = new Map<string, { startDate: Date; index: number }>();
+
+    for (const activity of activities) {
+      const entries = await database.getEntries(activity.id);
+      for (const entry of entries) {
+        const refs = entry.images ?? entry.thumbnails ?? [];
+        refs.forEach((ref, index) => {
+          if (isFileRef(ref) && !refStartDates.has(ref)) {
+            refStartDates.set(ref, { startDate: entry.startDate, index });
+          }
+        });
+      }
+    }
+
     const imageFilesToExport = new Map<
       string,
       { ref: string; variant: 'full' | 'thumb'; archiveName: string }
@@ -96,10 +110,16 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
 
       for (const entry of entries) {
         const refs = entry.images ?? entry.thumbnails ?? [];
-        refs.forEach((ref, index) => {
+        refs.forEach(ref => {
           if (isFileRef(ref)) {
+            const meta = refStartDates.get(ref);
             for (const variant of ['full', 'thumb'] as const) {
-              const name = archiveNameFor(ref, variant, entry.startDate, index);
+              const name = archiveNameFor(
+                ref,
+                variant,
+                meta?.startDate ?? entry.startDate,
+                meta?.index,
+              );
               if (name) {
                 const key = `${ref}:${variant}`;
                 if (!imageFilesToExport.has(key)) {
@@ -120,6 +140,7 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
           notes: entry.notes,
           imageRefs: refs,
           tags: entry.tags,
+          refMap: refStartDates,
         })}\n`;
 
         entriesWritten += 1;
@@ -243,8 +264,10 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
 
     unzip.onfile = archiveFile => {
       const name = archiveFile.name;
+      const normalizedName = name.replace(/\\/g, '/');
+      const lowerName = normalizedName.toLowerCase();
 
-      if (name === CSV_FILENAME || name.endsWith(`/${CSV_FILENAME}`)) {
+      if (lowerName === CSV_FILENAME || lowerName.endsWith(`/${CSV_FILENAME}`)) {
         archiveFile.ondata = (error, chunk, final) => {
           if (error) throw error;
           if (chunk && chunk.length) csvChunks.push(chunk);
@@ -264,7 +287,6 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
         return;
       }
 
-      const normalizedName = name.replace(/\\/g, '/');
       const parsed = parseArchiveName(normalizedName);
       if (!parsed) {
         // activities.db and anything unrecognised are skipped: the CSV is the

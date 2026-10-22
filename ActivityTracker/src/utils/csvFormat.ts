@@ -141,6 +141,8 @@ export interface CsvRowInput {
   tags?: Tag[];
   /** When false, unmanaged (legacy inline) values are written through as-is. */
   useArchiveNames?: boolean;
+  /** Optional mapping of shared image refs to their first-seen entry metadata */
+  refMap?: Map<string, { startDate: Date; index: number }>;
 }
 
 export const buildCsvRow = ({
@@ -154,12 +156,16 @@ export const buildCsvRow = ({
   imageRefs = [],
   tags = [],
   useArchiveNames = true,
+  refMap,
 }: CsvRowInput): string => {
   const toColumn = (variant: 'full' | 'thumb') =>
     imageRefs
       .map((ref, index) => {
         if (useArchiveNames) {
-          const name = archiveNameFor(ref, variant, startDate, index);
+          const meta = refMap?.get(ref);
+          const dateToUse = meta ? meta.startDate : startDate;
+          const indexToUse = meta ? meta.index : index;
+          const name = archiveNameFor(ref, variant, dateToUse, indexToUse);
           if (name) return name;
         }
         // Legacy inline base64 or an unmigrated placeholder: pass through so
