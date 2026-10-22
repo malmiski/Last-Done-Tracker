@@ -257,9 +257,33 @@ const pickFile = (): Promise<File | null> =>
     input.type = 'file';
     input.accept =
       '.zip,.csv,application/zip,application/x-zip-compressed,application/zip-compressed,application/x-zip,text/csv';
-    input.onchange = () => resolve(input.files?.[0] ?? null);
-    // Covers the user dismissing the dialog in browsers that fire it.
-    input.oncancel = () => resolve(null);
+
+    let resolved = false;
+    const done = (file: File | null) => {
+      if (resolved) return;
+      resolved = true;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', onFocus);
+      }
+      resolve(file);
+    };
+
+    const onFocus = () => {
+      // On iOS Safari / Chrome, cancelling the file picker does not fire oncancel or onchange.
+      // After window regains focus, if no file was selected, resolve cleanly after a brief delay.
+      setTimeout(() => {
+        if (!resolved && (!input.files || input.files.length === 0)) {
+          done(null);
+        }
+      }, 500);
+    };
+
+    input.onchange = () => done(input.files?.[0] ?? null);
+    input.oncancel = () => done(null);
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', onFocus);
+    }
     input.click();
   });
 
@@ -334,26 +358,22 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
       archiveFile.start();
     };
 
-    // Stream when supported, falling back to arrayBuffer for mobile browsers lacking file.stream()
-    if (typeof file.stream === 'function') {
-      try {
-        const reader = file.stream().getReader();
-        for (;;) {
-          const { done, value } = await reader.read();
-          if (done) {
-            unzip.push(new Uint8Array(0), true);
-            break;
-          }
-          if (value) unzip.push(value, false);
-        }
-      } catch (streamErr) {
-        console.warn('file.stream() failed, falling back to arrayBuffer()', streamErr);
-        const buffer = await file.arrayBuffer();
-        unzip.push(new Uint8Array(buffer), true);
+    // Chunked slice reading works reliably across all browsers (including iOS Chrome/Safari WKWebView)
+    const CHUNK_SIZE = 512 * 1024;
+    let offset = 0;
+
+    if (file.size > 0) {
+      while (offset < file.size) {
+        const slice = file.slice(offset, Math.min(file.size, offset + CHUNK_SIZE));
+        const buffer = await slice.arrayBuffer();
+        const chunk = new Uint8Array(buffer);
+        offset += buffer.byteLength;
+        const isFinal = offset >= file.size;
+        unzip.push(chunk, isFinal);
+        await new Promise<void>(resolve => setTimeout(resolve, 0));
       }
     } else {
-      const buffer = await file.arrayBuffer();
-      unzip.push(new Uint8Array(buffer), true);
+      unzip.push(new Uint8Array(0), true);
     }
 
     await Promise.all(pendingWrites);
