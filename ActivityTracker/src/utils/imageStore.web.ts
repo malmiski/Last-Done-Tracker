@@ -59,15 +59,48 @@ const openDb = (): Promise<IDBDatabase> => {
 const blobKey = (id: string, variant: ImageVariant) =>
   variant === 'thumb' ? `${id}:thumb` : `${id}:full`;
 
-const putBlob = async (id: string, variant: ImageVariant, blob: Blob): Promise<void> => {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
+const MAX_CONCURRENT_WRITES = 1;
+let activeWrites = 0;
+const writeQueue: (() => void)[] = [];
+
+const withWriteSlot = async <T>(work: () => Promise<T>): Promise<T> => {
+  if (activeWrites >= MAX_CONCURRENT_WRITES) {
+    await new Promise<void>(resolve => writeQueue.push(resolve));
+  }
+  activeWrites += 1;
+  try {
+    return await work();
+  } finally {
+    activeWrites -= 1;
+    writeQueue.shift()?.();
+  }
+};
+
+const writeBlob = (db: IDBDatabase, id: string, variant: ImageVariant, blob: Blob): Promise<void> =>
+  new Promise<void>((resolve, reject) => {
     const tx = db.transaction(BLOB_STORE, 'readwrite');
     tx.objectStore(BLOB_STORE).put(blob, blobKey(id, variant));
     tx.oncomplete = () => resolve();
     tx.onerror = () => reject(tx.error);
+    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
   });
-};
+
+const putBlob = async (id: string, variant: ImageVariant, blob: Blob): Promise<void> =>
+  withWriteSlot(async () => {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const db = await openDb();
+        await writeBlob(db, id, variant, blob);
+        return;
+      } catch (error) {
+        if (attempt === 2) {
+          console.warn(`Could not write image blob ${id}:${variant}`, error);
+          throw error;
+        }
+        await new Promise<void>(resolve => setTimeout(resolve, 50));
+      }
+    }
+  });
 
 /**
  * Cap on simultaneous IndexedDB reads.
