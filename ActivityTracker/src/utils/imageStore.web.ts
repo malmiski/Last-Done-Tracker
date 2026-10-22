@@ -79,10 +79,36 @@ const withWriteSlot = async <T>(work: () => Promise<T>): Promise<T> => {
 const writeBlob = (db: IDBDatabase, id: string, variant: ImageVariant, blob: Blob): Promise<void> =>
   new Promise<void>((resolve, reject) => {
     const tx = db.transaction(BLOB_STORE, 'readwrite');
+    let finished = false;
+
+    const timeoutId = setTimeout(() => {
+      if (!finished) {
+        try {
+          tx.abort();
+        } catch {
+          /* best effort */
+        }
+        reject(new Error('IndexedDB transaction timed out'));
+      }
+    }, 10000);
+
     tx.objectStore(BLOB_STORE).put(blob, blobKey(id, variant));
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+
+    tx.oncomplete = () => {
+      finished = true;
+      clearTimeout(timeoutId);
+      resolve();
+    };
+    tx.onerror = () => {
+      finished = true;
+      clearTimeout(timeoutId);
+      reject(tx.error);
+    };
+    tx.onabort = () => {
+      finished = true;
+      clearTimeout(timeoutId);
+      reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+    };
   });
 
 const putBlob = async (id: string, variant: ImageVariant, blob: Blob): Promise<void> =>

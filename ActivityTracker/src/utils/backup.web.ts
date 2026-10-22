@@ -398,7 +398,16 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
         offset += slice.size;
         const isFinal = offset >= file.size;
         unzip.push(chunk, isFinal);
-        await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+        // Apply backpressure: if fflate has emitted files that triggered writes, wait for them.
+        // This prevents holding thousands of uncompressed images in JS memory while IDB catches up,
+        // which causes jetsam OOM kills or silent IDB hangs on iOS WKWebView.
+        if (pendingWrites.length > 0) {
+          await Promise.all(pendingWrites);
+          pendingWrites.length = 0;
+        } else {
+          await new Promise<void>(resolve => setTimeout(resolve, 0));
+        }
       }
     } else {
       unzip.push(new Uint8Array(0), true);
