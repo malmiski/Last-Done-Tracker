@@ -33,7 +33,7 @@ const describeProgress = (progress: BackupProgress): string => {
     case 'images': return `Packing images… (${progress.completed}/${progress.total})`;
     case 'database': return 'Adding database…';
     case 'finalising': return 'Finishing…';
-    case 'reading': return `Reading images… (${progress.completed})`;
+    case 'reading': return progress.total > 0 ? `Reading images… (${progress.completed}/${progress.total})` : `Reading images… (${progress.completed})`;
     case 'reading_file': return `Reading backup… (${Math.round((progress.completed / progress.total) * 100)}%)`;
     case 'restoring': return `Restoring entries… (${progress.completed}/${progress.total})`;
     default: return 'Working…';

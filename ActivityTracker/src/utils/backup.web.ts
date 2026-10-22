@@ -332,6 +332,8 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
     const importedIds = new Map<string, string>();
     const pendingWrites: Promise<void>[] = [];
     let imagesImported = 0;
+    let imagesFound = 0;
+    let isReadingFile = true;
 
     const unzip = new Unzip();
     unzip.register(UnzipInflate);
@@ -364,6 +366,7 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
         if (chunk && chunk.length) parts.push(chunk);
         if (!final) return;
 
+        imagesFound += 1;
         const bytes = concat(parts);
         parts.length = 0;
 
@@ -373,7 +376,9 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
             .then(() => {
               recordImportedId(name, parsed.id, importedIds);
               imagesImported += 1;
-              onProgress?.({ phase: 'reading', completed: imagesImported, total: 0 });
+              if (!isReadingFile) {
+                onProgress?.({ phase: 'reading', completed: imagesImported, total: imagesFound });
+              }
             })
             .catch(writeError => console.warn(`Failed to restore image ${name}`, writeError)),
         );
@@ -398,6 +403,9 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
     } else {
       unzip.push(new Uint8Array(0), true);
     }
+
+    isReadingFile = false;
+    onProgress?.({ phase: 'reading', completed: imagesImported, total: imagesFound });
 
     await Promise.all(pendingWrites);
 
