@@ -5,18 +5,25 @@ import {
   classifyImageValue,
   detectLayout,
   escapeCsv,
+  formatDatePrefix,
   parseArchiveName,
   parseCsvLine,
   parseCsvRow,
 } from './csvFormat';
 
 describe('archive naming', () => {
+  it('formats alphanumeric date prefix correctly', () => {
+    const date = new Date('2026-08-16T14:30:05.123Z');
+    expect(formatDatePrefix(date)).toBe('20260816_143005_');
+    expect(formatDatePrefix(undefined)).toBe('');
+  });
+
   /**
    * Images are stored in the archive under their own id, which is what lets an
    * import write them back under the same id so every `img:<id>` in the CSV
    * resolves with no remapping table. Round-tripping is the whole contract.
    */
-  it('round-trips a reference through its archive filename', () => {
+  it('round-trips a reference through its archive filename without date', () => {
     expect(archiveNameFor('img:abc123', 'full')).toBe('abc123.jpg');
     expect(archiveNameFor('img:abc123', 'thumb')).toBe('abc123_thumb.jpg');
 
@@ -24,10 +31,34 @@ describe('archive naming', () => {
     expect(parseArchiveName('images/abc123_thumb.jpg')).toEqual({ id: 'abc123', variant: 'thumb' });
   });
 
-  it('ignores non-image entries', () => {
+  it('includes alphanumeric date prefix when startDate is provided', () => {
+    const startDate = new Date('2026-08-16T14:30:05.000Z');
+    expect(archiveNameFor('img:abc123', 'full', startDate)).toBe('20260816_143005_abc123.jpg');
+    expect(archiveNameFor('img:abc123', 'thumb', startDate)).toBe('20260816_143005_abc123_thumb.jpg');
+
+    expect(parseArchiveName('images/20260816_143005_abc123.jpg')).toEqual({
+      id: '20260816_143005_abc123',
+      variant: 'full',
+    });
+    expect(parseArchiveName('images/20260816_143005_abc123_thumb.jpg')).toEqual({
+      id: '20260816_143005_abc123',
+      variant: 'thumb',
+    });
+  });
+
+  it('parses various image extensions and folder paths', () => {
+    expect(parseArchiveName('photo1.png')).toEqual({ id: 'photo1', variant: 'full' });
+    expect(parseArchiveName('photos/IMG_0001.JPEG')).toEqual({ id: 'IMG_0001', variant: 'full' });
+    expect(parseArchiveName('images/sample_thumb.webp')).toEqual({ id: 'sample', variant: 'thumb' });
+  });
+
+  it('ignores non-image entries and hidden system files', () => {
     expect(archiveNameFor('data:image/jpeg;base64,AAAA', 'full')).toBeNull();
     expect(parseArchiveName('activities.db')).toBeNull();
     expect(parseArchiveName('data.csv')).toBeNull();
+    expect(parseArchiveName('__MACOSX/._photo1.jpg')).toBeNull();
+    expect(parseArchiveName('.DS_Store')).toBeNull();
+    expect(parseArchiveName('notes.txt')).toBeNull();
   });
 });
 
@@ -61,10 +92,10 @@ describe('row building', () => {
     tags: [{ id: 't1', name: 'Cardio', color: '#FF0000' }],
   };
 
-  it('writes filenames rather than image data', () => {
+  it('writes filenames rather than image data with date prefix', () => {
     const row = buildCsvRow({ ...base, imageRefs: ['img:abc123'] });
-    expect(row).toContain('abc123.jpg');
-    expect(row).toContain('abc123_thumb.jpg');
+    expect(row).toContain('20230101_120000_abc123.jpg');
+    expect(row).toContain('20230101_120000_abc123_thumb.jpg');
     expect(row).not.toContain('img:');
     expect(row).toContain('Cardio:#FF0000');
   });
@@ -77,7 +108,7 @@ describe('row building', () => {
 
   it('joins multiple images with a pipe', () => {
     const row = buildCsvRow({ ...base, imageRefs: ['img:a', 'img:b'] });
-    expect(row).toContain('a.jpg|b.jpg');
+    expect(row).toContain('20230101_120000_a.jpg|20230101_120000_b.jpg');
   });
 });
 

@@ -83,9 +83,10 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
     zip.add(csv);
     csv.push(strToU8(`${CSV_HEADER}\n`), false);
 
-    // Collected while walking the CSV so images are written exactly once even
-    // when several entries share one.
-    const referencedIds = new Set<string>();
+    const imageFilesToExport = new Map<
+      string,
+      { ref: string; variant: 'full' | 'thumb'; archiveName: string }
+    >();
 
     let buffer = '';
     let entriesWritten = 0;
@@ -96,7 +97,17 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
       for (const entry of entries) {
         const refs = entry.images ?? entry.thumbnails ?? [];
         refs.forEach(ref => {
-          if (isFileRef(ref)) referencedIds.add(ref);
+          if (isFileRef(ref)) {
+            for (const variant of ['full', 'thumb'] as const) {
+              const name = archiveNameFor(ref, variant, entry.startDate);
+              if (name) {
+                const key = `${ref}:${variant}`;
+                if (!imageFilesToExport.has(key)) {
+                  imageFilesToExport.set(key, { ref, variant, archiveName: name });
+                }
+              }
+            }
+          }
         });
 
         buffer += `${buildCsvRow({
@@ -127,24 +138,19 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
     csv.push(strToU8(buffer), true);
 
     /* -------- images/ (stored: JPEG is already compressed) -------- */
-    const refs = [...referencedIds];
+    const imageItems = [...imageFilesToExport.values()];
     let imagesWritten = 0;
 
-    for (const ref of refs) {
-      for (const variant of ['full', 'thumb'] as const) {
-        const name = archiveNameFor(ref, variant);
-        if (!name) continue;
-
-        const bytes = await imageStore.readAsBytes(ref, variant);
-        if (!bytes) continue;
-
-        const file = new ZipPassThrough(`${IMAGES_FOLDER}/${name}`);
+    for (const item of imageItems) {
+      const bytes = await imageStore.readAsBytes(item.ref, item.variant);
+      if (bytes) {
+        const file = new ZipPassThrough(`${IMAGES_FOLDER}/${item.archiveName}`);
         zip.add(file);
         file.push(bytes, true);
       }
 
       imagesWritten += 1;
-      onProgress?.({ phase: 'images', completed: imagesWritten, total: refs.length });
+      onProgress?.({ phase: 'images', completed: imagesWritten, total: imageItems.length });
       // Yield so the export does not block the UI thread for long stretches.
       await new Promise<void>(resolve => setTimeout(resolve, 0));
       if (failed) throw failed;
@@ -259,10 +265,7 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
       }
 
       const normalizedName = name.replace(/\\/g, '/');
-      const parsed =
-        normalizedName.includes(`/${IMAGES_FOLDER}/`) || normalizedName.startsWith(`${IMAGES_FOLDER}/`)
-          ? parseArchiveName(normalizedName)
-          : null;
+      const parsed = parseArchiveName(normalizedName);
       if (!parsed) {
         // activities.db and anything unrecognised are skipped: the CSV is the
         // authoritative restore path, and overwriting the live database

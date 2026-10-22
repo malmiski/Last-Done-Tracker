@@ -124,7 +124,11 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
     zip.add(csv);
     csv.push(strToU8(`${CSV_HEADER}\n`), false);
 
-    const referencedRefs = new Set<string>();
+    const imageFilesToExport = new Map<
+      string,
+      { ref: string; variant: 'full' | 'thumb'; archiveName: string }
+    >();
+
     let buffer = '';
     let entriesWritten = 0;
 
@@ -134,7 +138,17 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
       for (const entry of entries) {
         const refs = entry.images ?? entry.thumbnails ?? [];
         refs.forEach(ref => {
-          if (isFileRef(ref)) referencedRefs.add(ref);
+          if (isFileRef(ref)) {
+            for (const variant of ['full', 'thumb'] as const) {
+              const name = archiveNameFor(ref, variant, entry.startDate);
+              if (name) {
+                const key = `${ref}:${variant}`;
+                if (!imageFilesToExport.has(key)) {
+                  imageFilesToExport.set(key, { ref, variant, archiveName: name });
+                }
+              }
+            }
+          }
         });
 
         buffer += `${buildCsvRow({
@@ -162,24 +176,19 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
     csv.push(strToU8(buffer), true);
 
     /* -------- images/ -------- */
-    const refs = [...referencedRefs];
+    const imageItems = [...imageFilesToExport.values()];
     let imagesWritten = 0;
 
-    for (const ref of refs) {
-      for (const variant of ['full', 'thumb'] as const) {
-        const name = archiveNameFor(ref, variant);
-        if (!name) continue;
-
-        const bytes = await imageStore.readAsBytes(ref, variant);
-        if (!bytes) continue;
-
-        const file = new ZipPassThrough(`${IMAGES_FOLDER}/${name}`);
+    for (const item of imageItems) {
+      const bytes = await imageStore.readAsBytes(item.ref, item.variant);
+      if (bytes) {
+        const file = new ZipPassThrough(`${IMAGES_FOLDER}/${item.archiveName}`);
         zip.add(file);
         file.push(bytes, true);
       }
 
       imagesWritten += 1;
-      onProgress?.({ phase: 'images', completed: imagesWritten, total: refs.length });
+      onProgress?.({ phase: 'images', completed: imagesWritten, total: imageItems.length });
       // Yield to the event loop so the tab stays responsive and the browser
       // gets a chance to reclaim the bytes just written.
       await new Promise<void>(resolve => setTimeout(resolve, 0));
@@ -292,10 +301,7 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
       }
 
       const normalizedName = name.replace(/\\/g, '/');
-      const parsed =
-        normalizedName.includes(`/${IMAGES_FOLDER}/`) || normalizedName.startsWith(`${IMAGES_FOLDER}/`)
-          ? parseArchiveName(normalizedName)
-          : null;
+      const parsed = parseArchiveName(normalizedName);
       if (!parsed) return; // activities.db and anything unrecognised.
 
       const parts: Uint8Array[] = [];

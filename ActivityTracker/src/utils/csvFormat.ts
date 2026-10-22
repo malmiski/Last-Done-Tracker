@@ -19,12 +19,42 @@ export const IMAGES_FOLDER = 'images';
 export const CSV_FILENAME = 'data.csv';
 export const DB_FILENAME = 'activities.db';
 
+export const formatDatePrefix = (date?: Date): string => {
+  if (!date || isNaN(date.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const year = date.getUTCFullYear();
+  const month = pad(date.getUTCMonth() + 1);
+  const day = pad(date.getUTCDate());
+  const hours = pad(date.getUTCHours());
+  const minutes = pad(date.getUTCMinutes());
+  const seconds = pad(date.getUTCSeconds());
+  return `${year}${month}${day}_${hours}${minutes}${seconds}_`;
+};
+
 /** Archive path for a managed reference. Ids are stable across export/import. */
-export const archiveNameFor = (ref: string, variant: 'full' | 'thumb'): string | null => {
+export const archiveNameFor = (
+  ref: string,
+  variant: 'full' | 'thumb',
+  startDate?: Date,
+): string | null => {
   if (!isFileRef(ref)) return null;
   const id = refId(ref);
-  return variant === 'thumb' ? `${id}_thumb.jpg` : `${id}.jpg`;
+  const prefix = formatDatePrefix(startDate);
+  return variant === 'thumb' ? `${prefix}${id}_thumb.jpg` : `${prefix}${id}.jpg`;
 };
+
+const IMAGE_EXTENSIONS = new Set([
+  'jpg',
+  'jpeg',
+  'png',
+  'webp',
+  'gif',
+  'heic',
+  'bmp',
+  'svg',
+  'tif',
+  'tiff',
+]);
 
 /**
  * Recover the reference an archive filename belongs to.
@@ -35,12 +65,28 @@ export const archiveNameFor = (ref: string, variant: 'full' | 'thumb'): string |
 export const parseArchiveName = (
   name: string,
 ): { id: string; variant: 'full' | 'thumb' } | null => {
-  const base = name.split('/').pop();
-  if (!base || !base.endsWith('.jpg')) return null;
-  if (base.endsWith('_thumb.jpg')) {
-    return { id: base.slice(0, -'_thumb.jpg'.length), variant: 'thumb' };
+  if (!name) return null;
+  const normalized = name.replace(/\\/g, '/');
+  if (normalized.startsWith('__MACOSX/') || normalized.includes('/__MACOSX/')) {
+    return null;
   }
-  return { id: base.slice(0, -'.jpg'.length), variant: 'full' };
+  const base = normalized.split('/').pop();
+  if (!base || base.startsWith('.')) return null;
+
+  const lowerBase = base.toLowerCase();
+  if (lowerBase === 'data.csv' || lowerBase === 'activities.db') return null;
+
+  const lastDot = base.lastIndexOf('.');
+  if (lastDot === -1) return null;
+
+  const ext = base.slice(lastDot + 1).toLowerCase();
+  if (!IMAGE_EXTENSIONS.has(ext)) return null;
+
+  const nameWithoutExt = base.slice(0, lastDot);
+  const variant: 'full' | 'thumb' = nameWithoutExt.endsWith('_thumb') ? 'thumb' : 'full';
+  const id = variant === 'thumb' ? nameWithoutExt.slice(0, -'_thumb'.length) : nameWithoutExt;
+
+  return id ? { id, variant } : null;
 };
 
 export const escapeCsv = (field: unknown): string => {
@@ -107,7 +153,7 @@ export const buildCsvRow = ({
     imageRefs
       .map(ref => {
         if (useArchiveNames) {
-          const name = archiveNameFor(ref, variant);
+          const name = archiveNameFor(ref, variant, startDate);
           if (name) return name;
         }
         // Legacy inline base64 or an unmigrated placeholder: pass through so
