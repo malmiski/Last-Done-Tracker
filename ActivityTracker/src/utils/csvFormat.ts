@@ -19,7 +19,7 @@ export const IMAGES_FOLDER = 'images';
 export const CSV_FILENAME = 'data.csv';
 export const DB_FILENAME = 'activities.db';
 
-export const formatDatePrefix = (date?: Date): string => {
+export const formatDatePrefix = (date?: Date, index?: number): string => {
   if (!date || isNaN(date.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
   const year = date.getUTCFullYear();
@@ -28,7 +28,12 @@ export const formatDatePrefix = (date?: Date): string => {
   const hours = pad(date.getUTCHours());
   const minutes = pad(date.getUTCMinutes());
   const seconds = pad(date.getUTCSeconds());
-  return `${year}${month}${day}_${hours}${minutes}${seconds}_`;
+  const dateStr = `${year}${month}${day}_${hours}${minutes}${seconds}_`;
+  if (index !== undefined && index >= 0) {
+    const idxStr = pad(index + 1);
+    return `${dateStr}${idxStr}_`;
+  }
+  return dateStr;
 };
 
 /** Archive path for a managed reference. Ids are stable across export/import. */
@@ -36,10 +41,11 @@ export const archiveNameFor = (
   ref: string,
   variant: 'full' | 'thumb',
   startDate?: Date,
+  index?: number,
 ): string | null => {
   if (!isFileRef(ref)) return null;
   const id = refId(ref);
-  const prefix = formatDatePrefix(startDate);
+  const prefix = formatDatePrefix(startDate, index);
   return variant === 'thumb' ? `${prefix}${id}_thumb.jpg` : `${prefix}${id}.jpg`;
 };
 
@@ -151,9 +157,9 @@ export const buildCsvRow = ({
 }: CsvRowInput): string => {
   const toColumn = (variant: 'full' | 'thumb') =>
     imageRefs
-      .map(ref => {
+      .map((ref, index) => {
         if (useArchiveNames) {
-          const name = archiveNameFor(ref, variant, startDate);
+          const name = archiveNameFor(ref, variant, startDate, index);
           if (name) return name;
         }
         // Legacy inline base64 or an unmigrated placeholder: pass through so

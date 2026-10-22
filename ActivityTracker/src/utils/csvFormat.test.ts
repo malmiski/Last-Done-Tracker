@@ -12,9 +12,11 @@ import {
 } from './csvFormat';
 
 describe('archive naming', () => {
-  it('formats alphanumeric date prefix correctly', () => {
+  it('formats alphanumeric date prefix correctly with image index', () => {
     const date = new Date('2026-08-16T14:30:05.123Z');
     expect(formatDatePrefix(date)).toBe('20260816_143005_');
+    expect(formatDatePrefix(date, 0)).toBe('20260816_143005_01_');
+    expect(formatDatePrefix(date, 1)).toBe('20260816_143005_02_');
     expect(formatDatePrefix(undefined)).toBe('');
   });
 
@@ -31,17 +33,18 @@ describe('archive naming', () => {
     expect(parseArchiveName('images/abc123_thumb.jpg')).toEqual({ id: 'abc123', variant: 'thumb' });
   });
 
-  it('includes alphanumeric date prefix when startDate is provided', () => {
+  it('includes alphanumeric date and image index prefix when startDate and index are provided', () => {
     const startDate = new Date('2026-08-16T14:30:05.000Z');
-    expect(archiveNameFor('img:abc123', 'full', startDate)).toBe('20260816_143005_abc123.jpg');
-    expect(archiveNameFor('img:abc123', 'thumb', startDate)).toBe('20260816_143005_abc123_thumb.jpg');
+    expect(archiveNameFor('img:abc123', 'full', startDate, 0)).toBe('20260816_143005_01_abc123.jpg');
+    expect(archiveNameFor('img:abc123', 'thumb', startDate, 0)).toBe('20260816_143005_01_abc123_thumb.jpg');
+    expect(archiveNameFor('img:def456', 'full', startDate, 1)).toBe('20260816_143005_02_def456.jpg');
 
-    expect(parseArchiveName('images/20260816_143005_abc123.jpg')).toEqual({
-      id: '20260816_143005_abc123',
+    expect(parseArchiveName('images/20260816_143005_01_abc123.jpg')).toEqual({
+      id: '20260816_143005_01_abc123',
       variant: 'full',
     });
-    expect(parseArchiveName('images/20260816_143005_abc123_thumb.jpg')).toEqual({
-      id: '20260816_143005_abc123',
+    expect(parseArchiveName('images/20260816_143005_01_abc123_thumb.jpg')).toEqual({
+      id: '20260816_143005_01_abc123',
       variant: 'thumb',
     });
   });
@@ -92,10 +95,10 @@ describe('row building', () => {
     tags: [{ id: 't1', name: 'Cardio', color: '#FF0000' }],
   };
 
-  it('writes filenames rather than image data with date prefix', () => {
+  it('writes filenames rather than image data with date and index prefix', () => {
     const row = buildCsvRow({ ...base, imageRefs: ['img:abc123'] });
-    expect(row).toContain('20230101_120000_abc123.jpg');
-    expect(row).toContain('20230101_120000_abc123_thumb.jpg');
+    expect(row).toContain('20230101_120000_01_abc123.jpg');
+    expect(row).toContain('20230101_120000_01_abc123_thumb.jpg');
     expect(row).not.toContain('img:');
     expect(row).toContain('Cardio:#FF0000');
   });
@@ -108,7 +111,7 @@ describe('row building', () => {
 
   it('joins multiple images with a pipe', () => {
     const row = buildCsvRow({ ...base, imageRefs: ['img:a', 'img:b'] });
-    expect(row).toContain('20230101_120000_a.jpg|20230101_120000_b.jpg');
+    expect(row).toContain('20230101_120000_01_a.jpg|20230101_120000_02_b.jpg');
   });
 });
 

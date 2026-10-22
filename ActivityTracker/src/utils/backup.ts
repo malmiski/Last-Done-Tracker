@@ -96,10 +96,10 @@ export const exportBundle = async (onProgress?: ProgressCallback): Promise<strin
 
       for (const entry of entries) {
         const refs = entry.images ?? entry.thumbnails ?? [];
-        refs.forEach(ref => {
+        refs.forEach((ref, index) => {
           if (isFileRef(ref)) {
             for (const variant of ['full', 'thumb'] as const) {
-              const name = archiveNameFor(ref, variant, entry.startDate);
+              const name = archiveNameFor(ref, variant, entry.startDate, index);
               if (name) {
                 const key = `${ref}:${variant}`;
                 if (!imageFilesToExport.has(key)) {
