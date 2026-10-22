@@ -255,7 +255,8 @@ const pickFile = (): Promise<File | null> =>
   new Promise(resolve => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.zip,.csv,application/zip,text/csv';
+    input.accept =
+      '.zip,.csv,application/zip,application/x-zip-compressed,application/zip-compressed,application/x-zip,text/csv';
     input.onchange = () => resolve(input.files?.[0] ?? null);
     // Covers the user dismissing the dialog in browsers that fire it.
     input.oncancel = () => resolve(null);
@@ -266,7 +267,13 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
   const file = await pickFile();
   if (!file) return null;
 
-  const isZip = file.name.toLowerCase().endsWith('.zip') || file.type === 'application/zip';
+  const mimeLower = (file.type || '').toLowerCase();
+  const nameLower = file.name.toLowerCase();
+  const isZip =
+    nameLower.endsWith('.zip') ||
+    mimeLower.includes('zip') ||
+    mimeLower === 'application/x-zip-compressed' ||
+    mimeLower === 'application/zip-compressed';
 
   try {
     if (!isZip) {
@@ -327,15 +334,26 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
       archiveFile.start();
     };
 
-    // Stream rather than buffering the whole archive.
-    const reader = file.stream().getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) {
-        unzip.push(new Uint8Array(0), true);
-        break;
+    // Stream when supported, falling back to arrayBuffer for mobile browsers lacking file.stream()
+    if (typeof file.stream === 'function') {
+      try {
+        const reader = file.stream().getReader();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) {
+            unzip.push(new Uint8Array(0), true);
+            break;
+          }
+          if (value) unzip.push(value, false);
+        }
+      } catch (streamErr) {
+        console.warn('file.stream() failed, falling back to arrayBuffer()', streamErr);
+        const buffer = await file.arrayBuffer();
+        unzip.push(new Uint8Array(buffer), true);
       }
-      unzip.push(value, false);
+    } else {
+      const buffer = await file.arrayBuffer();
+      unzip.push(new Uint8Array(buffer), true);
     }
 
     await Promise.all(pendingWrites);
