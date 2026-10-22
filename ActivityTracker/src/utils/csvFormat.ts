@@ -307,3 +307,80 @@ export const classifyImageValue = (
   if (parsed) return { kind: 'archive', id: parsed.id };
   return { kind: 'unknown' };
 };
+
+/**
+ * Strip YYYYMMDD_HHmmss_XX_ prefix if present from an archive ID or filename.
+ * E.g., '20260816_143005_01_abc123' -> 'abc123'
+ */
+export const stripDatePrefix = (id: string): string => {
+  if (!id) return id;
+  const base = id.split('/').pop() || id;
+  const match = base.match(/^\d{8}_\d{6}_(?:\d{2}_)?(.+)$/);
+  return match ? match[1] : base;
+};
+
+/**
+ * Record an imported image file in availableIds mapping all key variations
+ * (raw name, path, extracted ID, and stripped ID) to the target stored ID.
+ */
+export const recordImportedId = (
+  archivePath: string,
+  parsedId: string,
+  availableIds: Map<string, string>,
+): void => {
+  if (!archivePath || !parsedId) return;
+  const normalizedPath = archivePath.replace(/\\/g, '/');
+  const filename = normalizedPath.split('/').pop() || normalizedPath;
+  const strippedId = stripDatePrefix(parsedId);
+  const strippedFilename = stripDatePrefix(filename);
+
+  const keys = [
+    parsedId,
+    filename,
+    normalizedPath,
+    strippedId,
+    strippedFilename,
+    `img:${parsedId}`,
+    `img:${strippedId}`,
+  ];
+
+  for (const key of keys) {
+    if (key && !availableIds.has(key)) {
+      availableIds.set(key, parsedId);
+    }
+  }
+};
+
+/**
+ * Resolve an image value from data.csv (filename, archive ID, img: ref) against availableIds.
+ * Returns the target stored ID if found, or null if missing.
+ */
+export const resolveAvailableImageId = (
+  value: string,
+  availableIds: Map<string, string>,
+): string | null => {
+  if (!value || availableIds.size === 0) return null;
+
+  if (availableIds.has(value)) return availableIds.get(value)!;
+
+  if (isFileRef(value)) {
+    const id = refId(value);
+    if (availableIds.has(id)) return availableIds.get(id)!;
+    const stripped = stripDatePrefix(id);
+    if (availableIds.has(stripped)) return availableIds.get(stripped)!;
+  }
+
+  const classified = classifyImageValue(value);
+  if (classified.kind === 'archive') {
+    if (availableIds.has(classified.id)) return availableIds.get(classified.id)!;
+    const stripped = stripDatePrefix(classified.id);
+    if (availableIds.has(stripped)) return availableIds.get(stripped)!;
+  }
+
+  const base = value.replace(/\\/g, '/').split('/').pop() || value;
+  if (availableIds.has(base)) return availableIds.get(base)!;
+  const strippedBase = stripDatePrefix(base);
+  if (availableIds.has(strippedBase)) return availableIds.get(strippedBase)!;
+
+  return null;
+};

@@ -31,6 +31,7 @@ import {
   archiveNameFor,
   buildCsvRow,
   parseArchiveName,
+  recordImportedId,
 } from './csvFormat';
 import { isFileRef } from './imageRef';
 import { restoreFromCsv } from './backupRestore';
@@ -370,7 +371,7 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
           imageStore
             .writeFromBytes(bytes, parsed.variant, parsed.id)
             .then(() => {
-              importedIds.set(parsed.id, parsed.id);
+              recordImportedId(name, parsed.id, importedIds);
               imagesImported += 1;
               onProgress?.({ phase: 'reading', completed: imagesImported, total: 0 });
             })

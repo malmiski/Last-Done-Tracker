@@ -9,6 +9,9 @@ import {
   parseArchiveName,
   parseCsvLine,
   parseCsvRow,
+  recordImportedId,
+  resolveAvailableImageId,
+  stripDatePrefix,
 } from './csvFormat';
 
 describe('archive naming', () => {
@@ -181,5 +184,24 @@ describe('image value classification', () => {
     expect(classifyImageValue('img:abc123')).toEqual({ kind: 'ref', ref: 'img:abc123' });
     expect(classifyImageValue('data:image/jpeg;base64,AAAA')).toEqual({ kind: 'base64' });
     expect(classifyImageValue('nonsense')).toEqual({ kind: 'unknown' });
+  });
+});
+
+describe('ID resolution and date stripping', () => {
+  it('strips date and index prefixes from IDs', () => {
+    expect(stripDatePrefix('20260816_143005_01_abc123')).toBe('abc123');
+    expect(stripDatePrefix('20260816_143005_abc123')).toBe('abc123');
+    expect(stripDatePrefix('plain_id')).toBe('plain_id');
+  });
+
+  it('records and resolves imported IDs across key variations', () => {
+    const available = new Map<string, string>();
+    recordImportedId('images/20260816_143005_01_abc123.jpg', '20260816_143005_01_abc123', available);
+
+    expect(resolveAvailableImageId('20260816_143005_01_abc123.jpg', available)).toBe('20260816_143005_01_abc123');
+    expect(resolveAvailableImageId('abc123.jpg', available)).toBe('20260816_143005_01_abc123');
+    expect(resolveAvailableImageId('img:abc123', available)).toBe('20260816_143005_01_abc123');
+    expect(resolveAvailableImageId('img:20260816_143005_01_abc123', available)).toBe('20260816_143005_01_abc123');
+    expect(resolveAvailableImageId('missing.jpg', available)).toBeNull();
   });
 });

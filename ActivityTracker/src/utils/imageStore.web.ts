@@ -586,10 +586,7 @@ export const writeFromBytes = async (
   existingId?: string,
 ): Promise<string> => {
   const id = existingId ?? newId();
-  // `.slice().buffer` yields a plain ArrayBuffer, which every Blob
-  // implementation accepts — some TypedArray views are rejected on older
-  // Safari builds.
-  await putBlob(id, variant, new Blob([bytes.slice().buffer], { type: 'image/jpeg' }));
+  await putBlob(id, variant, new Blob([bytes], { type: 'image/jpeg' }));
 
   // Importing over an existing id replaces the blob, but an object URL pins the
   // *old* Blob for its lifetime — without this, a re-import would keep showing

@@ -9,8 +9,8 @@ import * as database from './database';
 import * as imageStore from './imageStore';
 import { generateActivityId } from './crypto';
 import { Tag } from '../data/activity-details';
-import { classifyImageValue, detectLayout, parseCsvRow } from './csvFormat';
-import { makeFileRef, stripDataUri } from './imageRef';
+import { classifyImageValue, detectLayout, parseCsvRow, resolveAvailableImageId } from './csvFormat';
+import { isFileRef, isInlineBase64, makeFileRef, stripDataUri } from './imageRef';
 import { ImportResult, ProgressCallback } from './backupTypes';
 
 /**
@@ -85,18 +85,13 @@ export const restoreFromCsv = async (
     /* -------- images -------- */
     const refs: string[] = [];
     for (const value of row.imageValues) {
-      const classified = classifyImageValue(value);
+      const resolvedId = resolveAvailableImageId(value, availableIds);
 
-      if (classified.kind === 'archive') {
-        if (availableIds.has(classified.id)) {
-          refs.push(makeFileRef(classified.id));
-        } else {
-          // Filename referenced but no such file in the archive.
-          imagesMissing += 1;
-        }
-      } else if (classified.kind === 'ref') {
-        refs.push(classified.ref);
-      } else if (classified.kind === 'base64') {
+      if (resolvedId) {
+        refs.push(makeFileRef(resolvedId));
+      } else if (isFileRef(value)) {
+        refs.push(value);
+      } else if (isInlineBase64(value)) {
         // Legacy CSV: decode straight into the store, one at a time.
         try {
           const stored = await imageStore.importFromBase64(stripDataUri(value));
