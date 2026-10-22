@@ -387,6 +387,7 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
 
     if (file.size > 0) {
       while (offset < file.size) {
+        onProgress?.({ phase: 'reading_file', completed: offset, total: file.size });
         const slice = file.slice(offset, Math.min(file.size, offset + CHUNK_SIZE));
         const chunk = await readAsUint8Array(slice);
         offset += slice.size;
