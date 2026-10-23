@@ -334,6 +334,7 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
     let imagesImported = 0;
     let imagesFound = 0;
     let isReadingFile = true;
+    let quotaExceeded = false;
 
     const unzip = new Unzip();
     unzip.register(UnzipInflate);
@@ -370,6 +371,8 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
         const bytes = concat(parts);
         parts.length = 0;
 
+        if (quotaExceeded) return;
+
         pendingWrites.push(
           imageStore
             .writeFromBytes(bytes, parsed.variant, parsed.id)
@@ -380,7 +383,12 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
                 onProgress?.({ phase: 'reading', completed: imagesImported, total: imagesFound });
               }
             })
-            .catch(writeError => console.warn(`Failed to restore image ${name}`, writeError)),
+            .catch(writeError => {
+              console.warn(`Failed to restore image ${name}`, writeError);
+              if (writeError?.name === 'QuotaExceededError' || writeError?.message?.includes('Quota')) {
+                quotaExceeded = true;
+              }
+            }),
         );
       };
       archiveFile.start();
