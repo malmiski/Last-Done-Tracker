@@ -11,6 +11,7 @@
  */
 import { HEADER_BYTES, ImageSize, readImageSize } from './jpegSize';
 import { BorderBounds, boundsHeight, findContentBounds, scaleBounds } from './blackBorders';
+import { stripDatePrefix } from './csvFormat';
 import {
   ImageVariant,
   StoredImage,
@@ -47,7 +48,21 @@ const openDb = (): Promise<IDBDatabase> => {
         db.createObjectStore(BLOB_STORE);
       }
     };
-    request.onsuccess = (event: any) => resolve(event.target.result);
+    request.onsuccess = (event: any) => {
+      const db = event.target.result as IDBDatabase;
+      db.onversionchange = () => {
+        try {
+          db.close();
+        } catch {
+          /* best effort */
+        }
+        dbPromise = null;
+      };
+      (db as any).onclose = () => {
+        dbPromise = null;
+      };
+      resolve(db);
+    };
     request.onerror = (event: any) => reject(event.target.error);
   }).catch((err) => {
     dbPromise = null;
@@ -59,13 +74,184 @@ const openDb = (): Promise<IDBDatabase> => {
 const blobKey = (id: string, variant: ImageVariant) =>
   variant === 'thumb' ? `${id}:thumb` : `${id}:full`;
 
-const putBlob = async (id: string, variant: ImageVariant, blob: Blob): Promise<void> => {
-  const db = await openDb();
-  await new Promise<void>((resolve, reject) => {
+const MAX_CONCURRENT_WRITES = 1;
+const MAX_BATCH_WRITE_ITEMS = 32;
+const MAX_BATCH_WRITE_BYTES = 8 * 1024 * 1024;
+let activeWrites = 0;
+const writeQueue: (() => void)[] = [];
+
+const withWriteSlot = async <T>(work: () => Promise<T>): Promise<T> => {
+  if (activeWrites >= MAX_CONCURRENT_WRITES) {
+    await new Promise<void>(resolve => writeQueue.push(resolve));
+  }
+  activeWrites += 1;
+  try {
+    return await work();
+  } finally {
+    activeWrites -= 1;
+    writeQueue.shift()?.();
+  }
+};
+
+const writeBatch = (
+  db: IDBDatabase,
+  entries: { key: string; bytes: Uint8Array }[],
+): Promise<void> =>
+  new Promise<void>((resolve, reject) => {
     const tx = db.transaction(BLOB_STORE, 'readwrite');
-    tx.objectStore(BLOB_STORE).put(blob, blobKey(id, variant));
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
+    let finished = false;
+
+    const timeoutId = setTimeout(() => {
+      if (!finished) {
+        try {
+          tx.abort();
+        } catch {
+          /* best effort */
+        }
+        reject(new Error('IndexedDB transaction timed out'));
+      }
+    }, 15000);
+
+    const store = tx.objectStore(BLOB_STORE);
+    for (const entry of entries) {
+      store.put(entry.bytes, entry.key);
+    }
+
+    tx.oncomplete = () => {
+      finished = true;
+      clearTimeout(timeoutId);
+      resolve();
+    };
+    tx.onerror = () => {
+      finished = true;
+      clearTimeout(timeoutId);
+      reject(tx.error);
+    };
+    tx.onabort = () => {
+      finished = true;
+      clearTimeout(timeoutId);
+      reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+    };
+  });
+
+interface QueuedWrite {
+  key: string;
+  bytes: Uint8Array;
+  resolve: () => void;
+  reject: (err: unknown) => void;
+}
+
+const pendingWriteQueue: QueuedWrite[] = [];
+let drainingWrites = false;
+
+const writeSingleWithRetry = async (key: string, bytes: Uint8Array): Promise<void> => {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const db = await openDb();
+      await writeBatch(db, [{ key, bytes }]);
+      return;
+    } catch (error) {
+      dbPromise = null;
+      if (attempt === 2) {
+        console.warn(`Could not write image bytes ${key}`, error);
+        throw error;
+      }
+      await new Promise<void>(resolve => setTimeout(resolve, 50));
+    }
+  }
+};
+
+const drainWriteQueue = async (): Promise<void> => {
+  if (drainingWrites) return;
+  drainingWrites = true;
+  try {
+    await withWriteSlot(async () => {
+      while (pendingWriteQueue.length > 0) {
+        const batch: QueuedWrite[] = [];
+        let batchBytes = 0;
+        while (
+          pendingWriteQueue.length > 0 &&
+          batch.length < MAX_BATCH_WRITE_ITEMS &&
+          (batch.length === 0 || batchBytes + pendingWriteQueue[0].bytes.byteLength <= MAX_BATCH_WRITE_BYTES)
+        ) {
+          const item = pendingWriteQueue.shift()!;
+          batch.push(item);
+          batchBytes += item.bytes.byteLength;
+        }
+
+        if (batch.length === 1) {
+          const only = batch[0];
+          try {
+            await writeSingleWithRetry(only.key, only.bytes);
+            only.resolve();
+          } catch (err) {
+            only.reject(err);
+          }
+          continue;
+        }
+
+        try {
+          const db = await openDb();
+          await writeBatch(
+            db,
+            batch.map(item => ({ key: item.key, bytes: item.bytes })),
+          );
+          batch.forEach(item => item.resolve());
+        } catch {
+          dbPromise = null;
+          for (const item of batch) {
+            try {
+              await writeSingleWithRetry(item.key, item.bytes);
+              item.resolve();
+            } catch (err) {
+              item.reject(err);
+            }
+          }
+        }
+      }
+    });
+  } finally {
+    drainingWrites = false;
+    if (pendingWriteQueue.length > 0) {
+      void drainWriteQueue();
+    }
+  }
+};
+
+/**
+ * Store raw Uint8Array bytes in IndexedDB.
+ *
+ * Why Uint8Array instead of Blob:
+ * On iOS WKWebView (which backs Chrome iOS and Safari), IndexedDB stores Blob
+ * objects as external file references (`WebKitBlobResource`) rather than inline
+ * SQLite records. Under WKWebView sandbox rules, reading those Blob handles
+ * back via `URL.createObjectURL(blob)` or `blob.arrayBuffer()` fails with
+ * `WebKitBlobResource error 1` (`NotReadableError`), and writing Blobs can fail
+ * with `Error preparing Blob/File data to be stored in object store`.
+ * Storing `Uint8Array` writes the bytes directly into the SQLite record (the
+ * same path `activities_db` uses for `data.csv`), and wrapping them in a fresh
+ * in-memory `new Blob([bytes])` on read avoids `WebKitBlobResource` entirely.
+ */
+const putBytes = (id: string, variant: ImageVariant, bytes: Uint8Array): Promise<void> =>
+  new Promise<void>((resolve, reject) => {
+    pendingWriteQueue.push({
+      key: blobKey(id, variant),
+      bytes,
+      resolve,
+      reject,
+    });
+    void drainWriteQueue();
+  });
+
+const blobToBytes = async (blob: Blob): Promise<Uint8Array> => {
+  if (typeof blob.arrayBuffer === 'function') {
+    return new Uint8Array(await blob.arrayBuffer());
+  }
+  return new Promise<Uint8Array>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsArrayBuffer(blob);
   });
 };
 
@@ -96,31 +282,38 @@ const withReadSlot = async <T>(work: () => Promise<T>): Promise<T> => {
   }
 };
 
-const readBlob = (db: IDBDatabase, id: string, variant: ImageVariant): Promise<Blob | null> =>
-  new Promise<Blob | null>((resolve, reject) => {
+const readStored = (db: IDBDatabase, id: string, variant: ImageVariant): Promise<any> =>
+  new Promise<any>((resolve, reject) => {
     const tx = db.transaction(BLOB_STORE, 'readonly');
-    const request = tx.objectStore(BLOB_STORE).get(blobKey(id, variant));
-    request.onsuccess = () => resolve(request.result ?? null);
+    const store = tx.objectStore(BLOB_STORE);
+    const request = store.get(blobKey(id, variant));
+    request.onsuccess = () => {
+      if (request.result != null) {
+        resolve(request.result);
+        return;
+      }
+      const stripped = stripDatePrefix(id);
+      if (stripped !== id) {
+        const fallbackReq = store.get(blobKey(stripped, variant));
+        fallbackReq.onsuccess = () => resolve(fallbackReq.result ?? null);
+        fallbackReq.onerror = () => reject(fallbackReq.error);
+        return;
+      }
+      resolve(null);
+    };
     request.onerror = () => reject(request.error);
     // A transaction can abort without the request itself erroring.
     tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
   });
 
-/**
- * Read one stored blob.
- *
- * Returns null both for "no such blob" and for a read that failed after a
- * retry. Callers cannot act differently on the distinction anyway, and the
- * component retries on an empty result, so a transient failure recovers rather
- * than leaving a blank tile forever.
- */
-const getBlob = async (id: string, variant: ImageVariant): Promise<Blob | null> =>
+const getStored = async (id: string, variant: ImageVariant): Promise<any> =>
   withReadSlot(async () => {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const db = await openDb();
-        return await readBlob(db, id, variant);
+        return await readStored(db, id, variant);
       } catch (error) {
+        dbPromise = null;
         if (attempt === 1) {
           console.warn(`Could not read image blob ${id}:${variant}`, error);
           return null;
@@ -131,6 +324,59 @@ const getBlob = async (id: string, variant: ImageVariant): Promise<Blob | null> 
     }
     return null;
   });
+
+const toUint8Array = async (stored: any): Promise<Uint8Array | null> => {
+  if (!stored) return null;
+  if (stored instanceof Uint8Array) return stored;
+  if (stored instanceof ArrayBuffer) return new Uint8Array(stored);
+  if (ArrayBuffer.isView(stored)) {
+    return new Uint8Array(stored.buffer, stored.byteOffset, stored.byteLength);
+  }
+  if (typeof Blob !== 'undefined' && stored instanceof Blob) {
+    return await blobToBytes(stored);
+  }
+  if (typeof stored.arrayBuffer === 'function') {
+    return new Uint8Array(await stored.arrayBuffer());
+  }
+  return null;
+};
+
+const getBytes = async (id: string, variant: ImageVariant): Promise<Uint8Array | null> => {
+  const stored = await getStored(id, variant);
+  return await toUint8Array(stored);
+};
+
+/**
+ * Read one stored image as an in-memory Blob suitable for URL.createObjectURL.
+ *
+ * Returns null both for "no such blob" and for a read that failed after a
+ * retry. Callers cannot act differently on the distinction anyway, and the
+ * component retries on an empty result, so a transient failure recovers rather
+ * than leaving a blank tile forever.
+ */
+const getBlob = async (id: string, variant: ImageVariant): Promise<Blob | null> => {
+  const stored = await getStored(id, variant);
+  if (!stored) return null;
+  if (stored instanceof Uint8Array) {
+    return new Blob([stored as unknown as BlobPart], { type: 'image/jpeg' });
+  }
+  if (stored instanceof ArrayBuffer) {
+    return new Blob([stored], { type: 'image/jpeg' });
+  }
+  if (ArrayBuffer.isView(stored)) {
+    const view = new Uint8Array(stored.buffer, stored.byteOffset, stored.byteLength);
+    return new Blob([view as unknown as BlobPart], { type: 'image/jpeg' });
+  }
+  if (typeof Blob !== 'undefined' && stored instanceof Blob) {
+    try {
+      const bytes = await blobToBytes(stored);
+      return new Blob([bytes as unknown as BlobPart], { type: stored.type || 'image/jpeg' });
+    } catch {
+      return stored;
+    }
+  }
+  return stored as Blob;
+};
 
 const removeBlob = async (id: string, variant: ImageVariant): Promise<void> => {
   const db = await openDb();
@@ -297,6 +543,8 @@ export const clearMemoryCache = (): void => {
   if (released > 0) bumpEpoch();
 };
 
+const dimensionCache = new Map<string, ImageSize>();
+
 /**
  * Drop a specific cached URL, retained or not.
  * Used when the underlying blob changes or is deleted, where continuing to
@@ -304,6 +552,7 @@ export const clearMemoryCache = (): void => {
  * component re-resolve rather than keep a dead reference.
  */
 const invalidateKey = (key: string): void => {
+  dimensionCache.delete(`img:${key}`);
   const entry = urlCache.get(key);
   if (!entry) return;
   urlCache.delete(key);
@@ -452,11 +701,15 @@ export const acquireUrl = async (
   id: string,
   variant: ImageVariant = 'full',
   retain = false,
+  forceFresh = false,
 ): Promise<{ uri: string; key: string } | null> => {
   const key = blobKey(id, variant);
 
   const cached = urlCache.get(key);
-  if (cached) {
+  if (cached && forceFresh) {
+    urlCache.delete(key);
+    revoke(cached);
+  } else if (cached) {
     const entry = rememberUrl(key, cached.url);
     if (retain) {
       entry.refs += 1;
@@ -490,6 +743,7 @@ export const fileUriFor = async (
 export const acquireImageUri = async (
   ref?: string | null,
   variant: ImageVariant = 'full',
+  forceFresh = false,
 ): Promise<{ uri: string; key: string | null } | null> => {
   if (!isRenderable(ref)) return null;
   const value = ref as string;
@@ -498,8 +752,8 @@ export const acquireImageUri = async (
     const id = refId(value);
     // Retained inside acquireUrl, not after it — see the note there.
     // A missing thumbnail is not fatal: fall back to the full image.
-    const resolved = (await acquireUrl(id, variant, true)) ??
-      (variant === 'thumb' ? await acquireUrl(id, 'full', true) : null);
+    const resolved = (await acquireUrl(id, variant, true, forceFresh)) ??
+      (variant === 'thumb' ? await acquireUrl(id, 'full', true, forceFresh) : null);
     return resolved ?? null;
   }
 
@@ -533,13 +787,15 @@ const storeBoth = async (source: Blob | string): Promise<StoredImage> => {
   const id = newId();
 
   const full = await encode(source, FULL_MAX_DIMENSION, FULL_QUALITY);
-  await putBlob(id, 'full', full.blob);
+  const fullBytes = await blobToBytes(full.blob);
+  await putBytes(id, 'full', fullBytes);
 
   // Thumbnail is derived from the already-downscaled blob.
   const thumb = await encode(full.blob, THUMB_MAX_DIMENSION, THUMB_QUALITY);
-  await putBlob(id, 'thumb', thumb.blob);
+  const thumbBytes = await blobToBytes(thumb.blob);
+  await putBytes(id, 'thumb', thumbBytes);
 
-  return { ref: makeFileRef(id), width: full.width, height: full.height, bytes: full.blob.size };
+  return { ref: makeFileRef(id), width: full.width, height: full.height, bytes: fullBytes.byteLength };
 };
 
 export const importFromUri = async (sourceUri: string): Promise<StoredImage> => storeBoth(sourceUri);
@@ -575,9 +831,7 @@ export const readAsBytes = async (
   variant: ImageVariant = 'full',
 ): Promise<Uint8Array | null> => {
   if (!isFileRef(ref)) return null;
-  const blob = await getBlob(refId(ref), variant);
-  if (!blob) return null;
-  return new Uint8Array(await blob.arrayBuffer());
+  return await getBytes(refId(ref), variant);
 };
 
 export const writeFromBytes = async (
@@ -586,7 +840,7 @@ export const writeFromBytes = async (
   existingId?: string,
 ): Promise<string> => {
   const id = existingId ?? newId();
-  await putBlob(id, variant, new Blob([bytes], { type: 'image/jpeg' }));
+  await putBytes(id, variant, bytes);
 
   // Importing over an existing id replaces the blob, but an object URL pins the
   // *old* Blob for its lifetime — without this, a re-import would keep showing
@@ -600,18 +854,15 @@ export const writeFromBytes = async (
  * Dimensions
  * ------------------------------------------------------------------ */
 
-const dimensionCache = new Map<string, ImageSize | null>();
-
 /**
- * Natural pixel dimensions, read from the blob header without decoding.
+ * Natural pixel dimensions, read from the stored header bytes without decoding.
  *
- * `blob.slice()` is lazy — it does not copy — so this reads at most 64KB off
- * storage per image. Decoding to measure would cost the full bitmap, which on
- * web is ~7.7MB for a 1600x1200 image and is exactly what we are avoiding.
+ * Decoding to measure would cost the full bitmap, which on web is ~7.7MB for a
+ * 1600x1200 image and is exactly what we are avoiding.
  *
  * Pass 'full' when the result will drive layout: the thumbnail shares the
  * aspect ratio but is capped at 400px, so its absolute dimensions are not the
- * image's real size. Both headers cost the same bounded slice.
+ * image's real size.
  */
 export const getImageSize = async (
   ref: string,
@@ -624,21 +875,21 @@ export const getImageSize = async (
   if (cached !== undefined) return cached;
 
   const id = refId(ref);
-  const blob = (await getBlob(id, variant)) ?? (variant === 'thumb' ? await getBlob(id, 'full') : null);
-  if (!blob) {
-    dimensionCache.set(cacheKey, null);
+  const bytes = (await getBytes(id, variant)) ?? (variant === 'thumb' ? await getBytes(id, 'full') : null);
+  if (!bytes) {
     return null;
   }
 
   let size: ImageSize | null = null;
   try {
-    const header = blob.slice(0, HEADER_BYTES);
-    size = readImageSize(new Uint8Array(await header.arrayBuffer()));
+    size = readImageSize(bytes.subarray(0, HEADER_BYTES));
   } catch {
     size = null;
   }
 
-  dimensionCache.set(cacheKey, size);
+  if (size) {
+    dimensionCache.set(cacheKey, size);
+  }
   return size;
 };
 
@@ -748,8 +999,8 @@ export const cropStoredImage = async (
 
 export const sizeOf = async (ref: string, variant: ImageVariant = 'full'): Promise<number> => {
   if (!isFileRef(ref)) return 0;
-  const blob = await getBlob(refId(ref), variant);
-  return blob?.size ?? 0;
+  const stored = await getStored(refId(ref), variant);
+  return stored?.byteLength ?? stored?.size ?? 0;
 };
 
 export const deleteRef = async (ref: string): Promise<void> => {
@@ -765,7 +1016,11 @@ export const collectGarbage = async (liveRefs: Set<string>): Promise<number> => 
   const db = await openDb();
   const liveIds = new Set<string>();
   liveRefs.forEach((ref) => {
-    if (isFileRef(ref)) liveIds.add(refId(ref));
+    if (isFileRef(ref)) {
+      const id = refId(ref);
+      liveIds.add(id);
+      liveIds.add(stripDatePrefix(id));
+    }
   });
 
   const keys = await new Promise<IDBValidKey[]>((resolve, reject) => {
@@ -777,7 +1032,7 @@ export const collectGarbage = async (liveRefs: Set<string>): Promise<number> => 
 
   const stale = keys.filter((key) => {
     const id = String(key).split(':')[0];
-    return !liveIds.has(id);
+    return !liveIds.has(id) && !liveIds.has(stripDatePrefix(id));
   });
   if (stale.length === 0) return 0;
 
@@ -793,11 +1048,30 @@ export const collectGarbage = async (liveRefs: Set<string>): Promise<number> => 
 
 export const totalBytes = async (): Promise<number> => {
   const db = await openDb();
-  const blobs = await new Promise<Blob[]>((resolve, reject) => {
+  return await new Promise<number>((resolve, reject) => {
     const tx = db.transaction(BLOB_STORE, 'readonly');
-    const request = tx.objectStore(BLOB_STORE).getAll();
-    request.onsuccess = () => resolve(request.result);
+    const store = tx.objectStore(BLOB_STORE);
+    if (typeof store.openCursor === 'function') {
+      let sum = 0;
+      const request = store.openCursor();
+      request.onsuccess = () => {
+        const cursor = request.result;
+        if (cursor) {
+          const val = cursor.value as any;
+          sum += val?.byteLength ?? val?.size ?? 0;
+          cursor.continue();
+        } else {
+          resolve(sum);
+        }
+      };
+      request.onerror = () => reject(request.error);
+      return;
+    }
+    const request = store.getAll();
+    request.onsuccess = () => {
+      const items = (request.result ?? []) as any[];
+      resolve(items.reduce((sum, item) => sum + (item?.byteLength ?? item?.size ?? 0), 0));
+    };
     request.onerror = () => reject(request.error);
   });
-  return blobs.reduce((sum, blob) => sum + (blob?.size ?? 0), 0);
 };

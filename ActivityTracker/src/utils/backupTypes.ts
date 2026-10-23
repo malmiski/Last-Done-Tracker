@@ -1,7 +1,7 @@
 /** Shared types for the backup bundle, so native and web agree on the shape. */
 
 export interface BackupProgress {
-  phase: 'entries' | 'images' | 'database' | 'finalising' | 'reading' | 'restoring';
+  phase: 'entries' | 'images' | 'database' | 'finalising' | 'reading' | 'reading_file' | 'restoring';
   completed: number;
   /** 0 when the total is not known yet (for example while walking entries). */
   total: number;

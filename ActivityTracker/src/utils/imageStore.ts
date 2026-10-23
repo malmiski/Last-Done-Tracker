@@ -546,6 +546,7 @@ export const clearMemoryCache = (): void => {};
 export const acquireImageUri = async (
   ref?: string | null,
   variant: ImageVariant = 'full',
+  _forceFresh = false,
 ): Promise<{ uri: string; key: string | null } | null> => {
   const uri = await resolveImageUri(ref, variant);
   return uri ? { uri, key: null } : null;

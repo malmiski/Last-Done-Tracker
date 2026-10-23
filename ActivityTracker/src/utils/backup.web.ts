@@ -332,6 +332,9 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
     const importedIds = new Map<string, string>();
     const pendingWrites: Promise<void>[] = [];
     let imagesImported = 0;
+    let imagesFound = 0;
+    let isReadingFile = true;
+    let quotaExceeded = false;
 
     const unzip = new Unzip();
     unzip.register(UnzipInflate);
@@ -364,8 +367,11 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
         if (chunk && chunk.length) parts.push(chunk);
         if (!final) return;
 
+        imagesFound += 1;
         const bytes = concat(parts);
         parts.length = 0;
+
+        if (quotaExceeded) return;
 
         pendingWrites.push(
           imageStore
@@ -373,9 +379,16 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
             .then(() => {
               recordImportedId(name, parsed.id, importedIds);
               imagesImported += 1;
-              onProgress?.({ phase: 'reading', completed: imagesImported, total: 0 });
+              if (!isReadingFile) {
+                onProgress?.({ phase: 'reading', completed: imagesImported, total: imagesFound });
+              }
             })
-            .catch(writeError => console.warn(`Failed to restore image ${name}`, writeError)),
+            .catch(writeError => {
+              console.warn(`Failed to restore image ${name}`, writeError);
+              if (writeError?.name === 'QuotaExceededError' || writeError?.message?.includes('Quota')) {
+                quotaExceeded = true;
+              }
+            }),
         );
       };
       archiveFile.start();
@@ -387,16 +400,29 @@ export const importBundle = async (onProgress?: ProgressCallback): Promise<Impor
 
     if (file.size > 0) {
       while (offset < file.size) {
+        onProgress?.({ phase: 'reading_file', completed: offset, total: file.size });
         const slice = file.slice(offset, Math.min(file.size, offset + CHUNK_SIZE));
         const chunk = await readAsUint8Array(slice);
         offset += slice.size;
         const isFinal = offset >= file.size;
         unzip.push(chunk, isFinal);
-        await new Promise<void>(resolve => setTimeout(resolve, 0));
+
+        // Apply backpressure: if fflate has emitted files that triggered writes, wait for them.
+        // This prevents holding thousands of uncompressed images in JS memory while IDB catches up,
+        // which causes jetsam OOM kills or silent IDB hangs on iOS WKWebView.
+        if (pendingWrites.length > 0) {
+          await Promise.all(pendingWrites);
+          pendingWrites.length = 0;
+        } else {
+          await new Promise<void>(resolve => setTimeout(resolve, 0));
+        }
       }
     } else {
       unzip.push(new Uint8Array(0), true);
     }
+
+    isReadingFile = false;
+    onProgress?.({ phase: 'reading', completed: imagesImported, total: imagesFound });
 
     await Promise.all(pendingWrites);
 

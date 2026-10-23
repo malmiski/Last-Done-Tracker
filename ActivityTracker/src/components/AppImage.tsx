@@ -92,7 +92,7 @@ export const useImageUri = (
     let heldKey: string | null = null;
     let retryTimer: any;
 
-    acquireImageUri(imageRef, variant)
+    (nudge > 0 ? acquireImageUri(imageRef, variant, true) : acquireImageUri(imageRef, variant))
       .then((resolved) => {
         if (cancelled) {
           // Unmounted while resolving — hand the hold straight back.

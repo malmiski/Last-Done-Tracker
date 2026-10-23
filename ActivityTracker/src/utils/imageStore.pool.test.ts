@@ -17,9 +17,10 @@
 declare const global: any;
 
 const revoked: string[] = [];
+const createdFrom: any[] = [];
 let created = 0;
 
-const blobs = new Map<string, { size: number }>();
+const blobs = new Map<string, any>();
 
 /**
  * The pool protects a just-released URL for a grace period, so eviction is
@@ -36,6 +37,7 @@ const PAST_GRACE_MS = 60_000;
 
 beforeEach(() => {
   revoked.length = 0;
+  createdFrom.length = 0;
   created = 0;
   blobs.clear();
   clock = 1_700_000_000_000;
@@ -50,7 +52,10 @@ afterEach(() => {
 /** Minimal IndexedDB + URL stand-ins: enough to exercise the pool logic. */
 const installGlobals = () => {
   (global as any).URL = {
-    createObjectURL: () => `blob:mock/${++created}`,
+    createObjectURL: (obj: any) => {
+      createdFrom.push(obj);
+      return `blob:mock/${++created}`;
+    },
     revokeObjectURL: (url: string) => revoked.push(url),
   };
 
@@ -306,5 +311,68 @@ describe('object URL pool', () => {
     store.clearMemoryCache();
     Date.now = originalDateNow;
     expect(revoked).toContain(uri);
+  });
+
+  it('stores raw Uint8Array in IndexedDB and materialises an in-memory Blob on read', async () => {
+    const store = await loadStore();
+
+    // IndexedDB must hold raw Uint8Array bytes, never a Blob instance, so iOS
+    // WKWebView does not create unreadable WebKitBlobResource file handles.
+    const storedFull = blobs.get('abc:full');
+    expect(storedFull).toBeInstanceOf(Uint8Array);
+    expect(Array.from(storedFull)).toEqual([1, 2, 3]);
+
+    const resolved = await store.acquireImageUri('img:abc', 'full');
+    expect(resolved).not.toBeNull();
+    expect(createdFrom.length).toBe(1);
+    expect(createdFrom[0]).toBeInstanceOf(Blob);
+
+    const roundTrip = await store.readAsBytes('img:abc', 'full');
+    expect(roundTrip).toBeInstanceOf(Uint8Array);
+    expect(Array.from(roundTrip!)).toEqual([1, 2, 3]);
+
+    expect(await store.sizeOf('img:abc', 'full')).toBe(3);
+    expect(await store.totalBytes()).toBe(6);
+  });
+
+  it('falls back to stripDatePrefix(id) when an entry reference includes a date prefix', async () => {
+    const store = await loadStore();
+
+    const resolved = await store.acquireImageUri('img:20260405_143022_01_abc', 'thumb');
+    expect(resolved).not.toBeNull();
+    expect(resolved!.uri).toMatch(/^blob:mock\//);
+
+    const bytes = await store.readAsBytes('img:20260405_143022_01_abc', 'full');
+    expect(Array.from(bytes!)).toEqual([1, 2, 3]);
+  });
+
+  it('evicts and revokes a cached URL when forceFresh is true (onError retry)', async () => {
+    const store = await loadStore();
+
+    const first = await store.acquireImageUri('img:abc', 'thumb');
+    expect(first).not.toBeNull();
+
+    const refreshed = await store.acquireImageUri('img:abc', 'thumb', true);
+    expect(refreshed).not.toBeNull();
+    expect(refreshed!.uri).not.toBe(first!.uri);
+    expect(revoked).toContain(first!.uri);
+  });
+
+  it('does not permanently cache null in getImageSize when read before import completes', async () => {
+    installGlobals();
+    const store = require('./imageStore.web');
+
+    // Before the image is written, getImageSize returns null.
+    expect(await store.getImageSize('img:pending', 'full')).toBeNull();
+
+    // Minimal valid 16x32 JPEG header (SOI + SOF0 with height=32, width=16).
+    const jpegHeader = new Uint8Array([
+      0xff, 0xd8, 0xff, 0xc0, 0x00, 0x11, 0x08, 0x00, 0x20, 0x00, 0x10, 0x03,
+      0x01, 0x11, 0x00, 0x02, 0x11, 0x01, 0x03, 0x11, 0x01, 0xff, 0xd9,
+    ]);
+    await store.writeFromBytes(jpegHeader, 'full', 'pending');
+
+    // Subsequent call must read the newly imported bytes instead of returning a cached null.
+    expect(await store.getImageSize('img:pending', 'full')).toEqual({ width: 16, height: 32 });
   });
 });

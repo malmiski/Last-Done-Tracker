@@ -33,7 +33,8 @@ const describeProgress = (progress: BackupProgress): string => {
     case 'images': return `Packing images… (${progress.completed}/${progress.total})`;
     case 'database': return 'Adding database…';
     case 'finalising': return 'Finishing…';
-    case 'reading': return `Reading images… (${progress.completed})`;
+    case 'reading': return progress.total > 0 ? `Reading images… (${progress.completed}/${progress.total})` : `Reading images… (${progress.completed})`;
+    case 'reading_file': return `Reading backup… (${Math.round((progress.completed / progress.total) * 100)}%)`;
     case 'restoring': return `Restoring entries… (${progress.completed}/${progress.total})`;
     default: return 'Working…';
   }
@@ -41,7 +42,7 @@ const describeProgress = (progress: BackupProgress): string => {
 
 const SettingsScreen: React.FC = () => {
   const router = useRouter();
-  const { clearAllHistory } = useActivityData();
+  const { clearAllHistory, refreshData } = useActivityData();
   const [pinLock, setPinLock] = useState('');
   const [storage, setStorage] = useState<{ usage: number; quota: number } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -95,12 +96,18 @@ const SettingsScreen: React.FC = () => {
     try {
       const result = await importBundle(progress => setBusy(describeProgress(progress)));
       if (result) {
+        await refreshData();
         const parts = [`Imported ${result.entriesImported} entries`];
         if (result.imagesImported > 0) parts.push(`${result.imagesImported} images`);
         if (result.imagesMissing > 0) {
           parts.push(`${result.imagesMissing} images could not be restored`);
         }
-        Alert.alert('Import complete', `${parts.join('\n')}.`);
+        const message = `${parts.join('\n')}.`;
+        if (Platform.OS === 'web' && typeof alert === 'function') {
+          alert(`Import complete\n\n${message}`);
+        } else {
+          Alert.alert('Import complete', message);
+        }
       }
     } finally {
       setBusy(null);
