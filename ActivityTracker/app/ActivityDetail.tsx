@@ -16,6 +16,7 @@ import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import ActivityHistoryItem, { ImageMode } from '../src/components/ActivityHistoryItem';
+import ScrollHudButtons, { animateScrollOffset, JUMP_SCROLL_DURATION_MS } from '../src/components/ScrollHudButtons';
 import { clearImageMemoryCache } from '../src/components/AppImage';
 import { useActivityData } from '../src/hooks/useActivityData';
 import { useEntries } from '../src/hooks/useEntries';
@@ -164,16 +165,23 @@ const ActivityDetailScreen: React.FC = () => {
   const {
     entries,
     total,
+    windowOffset,
     loading,
     loadingMore,
     hasMore,
     loadMore,
+    jumpToBottom,
+    jumpToTop,
     refresh,
     removeEntry,
   } = useEntries(activityId, { search: searchQuery, filterStartDate, filterEndDate, filterTagIds, filterTagMode });
 
   const flatListRef = useRef<FlatList<EntryRow>>(null);
   const pendingRandomIndex = useRef<number | null>(null);
+  const scrollOffsetRef = useRef(0);
+  const listHeightRef = useRef(600);
+  const isJumpingRef = useRef(false);
+  const pendingJumpEdgeRef = useRef<'top' | 'bottom' | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -205,31 +213,31 @@ const ActivityDetailScreen: React.FC = () => {
     if (total === 0) return;
     const randomIndex = Math.floor(Math.random() * total);
 
-    if (randomIndex < entries.length) {
-      flatListRef.current?.scrollToIndex({ index: randomIndex, animated: false });
+    if (randomIndex >= windowOffset && randomIndex < windowOffset + entries.length) {
+      flatListRef.current?.scrollToIndex({ index: randomIndex - windowOffset, animated: false });
       return;
     }
 
     pendingRandomIndex.current = randomIndex;
     loadMore();
-  }, [entries.length, loadMore, total]);
+  }, [entries.length, loadMore, total, windowOffset]);
 
   useEffect(() => {
     const target = pendingRandomIndex.current;
     if (target === null) return;
 
-    if (target < entries.length) {
+    if (target >= windowOffset && target < windowOffset + entries.length) {
       pendingRandomIndex.current = null;
       // Wait a frame so the newly appended rows have been laid out.
       requestAnimationFrame(() => {
-        flatListRef.current?.scrollToIndex({ index: target, animated: false });
+        flatListRef.current?.scrollToIndex({ index: target - windowOffset, animated: false });
       });
     } else if (hasMore && !loadingMore) {
       loadMore();
     } else if (!hasMore) {
       pendingRandomIndex.current = null;
     }
-  }, [entries.length, hasMore, loadingMore, loadMore]);
+  }, [entries.length, hasMore, loadingMore, loadMore, windowOffset]);
 
 
 
@@ -301,11 +309,11 @@ const ActivityDetailScreen: React.FC = () => {
   const contentWidth = rowContentWidth(useWindowDimensions().width);
 
   const rows = useMemo<EntryRow[]>(
-    () => buildEntryRows(entries, total),
+    () => buildEntryRows(entries, total, undefined, windowOffset),
     // dimensionsVersion is not read here: it is a signal that the sizes the
     // builder looks up have changed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [entries, total, dimensionsVersion],
+    [entries, total, windowOffset, dimensionsVersion],
   );
 
   /*
@@ -325,6 +333,76 @@ const ActivityDetailScreen: React.FC = () => {
     () => buildItemLayout(rows, imageMode, contentWidth),
     [rows, imageMode, contentWidth],
   );
+
+  useEffect(() => {
+    const edge = pendingJumpEdgeRef.current;
+    if (!edge || rows.length === 0) return;
+    pendingJumpEdgeRef.current = null;
+
+    requestAnimationFrame(() => {
+      if (edge === 'bottom') {
+        const last = getItemLayout(rows, rows.length - 1);
+        flatListRef.current?.scrollToOffset({
+          offset: Math.max(0, last.offset + last.length),
+          animated: false,
+        });
+        flatListRef.current?.scrollToEnd({ animated: false });
+      } else {
+        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      }
+      isJumpingRef.current = false;
+    });
+  }, [rows, getItemLayout]);
+
+  const handleScrollToTop = useCallback(async () => {
+    if (rows.length === 0 || isJumpingRef.current) return;
+
+    if (windowOffset > 0) {
+      isJumpingRef.current = true;
+      const last = getItemLayout(rows, rows.length - 1);
+      const maxOffset = Math.max(0, last.offset + last.length - listHeightRef.current);
+      const startY =
+        scrollOffsetRef.current <= 40 ? Math.min(maxOffset, 600) : scrollOffsetRef.current;
+      pendingJumpEdgeRef.current = 'top';
+      await jumpToTop(() =>
+        animateScrollOffset(
+          y => flatListRef.current?.scrollToOffset({ offset: y, animated: false }),
+          startY,
+          0,
+          JUMP_SCROLL_DURATION_MS,
+        ),
+      );
+      return;
+    }
+
+    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
+  }, [getItemLayout, jumpToTop, rows, windowOffset]);
+
+  const handleScrollToBottom = useCallback(async () => {
+    if (rows.length === 0 || isJumpingRef.current) return;
+
+    if (hasMore) {
+      isJumpingRef.current = true;
+      const last = getItemLayout(rows, rows.length - 1);
+      const maxOffset = Math.max(0, last.offset + last.length - listHeightRef.current);
+      const startY =
+        scrollOffsetRef.current >= maxOffset - 40
+          ? Math.max(0, maxOffset - Math.min(maxOffset, 600))
+          : scrollOffsetRef.current;
+      pendingJumpEdgeRef.current = 'bottom';
+      await jumpToBottom(() =>
+        animateScrollOffset(
+          y => flatListRef.current?.scrollToOffset({ offset: y, animated: false }),
+          startY,
+          maxOffset,
+          JUMP_SCROLL_DURATION_MS,
+        ),
+      );
+      return;
+    }
+
+    flatListRef.current?.scrollToEnd({ animated: true });
+  }, [getItemLayout, hasMore, jumpToBottom, rows]);
 
   /*
    * Depends only on things that change when the user acts, not on `entries`.
@@ -359,7 +437,7 @@ const ActivityDetailScreen: React.FC = () => {
    * again — a feedback loop that appends pages faster than the user scrolls.
    */
   const handleEndReached = useCallback(() => {
-    if (!hasMore || loading || loadingMore) return;
+    if (isJumpingRef.current || !hasMore || loading || loadingMore) return;
     loadMore();
   }, [hasMore, loading, loadingMore, loadMore]);
 
@@ -517,6 +595,12 @@ const ActivityDetailScreen: React.FC = () => {
         viewabilityConfig={viewabilityConfigRef.current}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
+        onScroll={event => {
+          scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+        }}
+        onLayout={event => {
+          listHeightRef.current = event.nativeEvent.layout.height;
+        }}
         // Windowing. These are the numbers that bound how many images can be
         // decoded at once, so they tighten as the image mode gets heavier.
         windowSize={WINDOW_SIZE_BY_MODE[imageMode]}
@@ -577,6 +661,10 @@ const ActivityDetailScreen: React.FC = () => {
         <Icon name="plus" size={30} color={theme.colors.background} />
         <Text style={styles.fabText}>Add New Entry</Text>
       </TouchableOpacity>
+      <ScrollHudButtons
+        onPressTop={handleScrollToTop}
+        onPressBottom={handleScrollToBottom}
+      />
     </SafeAreaView>
   );
 };
@@ -775,7 +863,7 @@ const styles = StyleSheet.create({
     // Mirrored in ROW_METRICS.listPaddingTop, which getItemLayout adds to the
     // first row's offset.
     paddingTop: ROW_METRICS.listPaddingTop,
-    paddingBottom: 100,
+    paddingBottom: 110,
   },
   footer: {
     height: 60,
@@ -793,8 +881,8 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     bottom: 40,
-    right: 60,
-    left: 60,
+    right: 80,
+    left: 80,
     backgroundColor: theme.colors.primary,
     borderRadius: 30,
     paddingVertical: 15,

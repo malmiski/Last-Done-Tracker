@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Switch, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +14,7 @@ import {
   subscribeToMigration,
   MigrationProgress,
 } from '../src/utils/imageMigration';
+import ScrollHudButtons from '../src/components/ScrollHudButtons';
 
 const formatBytes = (bytes: number): string => {
   if (!bytes || bytes < 1024) return `${bytes || 0} B`;
@@ -43,6 +44,7 @@ const describeProgress = (progress: BackupProgress): string => {
 const SettingsScreen: React.FC = () => {
   const router = useRouter();
   const { clearAllHistory, refreshData } = useActivityData();
+  const scrollViewRef = useRef<ScrollView>(null);
   const [pinLock, setPinLock] = useState('');
   const [storage, setStorage] = useState<{ usage: number; quota: number } | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -176,7 +178,7 @@ const SettingsScreen: React.FC = () => {
         <View style={{ width: 30 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView ref={scrollViewRef} contentContainerStyle={styles.content}>
         {busy && (
           <View style={styles.busyBanner}>
             <ActivityIndicator color={theme.colors.primary} />
@@ -293,6 +295,11 @@ const SettingsScreen: React.FC = () => {
           <Icon name="trash-can-outline" size={24} color="#FF3B30" />
         </TouchableOpacity>
       </ScrollView>
+
+      <ScrollHudButtons
+        onPressTop={() => scrollViewRef.current?.scrollTo({ y: 0, animated: true })}
+        onPressBottom={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+      />
     </SafeAreaView>
   );
 };
@@ -317,7 +324,7 @@ const styles = StyleSheet.create({
   },
   content: {
     padding: 20,
-    paddingBottom: 60,
+    paddingBottom: 110,
   },
   sectionTitle: {
     color: theme.colors.subtext,

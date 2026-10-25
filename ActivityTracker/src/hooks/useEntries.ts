@@ -36,10 +36,13 @@ export type ListEntry = ActivityEntry & { activityId: string };
 interface UseEntriesResult {
   entries: ListEntry[];
   total: number;
+  windowOffset: number;
   loading: boolean;
   loadingMore: boolean;
   hasMore: boolean;
   loadMore: () => void;
+  jumpToBottom: (onBeforeSwap?: () => Promise<void>) => Promise<void>;
+  jumpToTop: (onBeforeSwap?: () => Promise<void>) => Promise<void>;
   refresh: () => Promise<void>;
   removeEntry: (entryId: string) => void;
 }
@@ -50,6 +53,7 @@ export const useEntries = (
 ): UseEntriesResult => {
   const [entries, setEntries] = useState<ListEntry[]>([]);
   const [total, setTotal] = useState(0);
+  const [windowOffset, setWindowOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState(search);
@@ -57,18 +61,22 @@ export const useEntries = (
   // Guards against a slow first page overwriting a newer search's results.
   const requestId = useRef(0);
   const offsetRef = useRef(0);
+  const windowOffsetRef = useRef(0);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedSearch(search), SEARCH_DEBOUNCE_MS);
     return () => clearTimeout(timer);
   }, [search]);
 
-  /** Re-read the list from the top, keeping `limit` rows. */
+  /** Read a window of `limit` rows starting at `startOffset`. */
   const loadWindow = useCallback(
-    async (limit: number) => {
+    async (limit: number, startOffset = 0) => {
       if (!activityId) {
         setEntries([]);
         setTotal(0);
+        setWindowOffset(0);
+        windowOffsetRef.current = 0;
+        offsetRef.current = 0;
         setLoading(false);
         return;
       }
@@ -77,11 +85,13 @@ export const useEntries = (
       setLoading(true);
       try {
         const [page, count] = await Promise.all([
-          database.getEntriesPage(activityId, { limit, offset: 0, search: debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode }),
+          database.getEntriesPage(activityId, { limit, offset: startOffset, search: debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode }),
           database.countEntries(activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode),
         ]);
         if (requestId.current !== token) return;
-        offsetRef.current = page.length;
+        windowOffsetRef.current = startOffset;
+        offsetRef.current = startOffset + page.length;
+        setWindowOffset(startOffset);
         setEntries(page);
         setTotal(count);
         prefetchDimensions(page);
@@ -90,6 +100,9 @@ export const useEntries = (
         if (requestId.current === token) {
           setEntries([]);
           setTotal(0);
+          setWindowOffset(0);
+          windowOffsetRef.current = 0;
+          offsetRef.current = 0;
         }
       } finally {
         if (requestId.current === token) setLoading(false);
@@ -98,7 +111,7 @@ export const useEntries = (
     [activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode],
   );
 
-  const loadFirstPage = useCallback(() => loadWindow(pageSize), [loadWindow, pageSize]);
+  const loadFirstPage = useCallback(() => loadWindow(pageSize, 0), [loadWindow, pageSize]);
 
   useEffect(() => {
     void loadFirstPage();
@@ -114,7 +127,11 @@ export const useEntries = (
    * clamped to fit, and the user was dumped near the top with no idea why.
    */
   const refresh = useCallback(
-    () => loadWindow(Math.max(pageSize, offsetRef.current)),
+    () =>
+      loadWindow(
+        Math.max(pageSize, offsetRef.current - windowOffsetRef.current),
+        windowOffsetRef.current,
+      ),
     [loadWindow, pageSize],
   );
 
@@ -152,12 +169,81 @@ export const useEntries = (
     })();
   }, [activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode, loading, loadingMore, pageSize, total]);
 
+  /**
+   * Jump directly to the oldest ("very first") page of entries without loading
+   * all intermediate pages into memory. Runs `onBeforeSwap` (such as a scroll
+   * animation) in parallel and swaps the rows in once both finish.
+   */
+  const jumpToBottom = useCallback(
+    async (onBeforeSwap?: () => Promise<void>) => {
+      if (!activityId) return;
+      const token = ++requestId.current;
+      const startOffset = Math.max(0, total - pageSize);
+      try {
+        const [page] = await Promise.all([
+          database.getEntriesPage(activityId, {
+            limit: pageSize,
+            offset: startOffset,
+            search: debouncedSearch,
+            filterStartDate,
+            filterEndDate,
+            filterTagIds,
+            filterTagMode,
+          }),
+          onBeforeSwap ? onBeforeSwap() : Promise.resolve(),
+        ]);
+        if (requestId.current !== token) return;
+        prefetchDimensions(page);
+        windowOffsetRef.current = startOffset;
+        offsetRef.current = startOffset + page.length;
+        setWindowOffset(startOffset);
+        setEntries(page);
+      } catch (error) {
+        console.error('Failed to jump to bottom entries', error);
+      }
+    },
+    [activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode, pageSize, total],
+  );
+
+  /**
+   * Return to the newest page of entries at offset 0.
+   */
+  const jumpToTop = useCallback(
+    async (onBeforeSwap?: () => Promise<void>) => {
+      if (!activityId) return;
+      const token = ++requestId.current;
+      try {
+        const [page] = await Promise.all([
+          database.getEntriesPage(activityId, {
+            limit: pageSize,
+            offset: 0,
+            search: debouncedSearch,
+            filterStartDate,
+            filterEndDate,
+            filterTagIds,
+            filterTagMode,
+          }),
+          onBeforeSwap ? onBeforeSwap() : Promise.resolve(),
+        ]);
+        if (requestId.current !== token) return;
+        prefetchDimensions(page);
+        windowOffsetRef.current = 0;
+        offsetRef.current = page.length;
+        setWindowOffset(0);
+        setEntries(page);
+      } catch (error) {
+        console.error('Failed to jump to top entries', error);
+      }
+    },
+    [activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode, pageSize],
+  );
+
   /** Drop a row locally without refetching the whole list. */
   const removeEntry = useCallback((entryId: string) => {
     setEntries(previous => {
       const next = previous.filter(entry => entry.id !== entryId);
       if (next.length !== previous.length) {
-        offsetRef.current = Math.max(0, offsetRef.current - 1);
+        offsetRef.current = Math.max(windowOffsetRef.current, offsetRef.current - 1);
         setTotal(count => Math.max(0, count - 1));
       }
       return next;
@@ -167,10 +253,13 @@ export const useEntries = (
   return {
     entries,
     total,
+    windowOffset,
     loading,
     loadingMore,
-    hasMore: entries.length < total,
+    hasMore: windowOffset + entries.length < total,
     loadMore,
+    jumpToBottom,
+    jumpToTop,
     refresh,
     removeEntry,
   };
@@ -220,11 +309,13 @@ export const useEntriesByTags = (
 ) => {
   const [entries, setEntries] = useState<ListEntry[]>([]);
   const [total, setTotal] = useState(0);
+  const [windowOffset, setWindowOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const requestId = useRef(0);
   const offsetRef = useRef(0);
+  const windowOffsetRef = useRef(0);
   // Array identity changes every render; compare by value instead.
   const key = tagIds.slice().sort().join(',');
 
@@ -233,6 +324,9 @@ export const useEntriesByTags = (
     if (ids.length === 0) {
       setEntries([]);
       setTotal(0);
+      setWindowOffset(0);
+      windowOffsetRef.current = 0;
+      offsetRef.current = 0;
       return;
     }
 
@@ -244,7 +338,9 @@ export const useEntriesByTags = (
         database.countEntriesByTags(ids),
       ]);
       if (requestId.current !== token) return;
+      windowOffsetRef.current = 0;
       offsetRef.current = page.length;
+      setWindowOffset(0);
       setEntries(page);
       setTotal(count);
     } catch (error) {
@@ -285,6 +381,51 @@ export const useEntriesByTags = (
     })();
   }, [key, loading, loadingMore, pageSize, total]);
 
+  const jumpToBottom = useCallback(
+    async (onBeforeSwap?: () => Promise<void>) => {
+      const ids = key ? key.split(',') : [];
+      if (ids.length === 0) return;
+      const token = ++requestId.current;
+      const startOffset = Math.max(0, total - pageSize);
+      try {
+        const [page] = await Promise.all([
+          database.getEntriesByTags(ids, { limit: pageSize, offset: startOffset }),
+          onBeforeSwap ? onBeforeSwap() : Promise.resolve(),
+        ]);
+        if (requestId.current !== token) return;
+        windowOffsetRef.current = startOffset;
+        offsetRef.current = startOffset + page.length;
+        setWindowOffset(startOffset);
+        setEntries(page);
+      } catch (error) {
+        console.error('Failed to jump to bottom tagged entries', error);
+      }
+    },
+    [key, pageSize, total],
+  );
+
+  const jumpToTop = useCallback(
+    async (onBeforeSwap?: () => Promise<void>) => {
+      const ids = key ? key.split(',') : [];
+      if (ids.length === 0) return;
+      const token = ++requestId.current;
+      try {
+        const [page] = await Promise.all([
+          database.getEntriesByTags(ids, { limit: pageSize, offset: 0 }),
+          onBeforeSwap ? onBeforeSwap() : Promise.resolve(),
+        ]);
+        if (requestId.current !== token) return;
+        windowOffsetRef.current = 0;
+        offsetRef.current = page.length;
+        setWindowOffset(0);
+        setEntries(page);
+      } catch (error) {
+        console.error('Failed to jump to top tagged entries', error);
+      }
+    },
+    [key, pageSize],
+  );
+
   const removeEntry = useCallback((entryId: string) => {
     setEntries(previous => previous.filter(entry => entry.id !== entryId));
     setTotal(count => Math.max(0, count - 1));
@@ -293,10 +434,13 @@ export const useEntriesByTags = (
   return {
     entries,
     total,
+    windowOffset,
     loading,
     loadingMore,
-    hasMore: entries.length < total,
+    hasMore: windowOffset + entries.length < total,
     loadMore,
+    jumpToBottom,
+    jumpToTop,
     refresh: loadFirstPage,
     removeEntry,
   };

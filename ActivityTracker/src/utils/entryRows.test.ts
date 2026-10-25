@@ -35,6 +35,16 @@ describe('buildEntryRows', () => {
     expect(rows[29].displayIndex).toBe(471);
   });
 
+  it('numbers a bottom window using startOffset so the oldest items end at #1', () => {
+    const entries = Array.from({ length: 30 }, (_, i) =>
+      entry(`e${i}`, `2026-01-${String(i + 1).padStart(2, '0')}T10:00:00Z`),
+    );
+
+    const rows = buildEntryRows(entries, 500, undefined, 470);
+    expect(rows[0].displayIndex).toBe(30);
+    expect(rows[29].displayIndex).toBe(1);
+  });
+
   it('never produces a number below 1 when the count has not arrived yet', () => {
     const entries = [entry('b', '2026-02-01T10:00:00Z'), entry('a', '2026-01-01T10:00:00Z')];
 

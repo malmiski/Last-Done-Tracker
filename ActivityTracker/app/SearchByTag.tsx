@@ -16,6 +16,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
 import { useEntriesByTags, ListEntry } from '../src/hooks/useEntries';
 import ActivityHistoryItem, { ImageMode } from '../src/components/ActivityHistoryItem';
+import ScrollHudButtons, { animateScrollOffset, JUMP_SCROLL_DURATION_MS } from '../src/components/ScrollHudButtons';
 import { clearImageMemoryCache } from '../src/components/AppImage';
 
 /**
@@ -87,11 +88,27 @@ const SearchByTagScreen: React.FC = () => {
 
   // Paginated across every selected tag. Previously this fetched the complete
   // entry list for each tag -- images included -- and de-duplicated in JS.
-  const { entries, total, loading, loadingMore, hasMore, loadMore, refresh, removeEntry } =
-    useEntriesByTags(selectedTagIds);
+  const {
+    entries,
+    total,
+    windowOffset,
+    loading,
+    loadingMore,
+    hasMore,
+    loadMore,
+    jumpToBottom,
+    jumpToTop,
+    refresh,
+    removeEntry,
+  } = useEntriesByTags(selectedTagIds);
 
   const sectionListRef = useRef<SectionList<ListEntry>>(null);
   const pendingRandomIndex = useRef<number | null>(null);
+  const scrollOffsetRef = useRef(0);
+  const contentHeightRef = useRef(800);
+  const listHeightRef = useRef(600);
+  const isJumpingRef = useRef(false);
+  const pendingJumpEdgeRef = useRef<'top' | 'bottom' | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -168,6 +185,112 @@ const SearchByTagScreen: React.FC = () => {
     [groupedEntries],
   );
 
+  const scrollSectionListToOffset = useCallback((y: number, animated: boolean) => {
+    const responder = (sectionListRef.current as any)?.getScrollResponder?.();
+    if (responder?.scrollTo) {
+      responder.scrollTo({ y, animated });
+    } else if ((sectionListRef.current as any)?._wrapperListRef?.getListRef) {
+      (sectionListRef.current as any)._wrapperListRef
+        .getListRef()
+        .scrollToOffset({ offset: y, animated });
+    }
+  }, []);
+
+  const scrollSectionListToBottom = useCallback(
+    (animated: boolean) => {
+      const lastSection = groupedEntries.length - 1;
+      if (lastSection >= 0) {
+        const lastItem = groupedEntries[lastSection].data.length - 1;
+        if (lastItem >= 0) {
+          sectionListRef.current?.scrollToLocation({
+            sectionIndex: lastSection,
+            itemIndex: lastItem,
+            animated,
+            viewPosition: 1,
+          });
+        }
+      }
+      const responder = (sectionListRef.current as any)?.getScrollResponder?.();
+      responder?.scrollToEnd?.({ animated });
+    },
+    [groupedEntries],
+  );
+
+  useEffect(() => {
+    const edge = pendingJumpEdgeRef.current;
+    if (!edge || groupedEntries.length === 0) return;
+    pendingJumpEdgeRef.current = null;
+
+    requestAnimationFrame(() => {
+      if (edge === 'bottom') {
+        scrollSectionListToBottom(false);
+      } else {
+        sectionListRef.current?.scrollToLocation({
+          sectionIndex: 0,
+          itemIndex: 0,
+          animated: false,
+          viewPosition: 0,
+        });
+        scrollSectionListToOffset(0, false);
+      }
+      isJumpingRef.current = false;
+    });
+  }, [groupedEntries, scrollSectionListToBottom, scrollSectionListToOffset]);
+
+  const handleScrollToTop = useCallback(async () => {
+    if (groupedEntries.length === 0 || isJumpingRef.current) return;
+
+    if (windowOffset > 0 && !searchQuery) {
+      isJumpingRef.current = true;
+      const maxOffset = Math.max(0, contentHeightRef.current - listHeightRef.current);
+      const startY =
+        scrollOffsetRef.current <= 40 ? Math.min(maxOffset, 600) : scrollOffsetRef.current;
+      pendingJumpEdgeRef.current = 'top';
+      await jumpToTop(() =>
+        animateScrollOffset(
+          y => scrollSectionListToOffset(y, false),
+          startY,
+          0,
+          JUMP_SCROLL_DURATION_MS,
+        ),
+      );
+      return;
+    }
+
+    sectionListRef.current?.scrollToLocation({
+      sectionIndex: 0,
+      itemIndex: 0,
+      animated: true,
+      viewPosition: 0,
+    });
+    scrollSectionListToOffset(0, true);
+  }, [groupedEntries.length, jumpToTop, scrollSectionListToOffset, searchQuery, windowOffset]);
+
+  const handleScrollToBottom = useCallback(async () => {
+    if (groupedEntries.length === 0 || isJumpingRef.current) return;
+
+    if (hasMore && !searchQuery) {
+      isJumpingRef.current = true;
+      const maxOffset = Math.max(400, contentHeightRef.current - listHeightRef.current);
+      const startY =
+        scrollOffsetRef.current >= maxOffset - 40
+          ? Math.max(0, maxOffset - Math.min(maxOffset, 600))
+          : scrollOffsetRef.current;
+      pendingJumpEdgeRef.current = 'bottom';
+      await jumpToBottom(() =>
+        animateScrollOffset(
+          y => scrollSectionListToOffset(y, false),
+          startY,
+          maxOffset,
+          JUMP_SCROLL_DURATION_MS,
+        ),
+      );
+      return;
+    }
+
+    scrollSectionListToBottom(true);
+  }, [groupedEntries.length, hasMore, jumpToBottom, scrollSectionListToBottom, scrollSectionListToOffset, searchQuery]);
+
   /**
    * Jump to a random entry among everything the selected tags match, not just
    * what has been paged in — the same as the dice on an activity. The target
@@ -191,22 +314,22 @@ const SearchByTagScreen: React.FC = () => {
     if (total === 0) return;
     const randomIndex = Math.floor(Math.random() * total);
 
-    if (randomIndex < entries.length) {
-      scrollToEntry(entries[randomIndex].id);
+    if (randomIndex >= windowOffset && randomIndex < windowOffset + entries.length) {
+      scrollToEntry(entries[randomIndex - windowOffset].id);
       return;
     }
 
     pendingRandomIndex.current = randomIndex;
     loadMore();
-  }, [entries, groupedEntries, loadMore, scrollToEntry, searchQuery, selectedTagIds.length, total]);
+  }, [entries, groupedEntries, loadMore, scrollToEntry, searchQuery, selectedTagIds.length, total, windowOffset]);
 
   useEffect(() => {
     const target = pendingRandomIndex.current;
     if (target === null) return;
 
-    if (target < entries.length) {
+    if (target >= windowOffset && target < windowOffset + entries.length) {
       pendingRandomIndex.current = null;
-      const entryId = entries[target].id;
+      const entryId = entries[target - windowOffset].id;
       // Wait a frame so the newly appended rows have been laid out.
       requestAnimationFrame(() => scrollToEntry(entryId));
     } else if (hasMore && !loadingMore) {
@@ -214,7 +337,7 @@ const SearchByTagScreen: React.FC = () => {
     } else if (!hasMore) {
       pendingRandomIndex.current = null;
     }
-  }, [entries, hasMore, loadingMore, loadMore, scrollToEntry]);
+  }, [entries, hasMore, loadingMore, loadMore, scrollToEntry, windowOffset]);
 
   const hasSelection = selectedTagIds.length > 0;
 
@@ -299,8 +422,20 @@ const SearchByTagScreen: React.FC = () => {
         sections={groupedEntries}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
-        onEndReached={loadMore}
+        onEndReached={() => {
+          if (!isJumpingRef.current) loadMore();
+        }}
         onEndReachedThreshold={0.5}
+        onScroll={e => {
+          scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+        }}
+        scrollEventThrottle={16}
+        onContentSizeChange={(_w, h) => {
+          contentHeightRef.current = h;
+        }}
+        onLayout={e => {
+          listHeightRef.current = e.nativeEvent.layout.height;
+        }}
         initialNumToRender={imageMode === 'large' ? 3 : 10}
         windowSize={WINDOW_SIZE_BY_MODE[imageMode]}
         maxToRenderPerBatch={imageMode === 'large' ? 2 : 4}
@@ -352,6 +487,11 @@ const SearchByTagScreen: React.FC = () => {
             </Text>
           </View>
         )}
+      />
+
+      <ScrollHudButtons
+        onPressTop={handleScrollToTop}
+        onPressBottom={handleScrollToBottom}
       />
     </SafeAreaView>
   );
@@ -448,7 +588,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 20,
-    paddingBottom: 40,
+    paddingBottom: 110,
   },
   activityLabel: {
     color: theme.colors.primary,

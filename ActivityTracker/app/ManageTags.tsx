@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, FlatList, TouchableOpacity, TextInput, Modal, Alert, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
@@ -7,10 +7,12 @@ import { useRouter } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
 import { Tag } from '../src/data/activity-details';
 import * as database from '../src/utils/database';
+import ScrollHudButtons from '../src/components/ScrollHudButtons';
 
 const ManageTagsScreen: React.FC = () => {
   const router = useRouter();
   const { tags, addTag, updateTag, deleteTag } = useActivityData();
+  const flatListRef = useRef<FlatList<Tag>>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [editingTag, setEditingTag] = useState<Tag | null>(null);
   const [tagName, setTagName] = useState('');
@@ -91,6 +93,7 @@ const ManageTagsScreen: React.FC = () => {
       </View>
 
       <FlatList
+        ref={flatListRef}
         data={tags}
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
@@ -112,6 +115,11 @@ const ManageTagsScreen: React.FC = () => {
             </View>
           </View>
         )}
+      />
+
+      <ScrollHudButtons
+        onPressTop={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
+        onPressBottom={() => flatListRef.current?.scrollToEnd({ animated: true })}
       />
 
       <Modal
@@ -183,6 +191,7 @@ const styles = StyleSheet.create({
   },
   listContent: {
     padding: 20,
+    paddingBottom: 110,
   },
   tagItem: {
     flexDirection: 'row',

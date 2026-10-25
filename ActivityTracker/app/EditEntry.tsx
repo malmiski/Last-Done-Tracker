@@ -25,6 +25,7 @@ import {
 import AppImage, { clearImageMemoryCache } from '../src/components/AppImage';
 import LargeImageGallery from '../src/components/LargeImageGallery';
 import Toast, { useToast } from '../src/components/Toast';
+import ScrollHudButtons from '../src/components/ScrollHudButtons';
 
 /** Matches how timestamps read in the activity history. */
 const formatStamp = (date: Date) =>
@@ -86,6 +87,7 @@ const EditEntryScreen: React.FC = () => {
   const router = useRouter();
   const { activityId, entryId } = useLocalSearchParams<{ activityId: string, entryId: string }>();
   const { updateActivityEntry, getActivityById, tags, addTag } = useActivityData();
+  const scrollViewRef = useRef<ScrollView>(null);
 
   const activity = getActivityById(activityId);
   // Loads exactly one row. Previously this screen pulled the entire database
@@ -768,7 +770,7 @@ const EditEntryScreen: React.FC = () => {
       {/* Anchored just under the copy/paste buttons that trigger it. */}
       <Toast toast={toast} onHide={hideToast} />
 
-      <ScrollView style={styles.content}>
+      <ScrollView ref={scrollViewRef} style={styles.content}>
         {/*
           Sits directly above the fields it would change, so the suggestion and
           its effect are visible at the same time. Nothing happens until "Use
@@ -1216,6 +1218,11 @@ const EditEntryScreen: React.FC = () => {
           <Text style={styles.buttonText}>Save Changes</Text>
         </TouchableOpacity>
       </View>
+      <ScrollHudButtons
+        bottom={25}
+        onPressTop={() => scrollViewRef.current?.scrollTo({ y: 0, animated: true })}
+        onPressBottom={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+      />
 
       {/*
         Full-size viewer. The inline previews deliberately render the thumbnail
@@ -1641,7 +1648,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   footer: {
-    padding: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 80,
   },
   button: {
     backgroundColor: theme.colors.primary,

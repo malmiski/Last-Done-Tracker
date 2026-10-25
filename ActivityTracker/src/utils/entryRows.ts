@@ -67,8 +67,9 @@ export const buildEntryRows = (
   entries: ListEntry[],
   total: number,
   lookup: DimensionLookup = knownDimensions,
+  startOffset = 0,
 ): EntryRow[] => {
-  const highest = Math.max(total, entries.length);
+  const highest = Math.max(total, startOffset + entries.length);
 
   return entries.map((entry, index) => {
     const previousEndDate = entries[index + 1]?.endDate;
@@ -78,7 +79,7 @@ export const buildEntryRows = (
 
     return {
       entry,
-      displayIndex: (entry as any).globalIndex ?? (highest - index),
+      displayIndex: (entry as any).globalIndex ?? (highest - (startOffset + index)),
       previousEndDate,
       shape: {
         // Every row in this list is numbered.

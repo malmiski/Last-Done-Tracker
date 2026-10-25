@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, FlatList, TextInput, TouchableOpacity } from 'r
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import ActivityListItem from '../src/components/ActivityListItem';
+import ScrollHudButtons from '../src/components/ScrollHudButtons';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import Animated, { useSharedValue, useAnimatedStyle, withTiming, Easing, runOnJS } from 'react-native-reanimated';
@@ -218,6 +219,10 @@ const ActivitiesScreen: React.FC = () => {
         <Icon name="plus" size={30} color={theme.colors.background} />
         <Text style={styles.fabText}>Add Activity</Text>
       </TouchableOpacity>
+      <ScrollHudButtons
+        onPressTop={() => flatListRef.current?.scrollToOffset({ offset: 0, animated: true })}
+        onPressBottom={() => flatListRef.current?.scrollToEnd({ animated: true })}
+      />
     </SafeAreaView>
   );
 };
@@ -263,13 +268,13 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingHorizontal: 20,
-    paddingBottom: 100,
+    paddingBottom: 110,
   },
   fab: {
     position: 'absolute',
     bottom: 40,
-    right: 60,
-    left: 60,
+    right: 80,
+    left: 80,
     backgroundColor: theme.colors.primary,
     borderRadius: 30,
     paddingVertical: 15,

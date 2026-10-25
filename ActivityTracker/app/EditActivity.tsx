@@ -1,9 +1,10 @@
-import React, { useCallback, useState, useEffect, act } from 'react';
+import React, { useCallback, useState, useEffect, useRef, act } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import IconGrid from '../src/components/IconGrid';
+import ScrollHudButtons from '../src/components/ScrollHudButtons';
 import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
 
@@ -11,6 +12,7 @@ const EditActivityScreen: React.FC = () => {
   const router = useRouter();
   const { activityId } = useLocalSearchParams<{ activityId: string }>();
   const { getActivityById, updateActivity } = useActivityData();
+  const scrollViewRef = useRef<ScrollView>(null);
   const [activityName, setActivityName] = useState('');
   const [selectedIcon, setSelectedIcon] = useState('run');
 
@@ -37,7 +39,7 @@ const EditActivityScreen: React.FC = () => {
         <Text style={styles.title}>Edit Activity</Text>
         <View style={{ width: 30 }} />
       </View>
-      <ScrollView>
+      <ScrollView ref={scrollViewRef}>
         <View style={styles.form}>
           <Text style={styles.label}>Activity Name</Text>
           <TextInput
@@ -60,6 +62,11 @@ const EditActivityScreen: React.FC = () => {
           <Text style={styles.buttonText}>Save Changes</Text>
         </TouchableOpacity>
       </View>
+      <ScrollHudButtons
+        bottom={25}
+        onPressTop={() => scrollViewRef.current?.scrollTo({ y: 0, animated: true })}
+        onPressBottom={() => scrollViewRef.current?.scrollToEnd({ animated: true })}
+      />
     </SafeAreaView>
   );
 };
@@ -100,7 +107,8 @@ const styles = StyleSheet.create({
     fontSize: 17,
   },
   footer: {
-    padding: 20,
+    paddingVertical: 20,
+    paddingHorizontal: 80,
   },
   button: {
     backgroundColor: theme.colors.primary,
