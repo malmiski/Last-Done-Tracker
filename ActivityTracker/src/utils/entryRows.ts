@@ -88,6 +88,7 @@ export const buildEntryRows = (
         hasSinceLast: hasSinceLastFor(entry.startDate, previousEndDate),
         hasNotes: !!notesFirstLine(entry.notes),
         hasTags: (entry.tags?.length ?? 0) > 0,
+        tags: entry.tags,
         // Thumbnails and full images address the same photos; either list
         // gives the count, and older rows may only have one of them.
         imageCount: entry.thumbnails?.length || entry.images?.length || 0,

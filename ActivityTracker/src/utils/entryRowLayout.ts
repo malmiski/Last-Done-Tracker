@@ -34,6 +34,8 @@ export const ROW_METRICS = {
   marginBottom: 15,
   /** the edit and delete icons */
   buttonsHeight: 24,
+  /** width occupied by the edit and delete buttons (2 * (24pt icon + 20pt marginLeft)) */
+  buttonsWidth: 88,
 
   index: { fontSize: 11, lineHeight: 14, marginBottom: 2 },
   date: { fontSize: 14, lineHeight: 18 },
@@ -41,10 +43,20 @@ export const ROW_METRICS = {
   sinceLast: { fontSize: 12, lineHeight: 15, marginTop: 2 },
   notes: { fontSize: 14, lineHeight: 18, marginTop: 5 },
   /** tag pill: 3pt padding above and below a 13pt line */
-  tags: { lineHeight: 13, paddingVertical: 3, marginTop: 5 },
+  tags: {
+    lineHeight: 13,
+    paddingVertical: 3,
+    paddingHorizontal: 8,
+    marginTop: 5,
+    gap: 5,
+    rowGap: 5,
+    charWidth: 7,
+  },
 
   thumbnailSmall: 50,
   thumbnailMedium: 100,
+  /** gap to the right of a single thumbnail sitting beside the text */
+  thumbnailMarginRight: 15,
   /** gap under the horizontal thumbnail strip */
   thumbnailStripMargin: 15,
   /** gap under the large-mode gallery */
@@ -67,6 +79,72 @@ export const rowContentWidth = (screenWidth: number): number =>
   Math.max(0, screenWidth - ROW_METRICS.listPaddingHorizontal * 2 - ROW_METRICS.padding * 2);
 
 export const TAG_ROW_HEIGHT = ROW_METRICS.tags.lineHeight + ROW_METRICS.tags.paddingVertical * 2;
+
+/**
+ * How wide the text column is inside a row of `contentWidth`.
+ *
+ * Subtracts the edit/delete buttons and, when a single thumbnail sits beside
+ * the text in small or medium mode, that thumbnail and its right margin.
+ */
+export const availableTextWidthFor = (
+  contentWidth: number,
+  mode: ImageMode,
+  imageCount: number,
+): number => {
+  if (contentWidth <= 0) return 0;
+  const singleThumbWidth =
+    (mode === 'small' || mode === 'medium') && imageCount === 1
+      ? (mode === 'medium' ? ROW_METRICS.thumbnailMedium : ROW_METRICS.thumbnailSmall) +
+        ROW_METRICS.thumbnailMarginRight
+      : 0;
+  return Math.max(0, contentWidth - ROW_METRICS.buttonsWidth - singleThumbWidth);
+};
+
+/** Conservative width estimate for a tag pill (`fontSize: 10, fontWeight: 'bold'`). */
+export const estimateTagWidth = (name: string): number =>
+  Math.ceil(name.length * ROW_METRICS.tags.charWidth) + ROW_METRICS.tags.paddingHorizontal * 2;
+
+/**
+ * Deterministically packs tags into fixed-height horizontal rows for a given
+ * text column width.
+ *
+ * Because both `entryRowHeight` (used by `getItemLayout`) and
+ * `ActivityHistoryItem` call this exact pure function with the same width,
+ * the pre-computed offset table and the rendered row height always match
+ * without relying on post-render measurement.
+ */
+export const layoutTagRows = <T extends { name: string }>(
+  tags: readonly T[] | undefined,
+  availableTextWidth: number,
+): T[][] => {
+  if (!tags || tags.length === 0) return [];
+  if (availableTextWidth <= 0) return [[...tags]];
+
+  const rows: T[][] = [];
+  let currentRow: T[] = [];
+  let currentWidth = 0;
+
+  for (const tag of tags) {
+    const pillWidth = estimateTagWidth(tag.name);
+    const neededWidth =
+      currentRow.length === 0 ? pillWidth : currentWidth + ROW_METRICS.tags.gap + pillWidth;
+
+    if (currentRow.length > 0 && neededWidth > availableTextWidth) {
+      rows.push(currentRow);
+      currentRow = [tag];
+      currentWidth = pillWidth;
+    } else {
+      currentRow.push(tag);
+      currentWidth = neededWidth;
+    }
+  }
+
+  if (currentRow.length > 0) {
+    rows.push(currentRow);
+  }
+
+  return rows;
+};
 
 /**
  * Whether a row shows a duration.
@@ -92,6 +170,8 @@ export interface RowShape {
   hasSinceLast: boolean;
   hasNotes: boolean;
   hasTags: boolean;
+  /** Tag objects used to deterministically compute wrapped tag row count. */
+  tags?: readonly { name: string }[];
   /** Thumbnails available for the small and medium modes. */
   imageCount: number;
   /**
@@ -149,7 +229,7 @@ export const galleryHeightFor = (
   return tallest > 0 ? tallest : FALLBACK_GALLERY_HEIGHT;
 };
 
-const textBlockHeight = (shape: RowShape): number => {
+const textBlockHeight = (shape: RowShape, availableTextWidth = 0): number => {
   const { index, date, duration, sinceLast, notes, tags } = ROW_METRICS;
 
   let height = date.lineHeight;
@@ -157,7 +237,16 @@ const textBlockHeight = (shape: RowShape): number => {
   if (shape.hasDuration) height += duration.lineHeight + duration.marginTop;
   if (shape.hasSinceLast) height += sinceLast.lineHeight + sinceLast.marginTop;
   if (shape.hasNotes) height += notes.lineHeight + notes.marginTop;
-  if (shape.hasTags) height += TAG_ROW_HEIGHT + tags.marginTop;
+  if (shape.hasTags || (shape.tags && shape.tags.length > 0)) {
+    const rowCount =
+      shape.tags && shape.tags.length > 0
+        ? layoutTagRows(shape.tags, availableTextWidth).length
+        : 1;
+    height +=
+      rowCount * TAG_ROW_HEIGHT +
+      Math.max(0, rowCount - 1) * tags.rowGap +
+      tags.marginTop;
+  }
 
   return height;
 };
@@ -181,7 +270,8 @@ export const entryRowHeight = (shape: RowShape, mode: ImageMode, contentWidth = 
     galleryMarginBottom,
   } = ROW_METRICS;
 
-  const text = Math.max(textBlockHeight(shape), buttonsHeight);
+  const textWidth = availableTextWidthFor(contentWidth, mode, shape.imageCount);
+  const text = Math.max(textBlockHeight(shape, textWidth), buttonsHeight);
 
   if (mode === 'large' && shape.imageCount > 0) {
     const gallery = galleryHeightFor(shape.imageSizes, contentWidth);

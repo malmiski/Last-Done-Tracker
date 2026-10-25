@@ -149,19 +149,50 @@ describe('ActivityHistoryItem', () => {
     expect(renderedText(await render({}))).not.toMatch(/#\d/);
   });
 
-  it('renders every tag in full, however many there are', async () => {
-    // The strip used to let pills shrink to fit the row, which squeezed each
-    // one down to a letter or two. It scrolls sideways instead now, so a long
-    // tag name survives intact.
+  it('renders every tag in full, wrapping onto multiple fixed-height rows when needed', async () => {
     const tags = [
       { id: 't1', name: 'Gardening', color: '#4CAF50' },
       { id: 't2', name: 'Cleaning', color: '#4CAF50' },
       { id: 't3', name: 'Food', color: '#9C27B0' },
       { id: 't4', name: 'Deliberately Quite A Long Tag Name', color: '#F44336' },
+      { id: 't5', name: 'Another Long Tag Name For Wrapping', color: '#2196F3' },
+      { id: 't6', name: 'Weekend Project Tag', color: '#FF9800' },
     ];
 
-    const text = renderedText(await render({ tags }));
+    const tree = await render({ tags });
+    const text = renderedText(tree);
     tags.forEach(tag => expect(text).toContain(tag.name));
+
+    const rootJson = tree.toJSON();
+    const containerStyles = Array.isArray(rootJson.props.style)
+      ? Object.assign({}, ...rootJson.props.style.filter(Boolean))
+      : rootJson.props.style;
+    const singleTagTree = await render({ tags: [tags[0]] });
+    const singleRootJson = singleTagTree.toJSON();
+    const singleStyles = Array.isArray(singleRootJson.props.style)
+      ? Object.assign({}, ...singleRootJson.props.style.filter(Boolean))
+      : singleRootJson.props.style;
+
+    expect(containerStyles.height).toBeGreaterThan(singleStyles.height);
+  });
+
+  it('constrains the multi-thumbnail strip height so it does not crush the text and tags below it', async () => {
+    const tags = [{ id: 't1', name: 'Important Tag', color: '#4CAF50' }];
+    const tree = await render({
+      entryId: 'e1',
+      images: [REF, REF],
+      thumbnails: [REF, REF],
+      imageMode: 'small',
+      notes: 'Some note',
+      tags,
+    });
+
+    const rootJson = tree.toJSON();
+    const thumbStrip = rootJson.children[0];
+    expect(thumbStrip.props.style).toMatchObject({
+      height: 50,
+      flexGrow: 0,
+    });
   });
 
   it('renders duration when startDate and endDate differ', async () => {

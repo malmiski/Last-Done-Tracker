@@ -35,7 +35,9 @@ import { clearImageMemoryCache } from '../src/components/AppImage';
  */
 const TAG_PILL_PADDING_VERTICAL = 8;
 const TAG_PILL_LINE_HEIGHT = 18;
-const TAG_PILL_HEIGHT = TAG_PILL_LINE_HEIGHT + TAG_PILL_PADDING_VERTICAL * 2;
+const TAG_PILL_BORDER_WIDTH = 2;
+const TAG_PILL_HEIGHT =
+  TAG_PILL_LINE_HEIGHT + TAG_PILL_PADDING_VERTICAL * 2 + TAG_PILL_BORDER_WIDTH * 2;
 const TAG_GAP = 10;
 const TAG_MAX_ROWS = 5;
 
@@ -545,6 +547,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: TAG_PILL_PADDING_VERTICAL,
     borderRadius: 20,
+    borderWidth: TAG_PILL_BORDER_WIDTH,
+    borderColor: 'transparent',
     opacity: 0.6,
     flexDirection: 'row',
     alignItems: 'center',
@@ -553,7 +557,6 @@ const styles = StyleSheet.create({
   },
   selectedTagButton: {
     opacity: 1,
-    borderWidth: 2,
     borderColor: theme.colors.text,
   },
   tagButtonText: {

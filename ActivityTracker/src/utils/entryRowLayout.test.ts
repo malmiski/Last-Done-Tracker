@@ -3,9 +3,11 @@ import {
   RowShape,
   TAG_ROW_HEIGHT,
   FALLBACK_GALLERY_HEIGHT,
+  availableTextWidthFor,
   buildItemLayout,
   entryRowHeight,
   galleryHeightFor,
+  layoutTagRows,
   rowContentWidth,
   hasDurationFor,
   hasSinceLastFor,
@@ -73,10 +75,32 @@ describe('entryRowHeight', () => {
     expect(withTags - base).toBe(TAG_ROW_HEIGHT + ROW_METRICS.tags.marginTop);
   });
 
-  it('does not depend on how many tags there are', () => {
-    // The tag strip is one line that clips, so ten tags are as tall as one.
-    const shape = { ...bare, hasNotes: true, hasTags: true };
-    expect(entryRowHeight(shape, 'hidden')).toBe(entryRowHeight(shape, 'hidden'));
+  it('wraps tags into deterministic rows and grows row height to fit every tag row', () => {
+    const tags = [
+      { name: 'Morning Workout' },
+      { name: 'Strength Training' },
+      { name: 'Cardio Session' },
+      { name: 'Stretching' },
+    ];
+    const contentWidth = 300;
+    const textWidth = availableTextWidthFor(contentWidth, 'hidden', 0);
+    const wrappedRows = layoutTagRows(tags, textWidth);
+    expect(wrappedRows.length).toBeGreaterThan(1);
+
+    const singleRowHeight = entryRowHeight(
+      { ...bare, hasTags: true, tags: [tags[0]] },
+      'hidden',
+      contentWidth,
+    );
+    const multiRowHeight = entryRowHeight(
+      { ...bare, hasTags: true, tags },
+      'hidden',
+      contentWidth,
+    );
+
+    expect(multiRowHeight - singleRowHeight).toBe(
+      (wrappedRows.length - 1) * (TAG_ROW_HEIGHT + ROW_METRICS.tags.rowGap),
+    );
   });
 
   it('puts a lone thumbnail beside the text and a strip above it', () => {

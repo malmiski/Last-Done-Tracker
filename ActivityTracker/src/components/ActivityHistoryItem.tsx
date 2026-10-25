@@ -19,8 +19,10 @@ import {
   ImageMode,
   ROW_METRICS,
   TAG_ROW_HEIGHT,
+  availableTextWidthFor,
   entryRowHeight,
   galleryHeightFor,
+  layoutTagRows,
   rowContentWidth,
   hasDurationFor,
   hasSinceLastFor,
@@ -164,11 +166,17 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
   // usually the same array; fall back either way for older rows.
   const thumbRefs = thumbnails && thumbnails.length > 0 ? thumbnails : images;
   const fullRefs = images && images.length > 0 ? images : thumbnails;
+  const imageCount = thumbRefs?.length ?? 0;
 
   // The width this row's content is laid out at, worked out the same way the
   // list works it out — the two must agree, or the height the list reserved
   // will not be the height the gallery draws.
   const contentWidth = rowContentWidth(useWindowDimensions().width);
+  const availableTextWidth = availableTextWidthFor(contentWidth, imageMode, imageCount);
+  const tagRows = useMemo(
+    () => layoutTagRows(tags, availableTextWidth),
+    [tags, availableTextWidth],
+  );
 
   /**
    * Sizes for the gallery, all or nothing.
@@ -215,6 +223,8 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
       ));
 
       if (thumbRefs.length > 1) {
+        const stripHeight =
+          imageMode === 'medium' ? ROW_METRICS.thumbnailMedium : ROW_METRICS.thumbnailSmall;
         return (
           <ScrollView
             horizontal
@@ -223,7 +233,12 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
             // being claimed by this scroller, which reads as the page getting
             // stuck at that row.
             directionalLockEnabled
-            style={{ marginBottom: ROW_METRICS.thumbnailStripMargin, width: '100%' }}
+            style={{
+              marginBottom: ROW_METRICS.thumbnailStripMargin,
+              width: '100%',
+              height: stripHeight,
+              flexGrow: 0,
+            }}
             /*
              * No removeClippedSubviews here. It detaches off-screen tiles, and
              * a detached view reports a zero-height layout, which changes the
@@ -260,10 +275,10 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
     return null;
   };
 
-  const hasAnyImage = (thumbRefs?.length ?? 0) > 0;
+  const hasAnyImage = imageCount > 0;
   const isLarge = imageMode === 'large' && (fullRefs?.length ?? 0) > 0;
   const hasMultipleInRow =
-    (imageMode === 'small' || imageMode === 'medium') && (thumbRefs?.length ?? 0) > 1 && hasAnyImage;
+    (imageMode === 'small' || imageMode === 'medium') && imageCount > 1 && hasAnyImage;
 
   /*
    * The row takes the height the list was told it would take, rather than
@@ -279,7 +294,8 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
       hasSinceLast: showsSinceLast,
       hasNotes: !!firstLine,
       hasTags: (tags?.length ?? 0) > 0,
-      imageCount: thumbRefs?.length ?? 0,
+      tags,
+      imageCount,
       imageSizes: galleryImageSizes,
     },
     imageMode,
@@ -332,22 +348,22 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
             </Text>
           ) : null}
           {/*
-            One line that scrolls sideways rather than wrapping. Wrapping made
-            the row's height depend on its width, which is the one thing the
-            list cannot account for in advance; letting the pills shrink to fit
-            instead squeezed them down to a single letter each. Overflowing
-            horizontally keeps the height fixed and every tag readable.
+            Tags are packed into deterministic fixed-height rows using the same
+            layoutTagRows function that entryRowHeight uses for getItemLayout,
+            so tags wrap onto additional lines instead of getting cut off while
+            keeping the pre-computed row height 100% exact.
           */}
-          {tags && tags.length > 0 && (
+          {tagRows.map((row, rowIndex) => (
             <ScrollView
+              key={`tag-row-${rowIndex}`}
               horizontal
               showsHorizontalScrollIndicator={false}
               // Leaves a mostly-vertical drag that starts on a tag to the list.
               directionalLockEnabled
-              style={styles.tagContainer}
+              style={[styles.tagContainer, rowIndex > 0 && styles.tagRowSubsequent]}
               contentContainerStyle={styles.tagContent}
             >
-              {tags.map(tag => (
+              {row.map(tag => (
                 <View key={tag.id} style={[styles.tag, { backgroundColor: tag.color }]}>
                   <Text style={styles.tagText} numberOfLines={1}>
                     {tag.name}
@@ -355,7 +371,7 @@ const ActivityHistoryItemComponent: React.FC<ActivityHistoryItemProps> = ({
                 </View>
               ))}
             </ScrollView>
-          )}
+          ))}
         </View>
         <View style={styles.buttons}>
           <TouchableOpacity onPress={onEdit} style={styles.button}>
@@ -459,6 +475,9 @@ const styles = StyleSheet.create({
     height: TAG_ROW_HEIGHT,
     // Exactly one row tall, never taller: the list reserved this much space.
     flexGrow: 0,
+  },
+  tagRowSubsequent: {
+    marginTop: ROW_METRICS.tags.rowGap,
   },
   tagContent: {
     flexDirection: 'row',
