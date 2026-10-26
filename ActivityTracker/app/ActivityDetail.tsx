@@ -383,12 +383,8 @@ const ActivityDetailScreen: React.FC = () => {
     let cancelled = false;
     const runLanding = async () => {
       try {
-        const maxY = getMaxScrollOffset();
-        const runway = Math.max(listHeightRef.current * 2.5, 1600);
         if (edge === 'bottom') {
-          const startY = Math.max(0, maxY - runway);
-          scrollOffsetRef.current = startY;
-          flatListRef.current?.scrollToOffset({ offset: startY, animated: false });
+          const fromY = scrollOffsetRef.current;
           await animateScrollOffset(
             y => {
               if (!cancelled) {
@@ -396,14 +392,12 @@ const ActivityDetailScreen: React.FC = () => {
                 flatListRef.current?.scrollToOffset({ offset: y, animated: false });
               }
             },
-            startY,
+            fromY,
             getMaxScrollOffset,
             JUMP_SCROLL_DURATION_MS,
           );
         } else {
-          const startY = Math.min(maxY, runway);
-          scrollOffsetRef.current = startY;
-          flatListRef.current?.scrollToOffset({ offset: startY, animated: false });
+          const fromY = scrollOffsetRef.current;
           await animateScrollOffset(
             y => {
               if (!cancelled) {
@@ -411,21 +405,20 @@ const ActivityDetailScreen: React.FC = () => {
                 flatListRef.current?.scrollToOffset({ offset: y, animated: false });
               }
             },
-            startY,
+            fromY,
             0,
             JUMP_SCROLL_DURATION_MS,
           );
         }
       } finally {
-        if (!cancelled) {
-          isJumpingRef.current = false;
-        }
+        isJumpingRef.current = false;
       }
     };
     void runLanding();
 
     return () => {
       cancelled = true;
+      isJumpingRef.current = false;
     };
   }, [pendingJump, rows, getMaxScrollOffset]);
 
@@ -446,18 +439,12 @@ const ActivityDetailScreen: React.FC = () => {
     }
     isJumpingRef.current = true;
     try {
-      const runway = Math.max(listHeightRef.current * 2.5, 1600);
-      const launchY = Math.min(startY, runway);
-      if (launchY < startY) {
-        scrollOffsetRef.current = launchY;
-        flatListRef.current?.scrollToOffset({ offset: launchY, animated: false });
-      }
       await animateScrollOffset(
         y => {
           scrollOffsetRef.current = y;
           flatListRef.current?.scrollToOffset({ offset: y, animated: false });
         },
-        launchY,
+        startY,
         0,
         JUMP_SCROLL_DURATION_MS,
       );
@@ -483,18 +470,12 @@ const ActivityDetailScreen: React.FC = () => {
     }
     isJumpingRef.current = true;
     try {
-      const runway = Math.max(listHeightRef.current * 2.5, 1600);
-      const launchY = Math.max(startY, targetY - runway);
-      if (launchY > startY) {
-        scrollOffsetRef.current = launchY;
-        flatListRef.current?.scrollToOffset({ offset: launchY, animated: false });
-      }
       await animateScrollOffset(
         y => {
           scrollOffsetRef.current = y;
           flatListRef.current?.scrollToOffset({ offset: y, animated: false });
         },
-        launchY,
+        startY,
         getMaxScrollOffset,
         JUMP_SCROLL_DURATION_MS,
       );
@@ -697,7 +678,7 @@ const ActivityDetailScreen: React.FC = () => {
         onScroll={event => {
           const y = event.nativeEvent.contentOffset.y;
           scrollOffsetRef.current = y;
-          if (!isJumpingRef.current && hasPrevious && !loadingPrevious && y < listHeightRef.current * 0.8) {
+          if (!isJumpingRef.current && hasPrevious && !loadingPrevious && y < Math.max(listHeightRef.current * 1.5, 900)) {
             loadPrevious();
           }
         }}

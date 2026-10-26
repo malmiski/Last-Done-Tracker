@@ -257,12 +257,8 @@ const SearchByTagScreen: React.FC = () => {
     let cancelled = false;
     const runLanding = async () => {
       try {
-        const maxY = Math.max(400, getMaxScrollOffset());
-        const runway = Math.max(listHeightRef.current * 2.5, 1600);
         if (edge === 'bottom') {
-          const startY = Math.max(0, maxY - runway);
-          scrollOffsetRef.current = startY;
-          scrollSectionListToOffset(startY, false);
+          const fromY = scrollOffsetRef.current;
           await animateScrollOffset(
             y => {
               if (!cancelled) {
@@ -270,14 +266,12 @@ const SearchByTagScreen: React.FC = () => {
                 scrollSectionListToOffset(y, false);
               }
             },
-            startY,
-            () => Math.max(startY, getMaxScrollOffset()),
+            fromY,
+            () => Math.max(fromY, getMaxScrollOffset()),
             JUMP_SCROLL_DURATION_MS,
           );
         } else {
-          const startY = Math.min(maxY, runway);
-          scrollOffsetRef.current = startY;
-          scrollSectionListToOffset(startY, false);
+          const fromY = scrollOffsetRef.current;
           await animateScrollOffset(
             y => {
               if (!cancelled) {
@@ -285,21 +279,20 @@ const SearchByTagScreen: React.FC = () => {
                 scrollSectionListToOffset(y, false);
               }
             },
-            startY,
+            fromY,
             0,
             JUMP_SCROLL_DURATION_MS,
           );
         }
       } finally {
-        if (!cancelled) {
-          isJumpingRef.current = false;
-        }
+        isJumpingRef.current = false;
       }
     };
     void runLanding();
 
     return () => {
       cancelled = true;
+      isJumpingRef.current = false;
     };
   }, [pendingJump, groupedEntries, getMaxScrollOffset, scrollSectionListToOffset]);
 
@@ -320,18 +313,12 @@ const SearchByTagScreen: React.FC = () => {
     }
     isJumpingRef.current = true;
     try {
-      const runway = Math.max(listHeightRef.current * 2.5, 1600);
-      const launchY = Math.min(startY, runway);
-      if (launchY < startY) {
-        scrollOffsetRef.current = launchY;
-        scrollSectionListToOffset(launchY, false);
-      }
       await animateScrollOffset(
         y => {
           scrollOffsetRef.current = y;
           scrollSectionListToOffset(y, false);
         },
-        launchY,
+        startY,
         0,
         JUMP_SCROLL_DURATION_MS,
       );
@@ -357,18 +344,12 @@ const SearchByTagScreen: React.FC = () => {
     }
     isJumpingRef.current = true;
     try {
-      const runway = Math.max(listHeightRef.current * 2.5, 1600);
-      const launchY = Math.max(startY, targetY - runway);
-      if (launchY > startY) {
-        scrollOffsetRef.current = launchY;
-        scrollSectionListToOffset(launchY, false);
-      }
       await animateScrollOffset(
         y => {
           scrollOffsetRef.current = y;
           scrollSectionListToOffset(y, false);
         },
-        launchY,
+        startY,
         getMaxScrollOffset,
         JUMP_SCROLL_DURATION_MS,
       );
@@ -546,7 +527,7 @@ const SearchByTagScreen: React.FC = () => {
         onScroll={e => {
           const y = e.nativeEvent.contentOffset.y;
           scrollOffsetRef.current = y;
-          if (!isJumpingRef.current && hasPrevious && !loadingPrevious && y < listHeightRef.current * 0.8) {
+          if (!isJumpingRef.current && hasPrevious && !loadingPrevious && y < Math.max(listHeightRef.current * 1.5, 900)) {
             loadPrevious();
           }
         }}
