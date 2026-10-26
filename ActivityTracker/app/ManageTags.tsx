@@ -99,12 +99,18 @@ const ManageTagsScreen: React.FC = () => {
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => (
           <View style={styles.tagItem}>
-            <View style={[styles.tagPreview, { backgroundColor: item.color }]}>
-              <Text style={styles.tagPreviewText}>{item.name}</Text>
-            </View>
-            <View style={styles.tagInfo}>
-              <Text style={styles.tagUsageText}>{tagCounts[item.id] || 0} entries</Text>
-            </View>
+            <TouchableOpacity
+              style={{ flex: 1, flexDirection: 'row', alignItems: 'center' }}
+              onPress={() => openModal(item)}
+              activeOpacity={0.7}
+            >
+              <View style={[styles.tagPreview, { backgroundColor: item.color }]}>
+                <Text style={styles.tagPreviewText}>{item.name}</Text>
+              </View>
+              <View style={styles.tagInfo}>
+                <Text style={styles.tagUsageText}>{tagCounts[item.id] || 0} entries</Text>
+              </View>
+            </TouchableOpacity>
             <View style={styles.tagActions}>
               <TouchableOpacity onPress={() => openModal(item)} style={styles.actionButton}>
                 <Icon name="pencil-outline" size={24} color={theme.colors.subtext} />

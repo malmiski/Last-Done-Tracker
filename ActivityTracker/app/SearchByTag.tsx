@@ -8,12 +8,15 @@ import {
   TextInput,
   ScrollView,
   SectionList,
+  Modal,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import theme from '../src/theme/theme';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import { useRouter, useFocusEffect } from 'expo-router';
 import { useActivityData } from '../src/hooks/useActivityData';
+import { Tag } from '../src/data/activity-details';
 import { useEntriesByTags, ListEntry } from '../src/hooks/useEntries';
 import ActivityHistoryItem, { ImageMode } from '../src/components/ActivityHistoryItem';
 import ScrollHudButtons, { animateScrollOffset, JUMP_SCROLL_DURATION_MS } from '../src/components/ScrollHudButtons';
@@ -81,12 +84,48 @@ const nextImageMode = (mode: ImageMode): ImageMode => {
   return 'small';
 };
 
+const TAG_COLORS = [
+  '#34C759', '#FF3B30', '#007AFF', '#FF9500', '#AF52DE',
+  '#5856D6', '#FFCC00', '#FF2D55', '#5AC8FA', '#8E8E93',
+];
+
 const SearchByTagScreen: React.FC = () => {
   const router = useRouter();
-  const { tags, activities, deleteActivityEntry } = useActivityData();
+  const { tags, activities, deleteActivityEntry, updateTag } = useActivityData();
   const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [imageMode, setImageMode] = useState<ImageMode>('small');
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [editingTag, setEditingTag] = useState<Tag | null>(null);
+  const [editTagName, setEditTagName] = useState('');
+  const [editTagColor, setEditTagColor] = useState(TAG_COLORS[0]);
+
+  const openEditTag = useCallback((tag: Tag) => {
+    setEditingTag(tag);
+    setEditTagName(tag.name);
+    setEditTagColor(tag.color);
+  }, []);
+
+  const closeEditTag = useCallback(() => {
+    setEditingTag(null);
+    setEditTagName('');
+    setEditTagColor(TAG_COLORS[0]);
+  }, []);
+
+  const handleSaveTag = useCallback(async () => {
+    if (!editingTag) return;
+    const trimmed = editTagName.trim();
+    if (!trimmed) {
+      Alert.alert('Error', 'Tag name cannot be empty');
+      return;
+    }
+    await updateTag({
+      ...editingTag,
+      name: trimmed,
+      color: editTagColor || editingTag.color,
+    });
+    closeEditTag();
+  }, [closeEditTag, editTagColor, editTagName, editingTag, updateTag]);
 
   // Paginated across every selected tag. Previously this fetched the complete
   // entry list for each tag -- images included -- and de-duplicated in JS.
@@ -417,7 +456,19 @@ const SearchByTagScreen: React.FC = () => {
         <Text style={styles.title}>Search by Tag</Text>
         <View style={[styles.headerSide, styles.headerSideRight]}>
           <TouchableOpacity
+            onPress={() => setIsEditMode(prev => !prev)}
+            style={styles.headerButton}
+            accessibilityLabel={isEditMode ? 'Done editing tags' : 'Edit tags'}
+          >
+            <Icon
+              name={isEditMode ? 'check' : 'pencil-outline'}
+              size={28}
+              color={isEditMode ? theme.colors.primary : theme.colors.text}
+            />
+          </TouchableOpacity>
+          <TouchableOpacity
             onPress={() => setImageMode(nextImageMode)}
+            style={styles.headerButton}
             accessibilityLabel="Change image size"
           >
             <Icon name={IMAGE_MODE_ICON[imageMode] as any} size={30} color={theme.colors.text} />
@@ -444,12 +495,25 @@ const SearchByTagScreen: React.FC = () => {
                 style={[
                   styles.tagButton,
                   { backgroundColor: tag.color },
-                  isSelected && styles.selectedTagButton
+                  isSelected && styles.selectedTagButton,
+                  isEditMode && styles.editingTagButton,
                 ]}
-                onPress={() => toggleTag(tag.id)}
+                onPress={() => {
+                  if (isEditMode) {
+                    openEditTag(tag);
+                  } else {
+                    toggleTag(tag.id);
+                  }
+                }}
+                onLongPress={() => openEditTag(tag)}
+                accessibilityLabel={isEditMode ? `Edit tag ${tag.name}` : `Tag ${tag.name}`}
               >
                 <Text style={styles.tagButtonText}>{tag.name}</Text>
-                {isSelected && <Icon name="check" size={14} color="#FFFFFF" style={{ marginLeft: 5 }} />}
+                {isEditMode ? (
+                  <Icon name="pencil" size={14} color="#FFFFFF" style={{ marginLeft: 5 }} />
+                ) : (
+                  isSelected && <Icon name="check" size={14} color="#FFFFFF" style={{ marginLeft: 5 }} />
+                )}
               </TouchableOpacity>
             );
           })}
@@ -550,6 +614,59 @@ const SearchByTagScreen: React.FC = () => {
         onPressTop={handleScrollToTop}
         onPressBottom={handleScrollToBottom}
       />
+
+      <Modal
+        visible={editingTag !== null}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={closeEditTag}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>Edit Tag</Text>
+
+            <Text style={styles.modalLabel}>Name</Text>
+            <TextInput
+              style={styles.modalInput}
+              value={editTagName}
+              onChangeText={setEditTagName}
+              placeholder="Tag Name"
+              placeholderTextColor={theme.colors.subtext}
+              autoFocus
+            />
+
+            <Text style={styles.modalLabel}>Color</Text>
+            <View style={styles.colorGrid}>
+              {TAG_COLORS.map(color => (
+                <TouchableOpacity
+                  key={color}
+                  style={[
+                    styles.colorOption,
+                    { backgroundColor: color },
+                    editTagColor === color && styles.selectedColorOption,
+                  ]}
+                  onPress={() => setEditTagColor(color)}
+                />
+              ))}
+            </View>
+
+            <View style={styles.modalButtons}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={closeEditTag}
+              >
+                <Text style={styles.modalButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={handleSaveTag}
+              >
+                <Text style={styles.modalButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -614,6 +731,11 @@ const styles = StyleSheet.create({
     opacity: 1,
     borderColor: theme.colors.text,
   },
+  editingTagButton: {
+    borderStyle: 'dashed',
+    borderColor: '#FFFFFF',
+    opacity: 0.95,
+  },
   tagButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
@@ -666,6 +788,78 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginTop: 20,
     textAlign: 'center',
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: theme.colors.card,
+    borderRadius: 16,
+    padding: 20,
+    width: '100%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: theme.colors.text,
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  modalLabel: {
+    fontSize: 14,
+    color: theme.colors.subtext,
+    marginBottom: 8,
+    marginTop: 12,
+  },
+  modalInput: {
+    backgroundColor: theme.colors.background,
+    borderRadius: 8,
+    padding: 12,
+    color: theme.colors.text,
+    fontSize: 16,
+  },
+  colorGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginBottom: 20,
+  },
+  colorOption: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+  },
+  selectedColorOption: {
+    borderWidth: 3,
+    borderColor: '#FFFFFF',
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+    marginTop: 10,
+  },
+  modalButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  cancelButton: {
+    backgroundColor: theme.colors.border,
+  },
+  saveButton: {
+    backgroundColor: theme.colors.primary,
+  },
+  modalButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
   },
 });
 
