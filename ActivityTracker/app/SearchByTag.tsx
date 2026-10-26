@@ -96,8 +96,11 @@ const SearchByTagScreen: React.FC = () => {
     windowOffset,
     loading,
     loadingMore,
+    loadingPrevious,
     hasMore,
+    hasPrevious,
     loadMore,
+    loadPrevious,
     jumpToBottom,
     jumpToTop,
     refresh,
@@ -110,7 +113,8 @@ const SearchByTagScreen: React.FC = () => {
   const contentHeightRef = useRef(800);
   const listHeightRef = useRef(600);
   const isJumpingRef = useRef(false);
-  const pendingJumpEdgeRef = useRef<'top' | 'bottom' | null>(null);
+  const [pendingJump, setPendingJump] = useState<{ edge: 'top' | 'bottom'; id: number } | null>(null);
+  const lastHandledJumpIdRef = useRef(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -198,74 +202,103 @@ const SearchByTagScreen: React.FC = () => {
     }
   }, []);
 
-  const scrollSectionListToBottom = useCallback(
-    (animated: boolean) => {
-      const lastSection = groupedEntries.length - 1;
-      if (lastSection >= 0) {
-        const lastItem = groupedEntries[lastSection].data.length - 1;
-        if (lastItem >= 0) {
-          sectionListRef.current?.scrollToLocation({
-            sectionIndex: lastSection,
-            itemIndex: lastItem,
-            animated,
-            viewPosition: 1,
-          });
-        }
-      }
-      const responder = (sectionListRef.current as any)?.getScrollResponder?.();
-      responder?.scrollToEnd?.({ animated });
-    },
-    [groupedEntries],
+  const getMaxScrollOffset = useCallback(
+    () => Math.max(0, contentHeightRef.current - listHeightRef.current),
+    [],
   );
 
   useEffect(() => {
-    const edge = pendingJumpEdgeRef.current;
-    if (!edge || groupedEntries.length === 0) return;
-    pendingJumpEdgeRef.current = null;
+    if (!pendingJump || pendingJump.id === lastHandledJumpIdRef.current || groupedEntries.length === 0) {
+      return;
+    }
+    lastHandledJumpIdRef.current = pendingJump.id;
+    const edge = pendingJump.edge;
+    setPendingJump(null);
 
-    requestAnimationFrame(() => {
-      if (edge === 'bottom') {
-        scrollSectionListToBottom(false);
-      } else {
-        sectionListRef.current?.scrollToLocation({
-          sectionIndex: 0,
-          itemIndex: 0,
-          animated: false,
-          viewPosition: 0,
-        });
-        scrollSectionListToOffset(0, false);
+    let cancelled = false;
+    const runLanding = async () => {
+      try {
+        const maxY = Math.max(400, getMaxScrollOffset());
+        const runway = Math.max(listHeightRef.current * 2.5, 1600);
+        if (edge === 'bottom') {
+          const startY = Math.max(0, maxY - runway);
+          scrollOffsetRef.current = startY;
+          scrollSectionListToOffset(startY, false);
+          await animateScrollOffset(
+            y => {
+              if (!cancelled) {
+                scrollOffsetRef.current = y;
+                scrollSectionListToOffset(y, false);
+              }
+            },
+            startY,
+            () => Math.max(startY, getMaxScrollOffset()),
+            JUMP_SCROLL_DURATION_MS,
+          );
+        } else {
+          const startY = Math.min(maxY, runway);
+          scrollOffsetRef.current = startY;
+          scrollSectionListToOffset(startY, false);
+          await animateScrollOffset(
+            y => {
+              if (!cancelled) {
+                scrollOffsetRef.current = y;
+                scrollSectionListToOffset(y, false);
+              }
+            },
+            startY,
+            0,
+            JUMP_SCROLL_DURATION_MS,
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          isJumpingRef.current = false;
+        }
       }
-      isJumpingRef.current = false;
-    });
-  }, [groupedEntries, scrollSectionListToBottom, scrollSectionListToOffset]);
+    };
+    void runLanding();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingJump, groupedEntries, getMaxScrollOffset, scrollSectionListToOffset]);
 
   const handleScrollToTop = useCallback(async () => {
     if (groupedEntries.length === 0 || isJumpingRef.current) return;
 
     if (windowOffset > 0 && !searchQuery) {
       isJumpingRef.current = true;
-      const maxOffset = Math.max(0, contentHeightRef.current - listHeightRef.current);
-      const startY =
-        scrollOffsetRef.current <= 40 ? Math.min(maxOffset, 600) : scrollOffsetRef.current;
-      pendingJumpEdgeRef.current = 'top';
-      await jumpToTop(() =>
-        animateScrollOffset(
-          y => scrollSectionListToOffset(y, false),
-          startY,
-          0,
-          JUMP_SCROLL_DURATION_MS,
-        ),
-      );
+      await jumpToTop();
+      setPendingJump({ edge: 'top', id: Date.now() });
       return;
     }
 
-    sectionListRef.current?.scrollToLocation({
-      sectionIndex: 0,
-      itemIndex: 0,
-      animated: true,
-      viewPosition: 0,
-    });
-    scrollSectionListToOffset(0, true);
+    const startY = scrollOffsetRef.current;
+    if (startY <= 1) {
+      scrollSectionListToOffset(0, false);
+      return;
+    }
+    isJumpingRef.current = true;
+    try {
+      const runway = Math.max(listHeightRef.current * 2.5, 1600);
+      const launchY = Math.min(startY, runway);
+      if (launchY < startY) {
+        scrollOffsetRef.current = launchY;
+        scrollSectionListToOffset(launchY, false);
+      }
+      await animateScrollOffset(
+        y => {
+          scrollOffsetRef.current = y;
+          scrollSectionListToOffset(y, false);
+        },
+        launchY,
+        0,
+        JUMP_SCROLL_DURATION_MS,
+      );
+    } finally {
+      isJumpingRef.current = false;
+    }
   }, [groupedEntries.length, jumpToTop, scrollSectionListToOffset, searchQuery, windowOffset]);
 
   const handleScrollToBottom = useCallback(async () => {
@@ -273,25 +306,37 @@ const SearchByTagScreen: React.FC = () => {
 
     if (hasMore && !searchQuery) {
       isJumpingRef.current = true;
-      const maxOffset = Math.max(400, contentHeightRef.current - listHeightRef.current);
-      const startY =
-        scrollOffsetRef.current >= maxOffset - 40
-          ? Math.max(0, maxOffset - Math.min(maxOffset, 600))
-          : scrollOffsetRef.current;
-      pendingJumpEdgeRef.current = 'bottom';
-      await jumpToBottom(() =>
-        animateScrollOffset(
-          y => scrollSectionListToOffset(y, false),
-          startY,
-          maxOffset,
-          JUMP_SCROLL_DURATION_MS,
-        ),
-      );
+      await jumpToBottom();
+      setPendingJump({ edge: 'bottom', id: Date.now() });
       return;
     }
 
-    scrollSectionListToBottom(true);
-  }, [groupedEntries.length, hasMore, jumpToBottom, scrollSectionListToBottom, scrollSectionListToOffset, searchQuery]);
+    const targetY = getMaxScrollOffset();
+    const startY = scrollOffsetRef.current;
+    if (Math.abs(targetY - startY) <= 1) {
+      return;
+    }
+    isJumpingRef.current = true;
+    try {
+      const runway = Math.max(listHeightRef.current * 2.5, 1600);
+      const launchY = Math.max(startY, targetY - runway);
+      if (launchY > startY) {
+        scrollOffsetRef.current = launchY;
+        scrollSectionListToOffset(launchY, false);
+      }
+      await animateScrollOffset(
+        y => {
+          scrollOffsetRef.current = y;
+          scrollSectionListToOffset(y, false);
+        },
+        launchY,
+        getMaxScrollOffset,
+        JUMP_SCROLL_DURATION_MS,
+      );
+    } finally {
+      isJumpingRef.current = false;
+    }
+  }, [getMaxScrollOffset, groupedEntries.length, hasMore, jumpToBottom, scrollSectionListToOffset, searchQuery]);
 
   /**
    * Jump to a random entry among everything the selected tags match, not just
@@ -322,8 +367,12 @@ const SearchByTagScreen: React.FC = () => {
     }
 
     pendingRandomIndex.current = randomIndex;
-    loadMore();
-  }, [entries, groupedEntries, loadMore, scrollToEntry, searchQuery, selectedTagIds.length, total, windowOffset]);
+    if (randomIndex < windowOffset) {
+      loadPrevious();
+    } else {
+      loadMore();
+    }
+  }, [entries, groupedEntries, loadMore, loadPrevious, scrollToEntry, searchQuery, selectedTagIds.length, total, windowOffset]);
 
   useEffect(() => {
     const target = pendingRandomIndex.current;
@@ -334,12 +383,14 @@ const SearchByTagScreen: React.FC = () => {
       const entryId = entries[target - windowOffset].id;
       // Wait a frame so the newly appended rows have been laid out.
       requestAnimationFrame(() => scrollToEntry(entryId));
-    } else if (hasMore && !loadingMore) {
+    } else if (target < windowOffset && hasPrevious && !loadingPrevious) {
+      loadPrevious();
+    } else if (target >= windowOffset + entries.length && hasMore && !loadingMore) {
       loadMore();
-    } else if (!hasMore) {
+    } else if (!hasMore && !hasPrevious) {
       pendingRandomIndex.current = null;
     }
-  }, [entries, hasMore, loadingMore, loadMore, scrollToEntry, windowOffset]);
+  }, [entries, hasMore, hasPrevious, loadingMore, loadingPrevious, loadMore, loadPrevious, scrollToEntry, windowOffset]);
 
   const hasSelection = selectedTagIds.length > 0;
 
@@ -429,7 +480,11 @@ const SearchByTagScreen: React.FC = () => {
         }}
         onEndReachedThreshold={0.5}
         onScroll={e => {
-          scrollOffsetRef.current = e.nativeEvent.contentOffset.y;
+          const y = e.nativeEvent.contentOffset.y;
+          scrollOffsetRef.current = y;
+          if (!isJumpingRef.current && hasPrevious && !loadingPrevious && y < listHeightRef.current * 0.8) {
+            loadPrevious();
+          }
         }}
         scrollEventThrottle={16}
         onContentSizeChange={(_w, h) => {

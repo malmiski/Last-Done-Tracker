@@ -39,8 +39,11 @@ interface UseEntriesResult {
   windowOffset: number;
   loading: boolean;
   loadingMore: boolean;
+  loadingPrevious: boolean;
   hasMore: boolean;
+  hasPrevious: boolean;
   loadMore: () => void;
+  loadPrevious: () => void;
   jumpToBottom: (onBeforeSwap?: () => Promise<void>) => Promise<void>;
   jumpToTop: (onBeforeSwap?: () => Promise<void>) => Promise<void>;
   refresh: () => Promise<void>;
@@ -56,6 +59,7 @@ export const useEntries = (
   const [windowOffset, setWindowOffset] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingPrevious, setLoadingPrevious] = useState(false);
   const [debouncedSearch, setDebouncedSearch] = useState(search);
 
   // Guards against a slow first page overwriting a newer search's results.
@@ -170,19 +174,66 @@ export const useEntries = (
   }, [activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode, loading, loadingMore, pageSize, total]);
 
   /**
-   * Jump directly to the oldest ("very first") page of entries without loading
-   * all intermediate pages into memory. Runs `onBeforeSwap` (such as a scroll
-   * animation) in parallel and swaps the rows in once both finish.
+   * Prepend the preceding page of entries when scrolling upward from a bottom
+   * or middle window (`windowOffset > 0`).
+   */
+  const loadPrevious = useCallback(() => {
+    if (!activityId || loading || loadingPrevious) return;
+    if (windowOffsetRef.current <= 0) return;
+
+    const token = requestId.current;
+    const currentStart = windowOffsetRef.current;
+    const nextStart = Math.max(0, currentStart - pageSize);
+    const fetchLimit = currentStart - nextStart;
+    if (fetchLimit <= 0) return;
+
+    setLoadingPrevious(true);
+    void (async () => {
+      try {
+        const page = await database.getEntriesPage(activityId, {
+          limit: fetchLimit,
+          offset: nextStart,
+          search: debouncedSearch,
+          filterStartDate,
+          filterEndDate,
+          filterTagIds,
+          filterTagMode,
+        });
+        if (requestId.current !== token) return;
+        windowOffsetRef.current = nextStart;
+        setWindowOffset(nextStart);
+        prefetchDimensions(page);
+        setEntries(previous => {
+          const seen = new Set(previous.map(entry => entry.id));
+          return [...page.filter(entry => !seen.has(entry.id)), ...previous];
+        });
+      } catch (error) {
+        console.error('Failed to load previous entries', error);
+      } finally {
+        if (requestId.current === token) setLoadingPrevious(false);
+      }
+    })();
+  }, [activityId, debouncedSearch, filterStartDate, filterEndDate, filterTagIds, filterTagMode, loading, loadingPrevious, pageSize]);
+
+  /**
+   * Jump directly to the oldest ("very first") window of entries without loading
+   * all intermediate pages into memory. Loads up to 2 pages so there is plenty
+   * of scroll runway above the bottom item for smooth landing and upward
+   * scrolling.
    */
   const jumpToBottom = useCallback(
     async (onBeforeSwap?: () => Promise<void>) => {
       if (!activityId) return;
       const token = ++requestId.current;
-      const startOffset = Math.max(0, total - pageSize);
+      setLoadingMore(false);
+      setLoadingPrevious(false);
+      const windowSize = pageSize * 2;
+      const startOffset = Math.max(0, total - windowSize);
+      const fetchLimit = Math.max(pageSize, total - startOffset);
       try {
         const [page] = await Promise.all([
           database.getEntriesPage(activityId, {
-            limit: pageSize,
+            limit: fetchLimit,
             offset: startOffset,
             search: debouncedSearch,
             filterStartDate,
@@ -212,10 +263,12 @@ export const useEntries = (
     async (onBeforeSwap?: () => Promise<void>) => {
       if (!activityId) return;
       const token = ++requestId.current;
+      setLoadingMore(false);
+      setLoadingPrevious(false);
       try {
         const [page] = await Promise.all([
           database.getEntriesPage(activityId, {
-            limit: pageSize,
+            limit: pageSize * 2,
             offset: 0,
             search: debouncedSearch,
             filterStartDate,
@@ -256,8 +309,11 @@ export const useEntries = (
     windowOffset,
     loading,
     loadingMore,
+    loadingPrevious,
     hasMore: windowOffset + entries.length < total,
+    hasPrevious: windowOffset > 0,
     loadMore,
+    loadPrevious,
     jumpToBottom,
     jumpToTop,
     refresh,
@@ -312,6 +368,7 @@ export const useEntriesByTags = (
   const [windowOffset, setWindowOffset] = useState(0);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingPrevious, setLoadingPrevious] = useState(false);
 
   const requestId = useRef(0);
   const offsetRef = useRef(0);
@@ -381,15 +438,52 @@ export const useEntriesByTags = (
     })();
   }, [key, loading, loadingMore, pageSize, total]);
 
+  const loadPrevious = useCallback(() => {
+    const ids = key ? key.split(',') : [];
+    if (ids.length === 0 || loading || loadingPrevious) return;
+    if (windowOffsetRef.current <= 0) return;
+
+    const token = requestId.current;
+    const currentStart = windowOffsetRef.current;
+    const nextStart = Math.max(0, currentStart - pageSize);
+    const fetchLimit = currentStart - nextStart;
+    if (fetchLimit <= 0) return;
+
+    setLoadingPrevious(true);
+    void (async () => {
+      try {
+        const page = await database.getEntriesByTags(ids, {
+          limit: fetchLimit,
+          offset: nextStart,
+        });
+        if (requestId.current !== token) return;
+        windowOffsetRef.current = nextStart;
+        setWindowOffset(nextStart);
+        setEntries(previous => {
+          const seen = new Set(previous.map(entry => entry.id));
+          return [...page.filter(entry => !seen.has(entry.id)), ...previous];
+        });
+      } catch (error) {
+        console.error('Failed to load previous tagged entries', error);
+      } finally {
+        if (requestId.current === token) setLoadingPrevious(false);
+      }
+    })();
+  }, [key, loading, loadingPrevious, pageSize]);
+
   const jumpToBottom = useCallback(
     async (onBeforeSwap?: () => Promise<void>) => {
       const ids = key ? key.split(',') : [];
       if (ids.length === 0) return;
       const token = ++requestId.current;
-      const startOffset = Math.max(0, total - pageSize);
+      setLoadingMore(false);
+      setLoadingPrevious(false);
+      const windowSize = pageSize * 2;
+      const startOffset = Math.max(0, total - windowSize);
+      const fetchLimit = Math.max(pageSize, total - startOffset);
       try {
         const [page] = await Promise.all([
-          database.getEntriesByTags(ids, { limit: pageSize, offset: startOffset }),
+          database.getEntriesByTags(ids, { limit: fetchLimit, offset: startOffset }),
           onBeforeSwap ? onBeforeSwap() : Promise.resolve(),
         ]);
         if (requestId.current !== token) return;
@@ -409,9 +503,11 @@ export const useEntriesByTags = (
       const ids = key ? key.split(',') : [];
       if (ids.length === 0) return;
       const token = ++requestId.current;
+      setLoadingMore(false);
+      setLoadingPrevious(false);
       try {
         const [page] = await Promise.all([
-          database.getEntriesByTags(ids, { limit: pageSize, offset: 0 }),
+          database.getEntriesByTags(ids, { limit: pageSize * 2, offset: 0 }),
           onBeforeSwap ? onBeforeSwap() : Promise.resolve(),
         ]);
         if (requestId.current !== token) return;
@@ -437,8 +533,11 @@ export const useEntriesByTags = (
     windowOffset,
     loading,
     loadingMore,
+    loadingPrevious,
     hasMore: windowOffset + entries.length < total,
+    hasPrevious: windowOffset > 0,
     loadMore,
+    loadPrevious,
     jumpToBottom,
     jumpToTop,
     refresh: loadFirstPage,

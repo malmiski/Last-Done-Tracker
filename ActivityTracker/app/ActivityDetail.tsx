@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -168,8 +168,11 @@ const ActivityDetailScreen: React.FC = () => {
     windowOffset,
     loading,
     loadingMore,
+    loadingPrevious,
     hasMore,
+    hasPrevious,
     loadMore,
+    loadPrevious,
     jumpToBottom,
     jumpToTop,
     refresh,
@@ -179,9 +182,12 @@ const ActivityDetailScreen: React.FC = () => {
   const flatListRef = useRef<FlatList<EntryRow>>(null);
   const pendingRandomIndex = useRef<number | null>(null);
   const scrollOffsetRef = useRef(0);
+  const contentHeightRef = useRef(0);
   const listHeightRef = useRef(600);
   const isJumpingRef = useRef(false);
-  const pendingJumpEdgeRef = useRef<'top' | 'bottom' | null>(null);
+  const prevWindowOffsetRef = useRef(0);
+  const [pendingJump, setPendingJump] = useState<{ edge: 'top' | 'bottom'; id: number } | null>(null);
+  const lastHandledJumpIdRef = useRef(0);
 
   useFocusEffect(
     useCallback(() => {
@@ -219,8 +225,12 @@ const ActivityDetailScreen: React.FC = () => {
     }
 
     pendingRandomIndex.current = randomIndex;
-    loadMore();
-  }, [entries.length, loadMore, total, windowOffset]);
+    if (randomIndex < windowOffset) {
+      loadPrevious();
+    } else {
+      loadMore();
+    }
+  }, [entries.length, loadMore, loadPrevious, total, windowOffset]);
 
   useEffect(() => {
     const target = pendingRandomIndex.current;
@@ -232,12 +242,14 @@ const ActivityDetailScreen: React.FC = () => {
       requestAnimationFrame(() => {
         flatListRef.current?.scrollToIndex({ index: target - windowOffset, animated: false });
       });
-    } else if (hasMore && !loadingMore) {
+    } else if (target < windowOffset && hasPrevious && !loadingPrevious) {
+      loadPrevious();
+    } else if (target >= windowOffset + entries.length && hasMore && !loadingMore) {
       loadMore();
-    } else if (!hasMore) {
+    } else if (!hasMore && !hasPrevious) {
       pendingRandomIndex.current = null;
     }
-  }, [entries.length, hasMore, loadingMore, loadMore, windowOffset]);
+  }, [entries.length, hasMore, hasPrevious, loadingMore, loadingPrevious, loadMore, loadPrevious, windowOffset]);
 
 
 
@@ -334,75 +346,162 @@ const ActivityDetailScreen: React.FC = () => {
     [rows, imageMode, contentWidth],
   );
 
-  useEffect(() => {
-    const edge = pendingJumpEdgeRef.current;
-    if (!edge || rows.length === 0) return;
-    pendingJumpEdgeRef.current = null;
+  const getMaxScrollOffset = useCallback(() => {
+    if (rows.length === 0) return 0;
+    const last = getItemLayout(rows, rows.length - 1);
+    // Include ListFooterComponent (50) and listContent paddingBottom (110).
+    const calculatedHeight = last.offset + last.length + 160;
+    const totalHeight = Math.max(contentHeightRef.current, calculatedHeight);
+    return Math.max(0, totalHeight - listHeightRef.current);
+  }, [getItemLayout, rows]);
 
-    requestAnimationFrame(() => {
-      if (edge === 'bottom') {
-        const last = getItemLayout(rows, rows.length - 1);
-        flatListRef.current?.scrollToOffset({
-          offset: Math.max(0, last.offset + last.length),
-          animated: false,
-        });
-        flatListRef.current?.scrollToEnd({ animated: false });
-      } else {
-        flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+  useLayoutEffect(() => {
+    const prevOffset = prevWindowOffsetRef.current;
+    prevWindowOffsetRef.current = windowOffset;
+    if (windowOffset < prevOffset && rows.length > 0 && !isJumpingRef.current) {
+      const prependedCount = prevOffset - windowOffset;
+      if (prependedCount > 0 && prependedCount < rows.length) {
+        const addedHeight =
+          getItemLayout(rows, prependedCount).offset - ROW_METRICS.listPaddingTop;
+        if (addedHeight > 0) {
+          const nextY = scrollOffsetRef.current + addedHeight;
+          scrollOffsetRef.current = nextY;
+          flatListRef.current?.scrollToOffset({ offset: nextY, animated: false });
+        }
       }
-      isJumpingRef.current = false;
-    });
-  }, [rows, getItemLayout]);
+    }
+  }, [windowOffset, rows, getItemLayout]);
+
+  useEffect(() => {
+    if (!pendingJump || pendingJump.id === lastHandledJumpIdRef.current || rows.length === 0) {
+      return;
+    }
+    lastHandledJumpIdRef.current = pendingJump.id;
+    const edge = pendingJump.edge;
+    setPendingJump(null);
+
+    let cancelled = false;
+    const runLanding = async () => {
+      try {
+        const maxY = getMaxScrollOffset();
+        const runway = Math.max(listHeightRef.current * 2.5, 1600);
+        if (edge === 'bottom') {
+          const startY = Math.max(0, maxY - runway);
+          scrollOffsetRef.current = startY;
+          flatListRef.current?.scrollToOffset({ offset: startY, animated: false });
+          await animateScrollOffset(
+            y => {
+              if (!cancelled) {
+                scrollOffsetRef.current = y;
+                flatListRef.current?.scrollToOffset({ offset: y, animated: false });
+              }
+            },
+            startY,
+            getMaxScrollOffset,
+            JUMP_SCROLL_DURATION_MS,
+          );
+        } else {
+          const startY = Math.min(maxY, runway);
+          scrollOffsetRef.current = startY;
+          flatListRef.current?.scrollToOffset({ offset: startY, animated: false });
+          await animateScrollOffset(
+            y => {
+              if (!cancelled) {
+                scrollOffsetRef.current = y;
+                flatListRef.current?.scrollToOffset({ offset: y, animated: false });
+              }
+            },
+            startY,
+            0,
+            JUMP_SCROLL_DURATION_MS,
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          isJumpingRef.current = false;
+        }
+      }
+    };
+    void runLanding();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pendingJump, rows, getMaxScrollOffset]);
 
   const handleScrollToTop = useCallback(async () => {
     if (rows.length === 0 || isJumpingRef.current) return;
 
     if (windowOffset > 0) {
       isJumpingRef.current = true;
-      const last = getItemLayout(rows, rows.length - 1);
-      const maxOffset = Math.max(0, last.offset + last.length - listHeightRef.current);
-      const startY =
-        scrollOffsetRef.current <= 40 ? Math.min(maxOffset, 600) : scrollOffsetRef.current;
-      pendingJumpEdgeRef.current = 'top';
-      await jumpToTop(() =>
-        animateScrollOffset(
-          y => flatListRef.current?.scrollToOffset({ offset: y, animated: false }),
-          startY,
-          0,
-          JUMP_SCROLL_DURATION_MS,
-        ),
-      );
+      await jumpToTop();
+      setPendingJump({ edge: 'top', id: Date.now() });
       return;
     }
 
-    flatListRef.current?.scrollToOffset({ offset: 0, animated: true });
-  }, [getItemLayout, jumpToTop, rows, windowOffset]);
+    const startY = scrollOffsetRef.current;
+    if (startY <= 1) {
+      flatListRef.current?.scrollToOffset({ offset: 0, animated: false });
+      return;
+    }
+    isJumpingRef.current = true;
+    try {
+      const runway = Math.max(listHeightRef.current * 2.5, 1600);
+      const launchY = Math.min(startY, runway);
+      if (launchY < startY) {
+        scrollOffsetRef.current = launchY;
+        flatListRef.current?.scrollToOffset({ offset: launchY, animated: false });
+      }
+      await animateScrollOffset(
+        y => {
+          scrollOffsetRef.current = y;
+          flatListRef.current?.scrollToOffset({ offset: y, animated: false });
+        },
+        launchY,
+        0,
+        JUMP_SCROLL_DURATION_MS,
+      );
+    } finally {
+      isJumpingRef.current = false;
+    }
+  }, [jumpToTop, rows.length, windowOffset]);
 
   const handleScrollToBottom = useCallback(async () => {
     if (rows.length === 0 || isJumpingRef.current) return;
 
     if (hasMore) {
       isJumpingRef.current = true;
-      const last = getItemLayout(rows, rows.length - 1);
-      const maxOffset = Math.max(0, last.offset + last.length - listHeightRef.current);
-      const startY =
-        scrollOffsetRef.current >= maxOffset - 40
-          ? Math.max(0, maxOffset - Math.min(maxOffset, 600))
-          : scrollOffsetRef.current;
-      pendingJumpEdgeRef.current = 'bottom';
-      await jumpToBottom(() =>
-        animateScrollOffset(
-          y => flatListRef.current?.scrollToOffset({ offset: y, animated: false }),
-          startY,
-          maxOffset,
-          JUMP_SCROLL_DURATION_MS,
-        ),
-      );
+      await jumpToBottom();
+      setPendingJump({ edge: 'bottom', id: Date.now() });
       return;
     }
 
-    flatListRef.current?.scrollToEnd({ animated: true });
-  }, [getItemLayout, hasMore, jumpToBottom, rows]);
+    const targetY = getMaxScrollOffset();
+    const startY = scrollOffsetRef.current;
+    if (Math.abs(targetY - startY) <= 1) {
+      return;
+    }
+    isJumpingRef.current = true;
+    try {
+      const runway = Math.max(listHeightRef.current * 2.5, 1600);
+      const launchY = Math.max(startY, targetY - runway);
+      if (launchY > startY) {
+        scrollOffsetRef.current = launchY;
+        flatListRef.current?.scrollToOffset({ offset: launchY, animated: false });
+      }
+      await animateScrollOffset(
+        y => {
+          scrollOffsetRef.current = y;
+          flatListRef.current?.scrollToOffset({ offset: y, animated: false });
+        },
+        launchY,
+        getMaxScrollOffset,
+        JUMP_SCROLL_DURATION_MS,
+      );
+    } finally {
+      isJumpingRef.current = false;
+    }
+  }, [getMaxScrollOffset, hasMore, jumpToBottom, rows.length]);
 
   /*
    * Depends only on things that change when the user acts, not on `entries`.
@@ -596,7 +695,14 @@ const ActivityDetailScreen: React.FC = () => {
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.5}
         onScroll={event => {
-          scrollOffsetRef.current = event.nativeEvent.contentOffset.y;
+          const y = event.nativeEvent.contentOffset.y;
+          scrollOffsetRef.current = y;
+          if (!isJumpingRef.current && hasPrevious && !loadingPrevious && y < listHeightRef.current * 0.8) {
+            loadPrevious();
+          }
+        }}
+        onContentSizeChange={(_w, h) => {
+          contentHeightRef.current = h;
         }}
         onLayout={event => {
           listHeightRef.current = event.nativeEvent.layout.height;

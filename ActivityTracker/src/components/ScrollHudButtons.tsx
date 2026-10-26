@@ -3,21 +3,27 @@ import { StyleSheet, TouchableOpacity, View } from 'react-native';
 import Icon from '@expo/vector-icons/MaterialCommunityIcons';
 import theme from '../theme/theme';
 
-export const JUMP_SCROLL_DURATION_MS = 1500;
+export const JUMP_SCROLL_DURATION_MS = 950;
 
 /**
- * Smoothly interpolates a scroll offset over `durationMs` using
- * requestAnimationFrame before swapping in a distant page.
+ * Smoothly interpolates a scroll offset over `durationMs` using a fast-launch,
+ * soft-landing quartic ease-out curve (`1 - (1 - t)^4`).
+ *
+ * `toOffset` can be a number or a getter function so that if content height
+ * refines mid-scroll, the animation steers continuously to the updated target
+ * without jerking at the end.
  */
 export const animateScrollOffset = (
   setOffset: (offset: number) => void,
   fromOffset: number,
-  toOffset: number,
+  toOffset: number | (() => number),
   durationMs = JUMP_SCROLL_DURATION_MS,
 ): Promise<void> => {
+  const resolveTarget = () => (typeof toOffset === 'function' ? toOffset() : toOffset);
+
   return new Promise(resolve => {
     if (durationMs <= 0 || typeof requestAnimationFrame !== 'function') {
-      setOffset(toOffset);
+      setOffset(resolveTarget());
       resolve();
       return;
     }
@@ -26,11 +32,11 @@ export const animateScrollOffset = (
     const step = () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(1, elapsed / durationMs);
-      const eased =
-        progress < 0.5
-          ? 2 * progress * progress
-          : 1 - Math.pow(-2 * progress + 2, 2) / 2;
-      const current = fromOffset + (toOffset - fromOffset) * eased;
+      // Quartic ease-out: launches immediately at high velocity and smoothly
+      // decelerates to zero velocity right as it lands on the target.
+      const eased = 1 - Math.pow(1 - progress, 4);
+      const target = resolveTarget();
+      const current = fromOffset + (target - fromOffset) * eased;
       setOffset(current);
 
       if (progress < 1) {
